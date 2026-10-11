@@ -1,0 +1,54 @@
+name: Publish sudoku index
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/update-sudoku-index.py'
+      - 'scripts/index-sources.json'
+      - 'scripts/test_sudoku_index.py'
+      - '.github/workflows/sudoku-index.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sudoku-index
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout publisher
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Test index generation
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+      - name: Checkout index Pages branch
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/sudoku-index
+          ref: gh-pages
+          path: index-site
+          ssh-key: ${{ secrets.SUDOKU_INDEX_DEPLOY_KEY }}
+
+      - name: Refresh index resources
+        run: python3 scripts/update-sudoku-index.py --output index-site
+
+      - name: Publish index to sudoku-index Pages branch
+        working-directory: index-site
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.json index.js .nojekyll
+          if ! git diff --cached --quiet; then
+            git commit -m 'Refresh sudoku index'
+            git push origin HEAD:gh-pages
+          fi
