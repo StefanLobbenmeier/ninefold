@@ -46,3 +46,36 @@ Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-mu
 We would appreciate your feedback on Compose/Web and Kotlin/Wasm in the public Slack
 channel [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web).
 If you face any issues, please report them on [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP).
+### Screenshot import
+
+Import → Image opens the system image picker. The shared Kotlin implementation finds an axis-aligned
+9×9 grid, recognizes printed digits locally, and maps each cell by its position (including empty rows
+and columns). No screenshot is uploaded and no OCR service, API key, or model download is required.
+The recognizer uses normalized glyph templates rendered from the platform's sans, serif, and monospace
+fonts, with stroke and enclosed-shape comparisons. It is intended for clear classic-sudoku screenshots;
+unusual fonts, pencil marks, handwriting, rotated/perspective photos, and very low-resolution images
+can require corrections. Automatic recognition is not guaranteed for every screenshot.
+
+Every import opens an editable review before changing the current puzzle:
+
+- Compare the original screenshot and imported clues; amber cells indicate uncertain readings.
+- Select any cell and use the number buttons or Erase to correct it. Adjust grid area lets you mark
+  the grid's opposite corners and rerun recognition; if detection fails, manual entry remains available.
+- Shared validation checks duplicate clues in rows, columns, and boxes, then searches for up to two
+  solutions. It distinguishes invalid, unsolvable, uniquely solvable, and ambiguous starting grids.
+  Checks rerun after edits, are cancellable, and stop after five seconds if still inconclusive.
+- Confirm that you have double-checked the clues before importing. Invalid or unsolvable grids may
+  still be imported with an explicit warning. Cancelling preserves the current game and its history.
+
+Recognition, crop coordinates, validation, and review UI live in `shared/src/commonMain`.
+FileKit supplies the native/browser image pickers; Desktop initializes FileKit with the application ID.
+There are no separate platform OCR implementations to add.
+
+Validation: `./gradlew :shared:jvmTest` includes solver cases and generated screenshot fixtures covering
+margins, sparse grids, multiple fonts, sizes, and dark backgrounds. The Web upload/review/edit flow was
+also checked in the browser. JS, Wasm, JVM, Android, and iOS simulator source compilation is checked.
+Before shipping native builds, smoke-test on devices:
+
+- Android: gallery selection/cancellation, PNG/JPEG decoding, and review on a small screen.
+- iOS: Photos picker presentation/dismissal, file decoding, and safe-area/scroll behavior.
+- Desktop: native picker behavior on each packaged OS (including Linux's desktop portal).
