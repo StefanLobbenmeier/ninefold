@@ -1,0 +1,392 @@
+package de.sudokupad
+
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.statement.HttpResponse
+import io.ktor.http.isSuccess
+import kotlinx.serialization.json.*
+import kotlin.math.abs
+import kotlin.math.pow
+
+private val sudokuPadClient by lazy { HttpClient() }
+private val sudokuPadLink = Regex("^https?://(?:www\\.)?sudokupad\\.app/(?:api/puzzle/)?([^?#]+)", RegexOption.IGNORE_CASE)
+private val safePuzzleId = Regex("[A-Za-z0-9_./-]+")
+
+fun sudokuPadPuzzleId(input: String): String? {
+    val trimmed = input.trim()
+    val id = sudokuPadLink.find(trimmed)?.groupValues?.get(1) ?: trimmed.takeIf { safePuzzleId.matches(it) }
+    return id?.trim('/')?.takeIf { it.isNotEmpty() && safePuzzleId.matches(it) && ".." !in it }
+}
+
+suspend fun importSudokuPadPuzzle(input: String): Puzzle {
+    val id = sudokuPadPuzzleId(input) ?: throw IllegalArgumentException("Enter a sudokupad.app puzzle link.")
+    val response: HttpResponse = sudokuPadClient.get("https://sudokupad.app/api/puzzle/$id")
+    if (!response.status.isSuccess()) throw IllegalArgumentException("SudokuPad returned ${response.status.value} for this puzzle.")
+    return parseSudokuPadPayload(response.body(), "https://sudokupad.app/$id")
+}
+
+internal fun parseSudokuPadPayload(payload: String, sourceUrl: String? = null): Puzzle {
+    val packageText = payload.trim()
+    require(packageText.length <= 5_000_000) { "This puzzle is too large to import." }
+    val (format, encoded) = when {
+        packageText.startsWith("fpuzzles") -> "fpuz" to packageText.removePrefix("fpuzzles")
+        packageText.startsWith("fpuz") -> "fpuz" to packageText.removePrefix("fpuz")
+        packageText.startsWith("scl") -> "scl" to packageText.removePrefix("scl")
+        packageText.startsWith("ctc") -> "scl" to packageText.removePrefix("ctc")
+        else -> "scl" to packageText
+    }
+    val decoded = if (encoded.startsWith("{") || encoded.startsWith("[")) encoded
+        else lzStringDecompressFromBase64(percentDecode(encoded))
+    val root = parsePackedJson(decoded)
+    return puzzleFromJson(root, format == "fpuz", sourceUrl)
+}
+
+private fun parsePackedJson(input: String): JsonObject {
+    val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    val direct = runCatching { json.parseToJsonElement(input) }.getOrNull()
+    val parsed = direct ?: json.parseToJsonElement(unzipPuzzleJson(input))
+    return expandPackedProperties(parsed).jsonObject
+}
+
+private val packedProperties = mapOf(
+    "c" to "color", "ca" to "cages", "ct" to "center", "c1" to "borderColor",
+    "c2" to "backgroundColor", "ce" to "cells", "cs" to "cellSize", "a" to "arrows",
+    "o" to "overlays", "u" to "underlays", "w" to "width", "h" to "height", "v" to "value",
+    "vd" to "videos", "l" to "lines", "r" to "rounded", "re" to "regions", "fs" to "fontSize",
+    "th" to "thickness", "hl" to "headLength", "wp" to "wayPoints", "t" to "title",
+    "te" to "text", "dur" to "duration", "d2" to "d",
+)
+
+private fun expandPackedProperties(element: JsonElement): JsonElement = when (element) {
+    is JsonObject -> JsonObject(element.map { (key, value) ->
+        (packedProperties[key] ?: key) to expandPackedProperties(value)
+    }.toMap())
+    is JsonArray -> JsonArray(element.map(::expandPackedProperties))
+    else -> element
+}
+
+/** Reverses SudokuPad's PuzzleZipper representation before normal JSON parsing. */
+private fun unzipPuzzleJson(packed: String): String {
+    val quoted = singleQuotedStringsToJson(packed)
+    val strings = mutableListOf<String>()
+    val skeleton = buildString {
+        var index = 0
+        while (index < quoted.length) {
+            if (quoted[index] != '"') { append(quoted[index++]); continue }
+            val start = index++
+            while (index < quoted.length) {
+                if (quoted[index] == '\\') index += 2
+                else if (quoted[index++] == '"') break
+                else Unit
+            }
+            strings += quoted.substring(start, index)
+            append("\"__{S${strings.lastIndex}}__\"")
+        }
+    }
+    var json = skeleton
+        .replace(Regex("([,\\{\\[])([a-zA-Z0-9]+):"), "$1\"$2\":")
+        .replace(Regex("([,\\{\\[])(?=[,}\\]])"), "$1_")
+        .replace("{_}", "{}")
+        .replace(Regex("([,\\{\\[])_"), "$1{}")
+        .replace(Regex(":f([,}\\]])"), ":false$1")
+        .replace(Regex(":t([,}\\]])"), ":true$1")
+        .replace(Regex(":#0([,}\\]])"), ":\"#000000\"$1")
+        .replace(Regex(":#F([,}\\]])"), ":\"#FFFFFF\"$1")
+        .replace(Regex(":([0-9a-fA-F]{6})([,}\\]])"), ":\"#$1\"$2")
+    strings.forEachIndexed { index, value -> json = json.replace("\"__{S$index}__\"", value) }
+    return json
+}
+
+private fun singleQuotedStringsToJson(input: String): String {
+    if ('\'' !in input) return input
+    return buildString {
+        var index = 0
+        var inString = false
+        while (index < input.length) {
+            val char = input[index++]
+            if (!inString) {
+                if (char == '\'') { append('"'); inString = true } else append(char)
+            } else when {
+                char == '\'' -> { append('"'); inString = false }
+                char == '\\' && index < input.length && input[index] == '\'' -> { append('\''); index++ }
+                char == '"' -> append("\\\"")
+                else -> append(char)
+            }
+        }
+        require(!inString) { "The SudokuPad data contains an unfinished string." }
+    }
+}
+
+private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: String?): Puzzle {
+    val metadata = root.obj("metadata") ?: root
+    val sourceCells = (root.array(if (fpuzzles) "grid" else "cells") ?: root.array("cells"))
+        ?: throw IllegalArgumentException("The puzzle has no grid.")
+    require(sourceCells.size == 9 && sourceCells.all { it.jsonArray.size == 9 }) {
+        "Only 9×9 SudokuPad puzzles are currently supported."
+    }
+    val givens = sourceCells.flatMap { row -> row.jsonArray.map { cell ->
+        cell.jsonObject.int("value")?.takeIf { it in 1..9 }?.digitToChar() ?: '.'
+    } }.joinToString("")
+    val solution = metadata.string("solution") ?: root.array("solution")?.mapNotNull(JsonElement::asInt)?.joinToString("")
+    val rulesText = metadata.string("rules") ?: metadata.string("ruleset") ?: "Normal sudoku rules apply."
+    val rules = rulesText.lines().map(String::trim).filter(String::isNotEmpty).ifEmpty { listOf("Normal sudoku rules apply.") }
+
+    val rawCages = root.array(if (fpuzzles) "killercage" else "cages") ?: root.array("cages") ?: JsonArray(emptyList())
+    val fog = mutableSetOf<CellPosition>()
+    root.array("foglight")?.forEach { parseCell(it)?.let(fog::add) }
+    val cages = rawCages.mapNotNull { element ->
+        val cage = element.jsonObject
+        val cells = cage.array("cells").orEmpty().mapNotNull(::parseCell).toSet()
+        val value = cage.int("value")
+        if (cage.string("value")?.startsWith("foglight", ignoreCase = true) == true) {
+            fog += cells; null
+        } else value?.takeIf { cells.isNotEmpty() }?.let { KillerCage(it, cells) }
+    }
+    val lines = parseLines(root, fpuzzles)
+    val overlays = root.array("overlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
+    val underlays = root.array("underlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
+    val arrows = parseArrows(root, fpuzzles, overlays)
+    val outsideClues = parseOutsideClues(rulesText, overlays, arrows)
+    val hasFog = root.containsKey("foglight") || rawCages.any {
+        it.jsonObject.string("value")?.startsWith("foglight", ignoreCase = true) == true
+    }
+    return Puzzle(
+        title = metadata.string("title") ?: "Imported SudokuPad puzzle",
+        author = metadata.string("author") ?: "Unknown setter",
+        givens = givens,
+        solution = solution?.filter(Char::isDigit)?.takeIf { it.length == 81 },
+        cages = cages,
+        rules = rules,
+        lines = lines,
+        arrows = arrows,
+        overlays = overlays,
+        underlays = underlays,
+        outsideClues = outsideClues,
+        fogLights = fog.takeIf { hasFog },
+        sourceUrl = sourceUrl,
+    )
+}
+
+private fun parseOutsideClues(rules: String, overlays: List<PuzzleOverlay>, arrows: List<PuzzleArrow>): List<OutsideClue> =
+    overlays.mapNotNull { overlay ->
+        val value = overlay.text?.toIntOrNull() ?: return@mapNotNull null
+        val point = overlay.center
+        if (point.row in 0.0..9.0 && point.column in 0.0..9.0) return@mapNotNull null
+        val nearbyArrow = arrows.firstOrNull { arrow -> arrow.points.any {
+            abs(it.row - point.row) < .75 && abs(it.column - point.column) < .75
+        } }
+        val type = when {
+            nearbyArrow != null && rules.contains("diagonal", ignoreCase = true) -> OutsideClueType.DiagonalSum
+            rules.contains("skyscraper", ignoreCase = true) -> OutsideClueType.Skyscraper
+            else -> OutsideClueType.Unspecified
+        }
+        val cells = when (type) {
+            OutsideClueType.DiagonalSum -> diagonalCells(point, requireNotNull(nearbyArrow))
+            OutsideClueType.Skyscraper -> edgeCells(point)
+            OutsideClueType.Unspecified -> emptyList()
+        }
+        OutsideClue(value, point, cells, type)
+    }
+
+private fun edgeCells(point: GridPoint): List<CellPosition> = when {
+    point.column < 0 -> List(9) { CellPosition(point.row.toInt().coerceIn(0, 8), it) }
+    point.column >= 9 -> List(9) { CellPosition(point.row.toInt().coerceIn(0, 8), 8 - it) }
+    point.row < 0 -> List(9) { CellPosition(it, point.column.toInt().coerceIn(0, 8)) }
+    point.row >= 9 -> List(9) { CellPosition(8 - it, point.column.toInt().coerceIn(0, 8)) }
+    else -> emptyList()
+}
+
+private fun diagonalCells(clue: GridPoint, arrow: PuzzleArrow): List<CellPosition> {
+    val first = arrow.points.first(); val last = arrow.points.last()
+    val rowStep = (last.row - first.row).compareTo(0.0)
+    val columnStep = (last.column - first.column).compareTo(0.0)
+    var row = when { clue.row < 0 -> 0; clue.row >= 9 -> 8; else -> clue.row.toInt() + rowStep }
+    var column = when { clue.column < 0 -> 0; clue.column >= 9 -> 8; else -> clue.column.toInt() + columnStep }
+    return buildList {
+        while (row in 0..8 && column in 0..8) { add(CellPosition(row, column)); row += rowStep; column += columnStep }
+    }
+}
+
+private fun parseLines(root: JsonObject, fpuzzles: Boolean): List<PuzzleLine> {
+    val source = root.array("lines") ?: root.array("line") ?: JsonArray(emptyList())
+    val generic = source.flatMap { element ->
+        val line = element.jsonObject
+        val groups = if (fpuzzles && line.array("lines") != null) line.array("lines").orEmpty().map(JsonElement::jsonArray)
+            else listOf(line.array("wayPoints") ?: JsonArray(emptyList()))
+        groups.mapNotNull { points ->
+            val parsed = points.mapNotNull(::parsePoint)
+            parsed.takeIf { it.size > 1 }?.let {
+                PuzzleLine(it, line.string("lineC") ?: line.string("color") ?: "#A0A0A0", line.double("thickness") ?: 6.0)
+            }
+        }
+    }
+    if (!fpuzzles) return generic
+    fun explicit(feature: String, rule: LineRule, color: String, thickness: Double) = root.array(feature).orEmpty().flatMap { element ->
+        element.jsonObject.array("lines").orEmpty().mapNotNull { group ->
+            val points = group.jsonArray.mapNotNull(::parsePoint)
+            points.takeIf { it.size > 1 }?.let { PuzzleLine(it, color, thickness, rule) }
+        }
+    }
+    return generic + explicit("thermometer", LineRule.Thermometer, "#B8B8B8", 12.0) +
+        explicit("palindrome", LineRule.Palindrome, "#CFCFCF", 6.0)
+}
+
+private fun parseFpuzzlesOverlays(root: JsonObject): List<PuzzleOverlay> = buildList {
+    fun pairMarks(feature: String, background: String, border: String?, defaultText: String? = null) {
+        root.array(feature).orEmpty().forEach { element ->
+            val mark = element.jsonObject
+            val cells = mark.array("cells").orEmpty().mapNotNull(::parseCell)
+            if (cells.size == 2) {
+                val center = GridPoint((cells[0].row + cells[1].row + 1) / 2.0, (cells[0].column + cells[1].column + 1) / 2.0)
+                add(PuzzleOverlay(center, .33, .33, background, border, if (background == "#000000") "#FFFFFF" else "#000000", mark.string("value") ?: defaultText, true))
+            }
+        }
+    }
+    pairMarks("difference", "#FFFFFF", "#000000")
+    pairMarks("ratio", "#000000", null)
+    pairMarks("xv", "#FFFFFF", "#000000")
+    root.array("arrow").orEmpty().forEach { element ->
+        element.jsonObject.array("cells").orEmpty().mapNotNull(::parseCell).forEach { cell ->
+            add(PuzzleOverlay(GridPoint(cell.row + .5, cell.column + .5), .8, .8, "#FFFFFF", "#999999", rounded = true))
+        }
+    }
+}
+
+private fun parseFpuzzlesCellShading(root: JsonObject): List<PuzzleOverlay> = buildList {
+    root.array("even").orEmpty().forEach { element -> parseCell(element.jsonObject["cell"] ?: element)?.let { cell ->
+        add(PuzzleOverlay(GridPoint(cell.row + .5, cell.column + .5), .55, .55, "#CFCFCF", rounded = false))
+    } }
+    root.array("odd").orEmpty().forEach { element -> parseCell(element.jsonObject["cell"] ?: element)?.let { cell ->
+        add(PuzzleOverlay(GridPoint(cell.row + .5, cell.column + .5), .55, .55, "#FFFFFF", "#777777", rounded = true))
+    } }
+}
+
+private fun parseArrows(root: JsonObject, fpuzzles: Boolean, overlays: List<PuzzleOverlay>): List<PuzzleArrow> {
+    val source = root.array("arrows") ?: root.array("arrow") ?: JsonArray(emptyList())
+    return source.flatMap { element ->
+        val arrow = element.jsonObject
+        if (fpuzzles && arrow.array("lines") != null) {
+            val circleCells = arrow.array("cells").orEmpty().mapNotNull(::parseCell)
+            arrow.array("lines").orEmpty().mapNotNull { line ->
+                val points = line.jsonArray.mapNotNull(::parsePoint)
+                points.takeIf { it.size > 1 }?.let {
+                    PuzzleArrow(it, circle = circleCells.firstOrNull(), pathCells = points.mapNotNull(GridPoint::cellPositionOrNull).distinct())
+                }
+            }
+        } else {
+            val points = arrow.array("wayPoints").orEmpty().mapNotNull(::parsePoint)
+            if (points.size < 2) emptyList() else {
+                val start = points.first()
+                val bulb = overlays.filter { it.rounded && it.width in .5..1.1 && it.height in .5..1.1 }
+                    .minByOrNull { (it.center.row - start.row).pow(2) + (it.center.column - start.column).pow(2) }
+                    ?.takeIf { abs(it.center.row - start.row) <= .7 && abs(it.center.column - start.column) <= .7 }
+                listOf(PuzzleArrow(
+                    points, arrow.string("color") ?: "#777777", arrow.double("thickness") ?: 3.0,
+                    arrow.double("headLength") ?: .3, bulb?.center?.cellPositionOrNull(),
+                    points.mapNotNull(GridPoint::cellPositionOrNull).distinct(),
+                ))
+            }
+        }
+    }
+}
+
+private fun parseOverlay(element: JsonElement): PuzzleOverlay? {
+    val value = element.jsonObject
+    val center = value["center"]?.let(::parsePoint) ?: return null
+    return PuzzleOverlay(
+        center, value.double("width") ?: .3, value.double("height") ?: .3,
+        value.string("backgroundColor"), value.string("borderColor") ?: value.string("stroke"),
+        value.string("color") ?: value.string("textColor"), value["text"]?.asString(),
+        value.boolean("rounded") ?: false, value.double("thickness") ?: 1.0,
+    )
+}
+
+private fun parsePoint(element: JsonElement): GridPoint? {
+    if (element is JsonPrimitive && element.isString) return parseCell(element)?.let { GridPoint(it.row + .5, it.column + .5) }
+    val pair = element as? JsonArray ?: return null
+    return GridPoint(pair.getOrNull(0)?.asDouble() ?: return null, pair.getOrNull(1)?.asDouble() ?: return null)
+}
+
+private fun parseCell(element: JsonElement): CellPosition? {
+    if (element is JsonArray) return CellPosition(element.getOrNull(0)?.asInt() ?: return null, element.getOrNull(1)?.asInt() ?: return null)
+    val match = Regex("R(\\d+)C(\\d+)", RegexOption.IGNORE_CASE).matchEntire(element.asString() ?: return null) ?: return null
+    return CellPosition(match.groupValues[1].toInt() - 1, match.groupValues[2].toInt() - 1)
+}
+
+private fun JsonObject.obj(name: String): JsonObject? = get(name) as? JsonObject
+private fun JsonObject.array(name: String): JsonArray? = get(name) as? JsonArray
+private fun JsonObject.string(name: String): String? = get(name)?.asString()
+private fun JsonObject.int(name: String): Int? = get(name)?.asInt()
+private fun JsonObject.double(name: String): Double? = get(name)?.asDouble()
+private fun JsonObject.boolean(name: String): Boolean? = (get(name) as? JsonPrimitive)?.booleanOrNull
+private fun JsonElement.asString(): String? = (this as? JsonPrimitive)?.contentOrNull
+private fun JsonElement.asInt(): Int? = (this as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+private fun JsonElement.asDouble(): Double? = (this as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
+
+private fun percentDecode(value: String): String {
+    val bytes = mutableListOf<Byte>()
+    var index = 0
+    while (index < value.length) {
+        if (value[index] == '%' && index + 2 < value.length) {
+            val byte = value.substring(index + 1, index + 3).toIntOrNull(16)
+            if (byte != null) { bytes += byte.toByte(); index += 3; continue }
+        }
+        // Encoded puzzle packages are ASCII; retain unexpected unicode as UTF-8 through its chars.
+        bytes += value[index].code.toByte(); index++
+    }
+    return bytes.toByteArray().decodeToString()
+}
+
+/** LZ-String's `decompressFromBase64`, used by fpuz and scl packages. */
+internal fun lzStringDecompressFromBase64(input: String): String {
+    if (input.isEmpty()) return ""
+    val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+    return lzDecompress(input.length, 32) { index -> alphabet.indexOf(input[index]).coerceAtLeast(0) }
+}
+
+private fun lzDecompress(length: Int, resetValue: Int, nextValue: (Int) -> Int): String {
+    val dictionary = mutableListOf("0", "1", "2")
+    var enlargeIn = 4
+    var dictSize = 4
+    var numBits = 3
+    var dataValue = nextValue(0)
+    var dataPosition = resetValue
+    var dataIndex = 1
+    fun readBits(count: Int): Int {
+        var bits = 0; var power = 1
+        repeat(count) {
+            val bit = dataValue and dataPosition
+            dataPosition = dataPosition shr 1
+            if (dataPosition == 0) { dataPosition = resetValue; dataValue = if (dataIndex < length) nextValue(dataIndex++) else 0 }
+            if (bit > 0) bits = bits or power
+            power = power shl 1
+        }
+        return bits
+    }
+    val first = when (readBits(2)) {
+        0 -> readBits(8).toChar().toString()
+        1 -> readBits(16).toChar().toString()
+        else -> return ""
+    }
+    dictionary += first
+    var w = first
+    val result = StringBuilder(first)
+    while (dataIndex <= length) {
+        var code = readBits(numBits)
+        when (code) {
+            0 -> { dictionary += readBits(8).toChar().toString(); code = dictSize++; enlargeIn-- }
+            1 -> { dictionary += readBits(16).toChar().toString(); code = dictSize++; enlargeIn-- }
+            2 -> return result.toString()
+        }
+        if (enlargeIn == 0) { enlargeIn = 2.0.pow(numBits).toInt(); numBits++ }
+        val entry = dictionary.getOrNull(code) ?: if (code == dictSize) w + w.first() else throw IllegalArgumentException("Invalid SudokuPad compression data.")
+        result.append(entry)
+        dictionary += w + entry.first()
+        dictSize++
+        enlargeIn--
+        w = entry
+        if (enlargeIn == 0) { enlargeIn = 2.0.pow(numBits).toInt(); numBits++ }
+    }
+    throw IllegalArgumentException("Incomplete SudokuPad compression data.")
+}

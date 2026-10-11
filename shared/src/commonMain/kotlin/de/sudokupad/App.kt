@@ -15,18 +15,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.sin
 
 private val Ink = Color(0xFF202522)
 private val Moss = Color(0xFF3D6547)
@@ -123,8 +132,8 @@ private fun SudokuApp() {
             }
         }
     }
-    if (showImport) ImportDialog({ showImport = false }) { grid ->
-        puzzle = Puzzle("Imported classic", "Imported puzzle", grid); cells = puzzle.startingCells(); mode = InputMode.Digit; selected = setOf(CellPosition(0, 0)); history = emptyList(); redoStack = emptyList(); clearManualChecks(); showImport = false
+    if (showImport) ImportDialog({ showImport = false }) { imported ->
+        puzzle = imported; cells = imported.startingCells(); mode = InputMode.Digit; selected = setOf(CellPosition(0, 0)); history = emptyList(); redoStack = emptyList(); clearManualChecks(); showImport = false
     }
     if (showRules) RulesDialog(puzzle) { showRules = false }
     if (showChecking) CheckingDialog(
@@ -157,7 +166,14 @@ private fun TopBar(onImport: () -> Unit, onRules: () -> Unit, onChecking: () -> 
 private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int, checked: Boolean) {
     Row(Modifier.widthIn(max = 660.dp).fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f)) {
-            Text(if (puzzle.cages.isEmpty()) "CLASSIC" else "KILLER · CLASSIC", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            val types = buildList {
+                if (puzzle.fogLights != null) add("FOG")
+                if (puzzle.cages.isNotEmpty()) add("KILLER")
+                if (puzzle.arrows.isNotEmpty()) add("ARROW")
+                if (puzzle.lines.isNotEmpty()) add("LINES")
+                if (isEmpty()) add("CLASSIC")
+            }
+            Text(types.joinToString(" · "), color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
             Text(puzzle.title, fontSize = 28.sp, fontWeight = FontWeight.Bold); Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 13.sp)
         }
         Surface(shape = RoundedCornerShape(50), color = if (!checked) Butter else if (errorCount > 0) Color(0xFFFFE7E3) else Sage) {
@@ -172,28 +188,116 @@ private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int, checked: Boolean) {
 
 @Composable
 internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), onSelect: (CellPosition) -> Unit) {
-    Box(Modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f).background(Color.White).border(2.dp, Ink)) {
-        Column(Modifier.fillMaxSize()) { repeat(9) { row -> Row(Modifier.weight(1f)) { repeat(9) { column ->
+    val hasOutside = (puzzle.overlays + puzzle.underlays).any { it.center.row !in 0.0..9.0 || it.center.column !in 0.0..9.0 } ||
+        puzzle.arrows.any { arrow -> arrow.points.any { it.row !in 0.0..9.0 || it.column !in 0.0..9.0 } }
+    val padCells = if (hasOutside) 1 else 0
+    val litCells = remember(puzzle, cells) { puzzle.litCells(cells) }
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(Modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f)) {
+        val inset = maxWidth * (padCells.toFloat() / (9 + padCells * 2))
+        Box(Modifier.fillMaxSize().background(if (hasOutside) Paper else Color.White)) {
+            Box(Modifier.fillMaxSize().padding(inset).background(Color.White).border(2.dp, Ink))
+            PuzzleGraphics(puzzle, padCells, measurer)
+            Box(Modifier.fillMaxSize().padding(inset)) {
+                Column(Modifier.fillMaxSize()) { repeat(9) { row -> Row(Modifier.weight(1f)) { repeat(9) { column ->
             val position = CellPosition(row, column); val cell = cells[position.index]; val isSelected = position in selected
             val peer = selected.any { it.row == row || it.column == column || (it.row / 3 == row / 3 && it.column / 3 == column / 3) }
             val same = cell.value != null && selected.any { cells[it.index].value == cell.value }
-            val background = when { position.index in conflicts -> Color(0xFFFFE1DC); isSelected -> Butter; position.index in uncertain -> Color(0xFFFFEDBD); same -> Color(0xFFE6D9A8); peer -> Color(0xFFF1F3EC); else -> Color.Transparent }
+            val background = when { position.index in conflicts -> Color(0xEFFFF1EC); isSelected -> Butter.copy(alpha = .82f); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); peer -> Color(0xCCF1F3EC); else -> Color.Transparent }
+            val fogged = puzzle.fogLights != null && position !in litCells
             Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }.drawBehind {
                 val thin = .55.dp.toPx(); val thick = 1.5.dp.toPx()
                 drawLine(Ink.copy(alpha = .65f), Offset(size.width, 0f), Offset(size.width, size.height), if ((column + 1) % 3 == 0) thick else thin)
                 drawLine(Ink.copy(alpha = .65f), Offset(0f, size.height), Offset(size.width, size.height), if ((row + 1) % 3 == 0) thick else thin)
             }, contentAlignment = Alignment.Center) {
+                if (fogged) Box(Modifier.matchParentSize().background(Color(0xFFB4B7B5)))
                 when {
-                    cell.value != null -> Text(cell.value.toString(), fontSize = 24.sp, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
+                    cell.value != null && (!cell.given || !fogged) -> Text(cell.value.toString(), fontSize = 24.sp, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
                     cell.cornerNotes.isNotEmpty() -> CornerNotes(cell.cornerNotes, invalidPencilMarks[position.index].orEmpty())
                     cell.centreNotes.isNotEmpty() -> CentreNotes(cell.centreNotes, invalidPencilMarks[position.index].orEmpty())
                 }
-                puzzle.cages.firstOrNull { position in it.cells }?.let { cage -> if (position == cage.cells.minBy { it.index }) Text(cage.total.toString(), Modifier.align(Alignment.TopStart).padding(start = 3.dp, top = 1.dp), fontSize = 8.sp, color = Color(0xFF765A7C), fontWeight = FontWeight.Bold) }
+                if (!fogged) puzzle.cages.firstOrNull { position in it.cells }?.let { cage -> if (position == cage.cells.minBy { it.index }) Text(cage.total.toString(), Modifier.align(Alignment.TopStart).padding(start = 3.dp, top = 1.dp), fontSize = 8.sp, color = Color(0xFF765A7C), fontWeight = FontWeight.Bold) }
             }
-        } } } }
-        CageOverlay(puzzle.cages)
+                } } } }
+                CageOverlay(puzzle.cages.mapNotNull { cage ->
+                    val visible = cage.cells.intersect(litCells)
+                    cage.copy(cells = visible).takeIf { visible.isNotEmpty() }
+                })
+            }
+        }
     }
 }
+
+private fun Puzzle.litCells(cells: List<CellState>): Set<CellPosition> {
+    val initial = fogLights ?: return buildSet { repeat(9) { row -> repeat(9) { column -> add(CellPosition(row, column)) } } }
+    return buildSet {
+        addAll(initial)
+        cells.forEachIndexed { index, cell ->
+            val position = CellPosition(index / 9, index % 9)
+            if (cell.given) add(position)
+            else if (cell.value != null && (solution?.getOrNull(index)?.digitToIntOrNull() == cell.value || solution == null)) {
+                for (row in position.row - 1..position.row + 1) for (column in position.column - 1..position.column + 1) {
+                    if (row in 0..8 && column in 0..8) add(CellPosition(row, column))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.PuzzleGraphics(puzzle: Puzzle, padCells: Int, measurer: androidx.compose.ui.text.TextMeasurer) {
+    Canvas(Modifier.matchParentSize()) {
+        val total = (9 + padCells * 2).toFloat()
+        val cell = size.width / total
+        fun at(point: GridPoint) = Offset(((point.column + padCells) * cell).toFloat(), ((point.row + padCells) * cell).toFloat())
+        fun overlay(item: PuzzleOverlay) {
+            val center = at(item.center)
+            val area = Size((item.width * cell).toFloat(), (item.height * cell).toFloat())
+            val topLeft = center - Offset(area.width / 2, area.height / 2)
+            item.backgroundColor?.toComposeColor()?.let { color ->
+                if (item.rounded) drawOval(color, topLeft, area) else drawRect(color, topLeft, area)
+            }
+            item.borderColor?.toComposeColor()?.let { color ->
+                if (item.rounded) drawOval(color, topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
+                else drawRect(color, topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
+            }
+            item.text?.takeIf(String::isNotEmpty)?.let { text ->
+                val style = androidx.compose.ui.text.TextStyle(color = item.textColor?.toComposeColor() ?: Ink, fontSize = (max(8f, area.height * .48f) / density).sp, textAlign = TextAlign.Center)
+                val measured = measurer.measure(text, style)
+                drawText(measured, topLeft = center - Offset(measured.size.width / 2f, measured.size.height / 2f))
+            }
+        }
+        puzzle.underlays.forEach(::overlay)
+        puzzle.lines.forEach { line ->
+            val path = Path(); line.points.firstOrNull()?.let { path.moveTo(at(it).x, at(it).y) }
+            line.points.drop(1).forEach { path.lineTo(at(it).x, at(it).y) }
+            drawPath(path, line.color.toComposeColor() ?: Color.Gray, style = Stroke((line.thickness / 50.0 * cell).toFloat().coerceAtLeast(2f)))
+        }
+        puzzle.arrows.forEach { arrow ->
+            val color = arrow.color.toComposeColor() ?: Color.Gray
+            arrow.points.zipWithNext().forEach { (a, b) -> drawLine(color, at(a), at(b), (arrow.thickness / 50.0 * cell).toFloat().coerceAtLeast(1.5f)) }
+            val tip = arrow.points.lastOrNull()?.let(::at); val previous = arrow.points.dropLast(1).lastOrNull()?.let(::at)
+            if (tip != null && previous != null) {
+                val angle = atan2((tip.y - previous.y).toDouble(), (tip.x - previous.x).toDouble())
+                val length = (arrow.headLength * cell).toFloat()
+                drawLine(color, tip, Offset(tip.x - length * cos(angle - .55).toFloat(), tip.y - length * sin(angle - .55).toFloat()), 2f)
+                drawLine(color, tip, Offset(tip.x - length * cos(angle + .55).toFloat(), tip.y - length * sin(angle + .55).toFloat()), 2f)
+            }
+        }
+        puzzle.overlays.forEach(::overlay)
+    }
+}
+
+private fun String.toComposeColor(): Color? = runCatching {
+    val hex = removePrefix("#")
+    when (hex.length) {
+        3 -> Color(("FF" + hex.map { "$it$it" }.joinToString("")).toLong(16))
+        4 -> Color((hex.last().let { "$it$it" } + hex.dropLast(1).map { "$it$it" }.joinToString("")).toLong(16))
+        6 -> Color(("FF$hex").toLong(16))
+        8 -> Color((hex.takeLast(2) + hex.dropLast(2)).toLong(16))
+        else -> error("Unsupported color")
+    }
+}.getOrNull()
 
 @Composable
 private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
@@ -295,7 +399,7 @@ private fun IndentedCheckOption(label: String, checked: Boolean, onChecked: (Boo
 
 @Composable
 private fun RulesDialog(puzzle: Puzzle, onDismiss: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, confirmButton = { Button(onDismiss) { Text("Got it") } }, title = { Text(puzzle.title) }, text = { Column {
+    AlertDialog(onDismissRequest = onDismiss, confirmButton = { Button(onDismiss) { Text("Got it") } }, title = { Text(puzzle.title) }, text = { Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
         Text("RULES", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp); Spacer(Modifier.height(8.dp)); puzzle.rules.forEach { Text("•  $it", Modifier.padding(vertical = 5.dp), lineHeight = 20.sp) }; Spacer(Modifier.height(8.dp)); Text(if (puzzle.solution != null) "This puzzle includes a solution, so incorrect digits can be highlighted immediately." else "No solution was included. Rule conflicts can still be detected.", color = Color.Gray, fontSize = 12.sp)
     } }, shape = RoundedCornerShape(22.dp))
 }

@@ -71,6 +71,21 @@ Recognition, crop coordinates, validation, and review UI live in `shared/src/com
 FileKit supplies the native/browser image pickers; Desktop initializes FileKit with the application ID.
 There are no separate platform OCR implementations to add.
 
+### SudokuPad URL import
+
+Import → SudokuPad link accepts links such as `https://sudokupad.app/hDNMJqPmTh`. The app fetches the
+corresponding `/api/puzzle/{id}` package and decodes both SudokuPad's `scl`/compact-JSON representation
+and the common `fpuz` representation. The API permits cross-origin GET requests, so this works in the
+JS and Wasm web builds as well as the native builds.
+
+Imported puzzles retain metadata, givens, solutions, killer cages, sum arrows, colored lines, fog,
+cell marks, and generic overlays such as Kropki/XV marks and outside-grid clues. Explicit fpuz
+thermometers and palindromes retain their semantics. Styled custom lines default to display-only; the
+review's line-rule dialog lets the solver assign German/Dutch whisper, renban, palindrome, thermometer,
+or region-sum meaning without guessing based only on a color. Killer sums, sum arrows, assigned simple
+line rules, and recognizable skyscraper/diagonal-sum outside clues participate in optional rule checks.
+Unknown artwork is still rendered and its original rule text is kept.
+
 Validation: `./gradlew :shared:jvmTest` includes solver cases and generated screenshot fixtures covering
 margins, sparse grids, multiple fonts, sizes, and dark backgrounds. The Web upload/review/edit flow was
 also checked in the browser. JS, Wasm, JVM, Android, and iOS simulator source compilation is checked.

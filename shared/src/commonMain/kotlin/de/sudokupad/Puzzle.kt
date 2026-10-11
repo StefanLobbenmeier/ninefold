@@ -3,6 +3,29 @@ package de.sudokupad
 data class CellPosition(val row: Int, val column: Int) { val index: Int get() = row * 9 + column }
 data class CellState(val value: Int? = null, val given: Boolean = false, val cornerNotes: Set<Int> = emptySet(), val centreNotes: Set<Int> = emptySet())
 data class KillerCage(val total: Int, val cells: Set<CellPosition>)
+data class GridPoint(val row: Double, val column: Double)
+
+enum class LineRule(val label: String) {
+    Unspecified("Display only"), GermanWhisper("German whisper (difference ≥ 5)"),
+    DutchWhisper("Dutch whisper (difference ≥ 4)"), Renban("Renban"),
+    Palindrome("Palindrome"), Thermometer("Thermometer"), RegionSum("Region sum"),
+}
+
+data class PuzzleLine(
+    val points: List<GridPoint>, val color: String = "#A0A0A0", val thickness: Double = 6.0,
+    val rule: LineRule = LineRule.Unspecified,
+)
+data class PuzzleArrow(
+    val points: List<GridPoint>, val color: String = "#777777", val thickness: Double = 3.0,
+    val headLength: Double = .3, val circle: CellPosition? = null, val pathCells: List<CellPosition> = emptyList(),
+)
+data class PuzzleOverlay(
+    val center: GridPoint, val width: Double = .3, val height: Double = .3,
+    val backgroundColor: String? = null, val borderColor: String? = null, val textColor: String? = null,
+    val text: String? = null, val rounded: Boolean = false, val thickness: Double = 1.0,
+)
+enum class OutsideClueType { Unspecified, Skyscraper, DiagonalSum }
+data class OutsideClue(val value: Int, val position: GridPoint, val cells: List<CellPosition>, val type: OutsideClueType)
 
 data class PuzzleCheckResult(
     val cells: Set<Int> = emptySet(),
@@ -21,6 +44,11 @@ data class PuzzleCheckResult(
 data class Puzzle(
     val title: String, val author: String, val givens: String, val solution: String? = null,
     val cages: List<KillerCage> = emptyList(), val rules: List<String> = listOf("Normal sudoku rules apply."),
+    val lines: List<PuzzleLine> = emptyList(), val arrows: List<PuzzleArrow> = emptyList(),
+    val overlays: List<PuzzleOverlay> = emptyList(), val underlays: List<PuzzleOverlay> = emptyList(),
+    val outsideClues: List<OutsideClue> = emptyList(),
+    /** Present (even when empty) when this is a fog puzzle. */
+    val fogLights: Set<CellPosition>? = null, val sourceUrl: String? = null,
 ) {
     fun startingCells(): List<CellState> = givens.map { char ->
         val value = char.digitToIntOrNull()?.takeIf { it in 1..9 }
@@ -74,7 +102,62 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
             if (invalid.isNotEmpty()) pencilMarks.getOrPut(index, ::mutableSetOf).addAll(invalid)
         }
     }
+    if (includeSpecialRules) puzzle.arrows.forEach { arrow ->
+        val circle = arrow.circle ?: return@forEach
+        val path = arrow.pathCells.filter { it != circle }.distinct()
+        if (path.isEmpty()) return@forEach
+        val circleValue = cells.getOrNull(circle.index)?.value
+        val pathValues = path.mapNotNull { cells.getOrNull(it.index)?.value }
+        if (circleValue != null && pathValues.size == path.size && pathValues.sum() != circleValue) {
+            conflicts += circle.index
+            conflicts += path.map(CellPosition::index)
+        }
+    }
+    if (includeSpecialRules) puzzle.lines.forEach { line ->
+        val indices = line.points.mapNotNull(GridPoint::cellPositionOrNull).map(CellPosition::index).distinct()
+        val values = indices.mapNotNull { index -> cells.getOrNull(index)?.value?.let { index to it } }
+        fun markPairs(isInvalid: (Int, Int) -> Boolean) {
+            values.zipWithNext().filter { isInvalid(it.first.second, it.second.second) }
+                .forEach { conflicts += it.first.first; conflicts += it.second.first }
+        }
+        when (line.rule) {
+            LineRule.GermanWhisper -> markPairs { a, b -> kotlin.math.abs(a - b) < 5 }
+            LineRule.DutchWhisper -> markPairs { a, b -> kotlin.math.abs(a - b) < 4 }
+            LineRule.Thermometer -> markPairs { a, b -> a >= b }
+            LineRule.Palindrome -> values.indices.forEach { offset ->
+                val opposite = values.lastIndex - offset
+                if (offset < opposite && values[offset].second != values[opposite].second) {
+                    conflicts += values[offset].first; conflicts += values[opposite].first
+                }
+            }
+            LineRule.Renban -> if (values.size == indices.size && values.isNotEmpty()) {
+                val digits = values.map { it.second }
+                if (digits.toSet().size != digits.size || digits.max() - digits.min() != digits.size - 1) conflicts += indices
+            }
+            LineRule.RegionSum, LineRule.Unspecified -> Unit
+        }
+    }
+    if (includeSpecialRules) puzzle.outsideClues.forEach { clue ->
+        val values = clue.cells.mapNotNull { cells.getOrNull(it.index)?.value }
+        if (values.size != clue.cells.size) return@forEach
+        val invalid = when (clue.type) {
+            OutsideClueType.DiagonalSum -> values.sum() != clue.value
+            OutsideClueType.Skyscraper -> {
+                var tallest = 0; var visible = 0
+                values.forEach { value -> if (value > tallest) { tallest = value; visible++ } }
+                visible != clue.value
+            }
+            OutsideClueType.Unspecified -> false
+        }
+        if (invalid) conflicts += clue.cells.map(CellPosition::index)
+    }
     return PuzzleCheckResult(conflicts, pencilMarks.mapValues { it.value.toSet() })
+}
+
+fun GridPoint.cellPositionOrNull(): CellPosition? {
+    val rowIndex = kotlin.math.floor(row).toInt()
+    val columnIndex = kotlin.math.floor(column).toInt()
+    return CellPosition(rowIndex, columnIndex).takeIf { rowIndex in 0..8 && columnIndex in 0..8 }
 }
 
 fun checkAgainstSolution(puzzle: Puzzle, cells: List<CellState>): PuzzleCheckResult {
