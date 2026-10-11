@@ -57,10 +57,13 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
+            implementation(libs.ktor.client.okhttp)
         }
         commonMain.dependencies {
             implementation(libs.filekit.dialogs.compose)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.ktor.client.core)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
@@ -79,6 +82,16 @@ kotlin {
         }
         jsMain.dependencies {
             implementation(libs.wrappers.browser)
+            implementation(libs.ktor.client.js)
+        }
+        wasmJsMain.dependencies {
+            implementation(libs.ktor.client.js)
+        }
+        jvmMain.dependencies {
+            implementation(libs.ktor.client.cio)
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
         }
     }
 }

@@ -37,7 +37,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 @Composable
-internal fun ImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
+internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
     val scope = rememberCoroutineScope()
     val measurer = rememberTextMeasurer()
     var templates by remember { mutableStateOf<List<DigitTemplate>?>(null) }
@@ -52,6 +52,9 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
     var job by remember { mutableStateOf<Job?>(null) }
     var tab by remember { mutableStateOf(0) }
     var code by remember { mutableStateOf("") }
+    var link by remember { mutableStateOf("") }
+    var importedPuzzle by remember { mutableStateOf<Puzzle?>(null) }
+    var showLineRules by remember { mutableStateOf(false) }
     var adjusting by remember { mutableStateOf(false) }
     var firstCorner by remember { mutableStateOf<Offset?>(null) }
     var validation by remember { mutableStateOf<ImportValidation?>(null) }
@@ -59,9 +62,10 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
     var confirmed by remember { mutableStateOf(false) }
     val parsed = remember(code) { parseClassicGrid(code) }
 
-    LaunchedEffect(grid) {
+    LaunchedEffect(grid, importedPuzzle) {
         validation = null; confirmed = false
         val current = grid ?: return@LaunchedEffect
+        if (importedPuzzle != null) { checking = false; return@LaunchedEffect }
         checking = true
         try { validation = withTimeoutOrNull(5_000) { validateClassicImport(current) } }
         finally { checking = false }
@@ -117,6 +121,20 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
         uncertain = uncertain - selected.index; confirmed = false
     }
 
+    fun loadLink() {
+        job?.cancel()
+        job = scope.launch {
+            busy = true; message = null
+            try {
+                val puzzle = importSudokuPadPuzzle(link)
+                importedPuzzle = puzzle; grid = puzzle.givens; uncertain = emptySet()
+                if (puzzle.lines.isNotEmpty()) showLineRules = true
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { message = e.message ?: "Could not import this SudokuPad puzzle." }
+            finally { busy = false }
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.padding(12.dp).widthIn(max = 900.dp).fillMaxWidth().heightIn(max = 900.dp), shape = RoundedCornerShape(22.dp)) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -128,20 +146,33 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
                     PrimaryTabRow(tab) {
                         Tab(tab == 0, { tab = 0 }, enabled = !busy, text = { Text("Image") })
                         Tab(tab == 1, { tab = 1 }, enabled = !busy, text = { Text("Puzzle code") })
+                        Tab(tab == 2, { tab = 2 }, enabled = !busy, text = { Text("SudokuPad link") })
                     }
                     if (tab == 0) {
                         Text("Choose a screenshot of a classic 9×9 sudoku. Keep the whole grid visible. Recognition happens on your device.")
                         Button({ picker.launch() }, enabled = !busy) { Text("Choose image") }
-                    } else {
+                    } else if (tab == 1) {
                         OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth(), label = { Text("81-character grid") }, supportingText = { Text("Use 1–9 for clues and dots or zeros for empty cells. Line breaks are allowed.") }, minLines = 3)
                         if (code.isNotBlank() && parsed == null) Text("Enter exactly 81 cells. Puzzle links and variants are not supported here.", color = MaterialTheme.colorScheme.error)
                         Button({ grid = parsed; uncertain = emptySet() }, enabled = parsed != null && !busy) { Text("Review grid") }
+                    } else {
+                        Text("Paste a sudokupad.app puzzle URL. Its givens, rules, cages, arrows, lines, marks, outside clues, solution, and fog data will be imported when available.")
+                        OutlinedTextField(link, { link = it }, Modifier.fillMaxWidth(), label = { Text("SudokuPad URL") }, singleLine = true,
+                            placeholder = { Text("https://sudokupad.app/hDNMJqPmTh") })
+                        Button(::loadLink, enabled = sudokuPadPuzzleId(link) != null && !busy) { Text("Fetch puzzle") }
                     }
                 }
                 if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Reading the screenshot…") }
                 message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (grid != null) {
-                    Text("Compare every clue with the original, even if the checks pass. Select any cell to add, replace, or erase a digit.")
+                    Text(if (importedPuzzle == null) "Compare every clue with the original, even if the checks pass. Select any cell to add, replace, or erase a digit."
+                        else "Review the imported puzzle. Graphical marks are preserved; only rules with a known meaning are checked automatically.")
+                    importedPuzzle?.takeIf { it.lines.isNotEmpty() }?.let { puzzle ->
+                        val unspecified = puzzle.lines.count { it.rule == LineRule.Unspecified }
+                        OutlinedButton({ showLineRules = true }) {
+                            Text(if (unspecified == 0) "Review line rules" else "Assign line rules ($unspecified display only)")
+                        }
+                    }
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val compact = maxWidth < 620.dp
                         val source: @Composable () -> Unit = {
@@ -175,7 +206,7 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
                         val editor: @Composable () -> Unit = {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 val current = requireNotNull(grid)
-                                val puzzle = remember(current) { Puzzle("", "", current) }
+                                val puzzle = remember(current, importedPuzzle) { importedPuzzle?.copy(givens = current) ?: Puzzle("", "", current) }
                                 val conflicts = remember(current) { conflictsFor(puzzle, puzzle.startingCells()) }
                                 Text("Imported clues · row ${selected.row + 1}, column ${selected.column + 1}", fontWeight = FontWeight.SemiBold)
                                 SudokuBoard(puzzle, puzzle.startingCells(), setOf(selected), conflicts, uncertain) { if (!busy) selected = it }
@@ -196,9 +227,10 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
                         } else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { source(); editor() }
                     }
                     val status = validation?.status
-                    val warning = status == ImportStatus.Conflicts || status == ImportStatus.Unsolvable || (!checking && status == null)
+                    val warning = importedPuzzle == null && (status == ImportStatus.Conflicts || status == ImportStatus.Unsolvable || (!checking && status == null))
                     Surface(color = if (warning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(10.dp)) {
                         Text(when {
+                            importedPuzzle != null -> "SudokuPad metadata and graphics loaded. Unsupported or unassigned visual rules remain display-only; the original rule text is included."
                             checking -> "Checking starting clues and solutions…"
                             status == ImportStatus.Conflicts -> "Starting clues break sudoku rules. Red cells repeat a digit in a row, column, or box. This may be an import error; correct the clues before playing."
                             status == ImportStatus.Unsolvable -> "No immediate rule conflicts, but this grid has no solution. Check for a misread or extra clue; the original puzzle may also be invalid."
@@ -212,11 +244,42 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
                         Text("I have double-checked the imported clues.", Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton({ grid = null; image = null; gray = null; bounds = null; message = null; confirmed = false }, enabled = !busy) { Text("Choose another puzzle") }
-                        Button({ grid?.let(onImport) }, enabled = confirmed && !busy && !checking) { Text(if (warning) "Import with warning" else "Import puzzle") }
+                    TextButton({ grid = null; importedPuzzle = null; image = null; gray = null; bounds = null; message = null; confirmed = false }, enabled = !busy) { Text("Choose another puzzle") }
+                        Button({ grid?.let { onImport(importedPuzzle?.copy(givens = it) ?: Puzzle("Imported classic", "Imported puzzle", it)) } }, enabled = confirmed && !busy && !checking) { Text(if (warning) "Import with warning" else "Import puzzle") }
                     }
                 }
             }
         }
     }
+    if (showLineRules) importedPuzzle?.let { puzzle ->
+        LineRulesDialog(puzzle.lines, { lines -> importedPuzzle = puzzle.copy(lines = lines); showLineRules = false }, { showLineRules = false })
+    }
+}
+
+@Composable
+private fun LineRulesDialog(lines: List<PuzzleLine>, onSave: (List<PuzzleLine>) -> Unit, onDismiss: () -> Unit) {
+    var edited by remember(lines) { mutableStateOf(lines) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Assign imported line rules") },
+        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("SudokuPad stores many custom lines as styled graphics. Choose a rule only when the puzzle instructions make its meaning clear.", fontSize = 13.sp)
+            edited.forEachIndexed { index, line ->
+                var expanded by remember(index) { mutableStateOf(false) }
+                Box {
+                    OutlinedButton({ expanded = true }, Modifier.fillMaxWidth()) {
+                        Text("Line ${index + 1} · ${line.color} · ${line.rule.label}", maxLines = 1)
+                    }
+                    DropdownMenu(expanded, { expanded = false }) {
+                        LineRule.entries.forEach { rule -> DropdownMenuItem(
+                            text = { Text(rule.label) },
+                            onClick = { edited = edited.toMutableList().also { it[index] = line.copy(rule = rule) }; expanded = false },
+                        ) }
+                    }
+                }
+            }
+        } },
+        confirmButton = { Button({ onSave(edited) }) { Text("Save assignments") } },
+        dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
+    )
 }

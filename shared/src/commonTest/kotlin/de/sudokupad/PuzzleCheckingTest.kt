@@ -62,4 +62,24 @@ class PuzzleCheckingTest {
         assertTrue(4 in withSpecialRules.pencilMarks[1].orEmpty())
         assertFalse(2 in withSpecialRules.pencilMarks[1].orEmpty())
     }
+
+    @Test fun checksAssignedLinesAndSumArrows() {
+        val line = PuzzleLine(listOf(GridPoint(.5, .5), GridPoint(.5, 1.5)), rule = LineRule.GermanWhisper)
+        val arrow = PuzzleArrow(emptyList(), circle = CellPosition(1, 0), pathCells = listOf(CellPosition(1, 1), CellPosition(1, 2)))
+        val puzzle = Puzzle("", "", ".".repeat(81), lines = listOf(line), arrows = listOf(arrow))
+        val cells = puzzle.startingCells().toMutableList().also {
+            it[0] = CellState(value = 1); it[1] = CellState(value = 4)
+            it[9] = CellState(value = 4); it[10] = CellState(value = 1); it[11] = CellState(value = 2)
+        }
+        val conflicts = checkSudokuRules(puzzle, cells).cells
+        assertTrue(0 in conflicts && 1 in conflicts)
+        assertTrue(9 in conflicts && 10 in conflicts && 11 in conflicts)
+    }
+
+    @Test fun checksTrivialOutsideClues() {
+        val skyscraper = OutsideClue(8, GridPoint(-.5, .5), List(9) { CellPosition(it, 0) }, OutsideClueType.Skyscraper)
+        val puzzle = Puzzle("", "", ".".repeat(81), outsideClues = listOf(skyscraper))
+        val cells = puzzle.startingCells().toMutableList().also { states -> (1..9).forEachIndexed { row, value -> states[row * 9] = CellState(value = value) } }
+        assertTrue((0..8).all { it * 9 in checkSudokuRules(puzzle, cells).cells })
+    }
 }
