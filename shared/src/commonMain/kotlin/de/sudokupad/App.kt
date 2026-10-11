@@ -19,8 +19,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -53,13 +56,31 @@ private fun SudokuApp() {
     var mode by remember { mutableStateOf(InputMode.Digit) }
     var showImport by remember { mutableStateOf(false) }
     var showRules by remember { mutableStateOf(false) }
-    var showErrors by remember { mutableStateOf(true) }
+    var showChecking by remember { mutableStateOf(false) }
+    var checkRules by remember { mutableStateOf(true) }
+    var checkRulesAutomatically by remember { mutableStateOf(true) }
+    var includeSpecialRules by remember { mutableStateOf(true) }
+    var checkSolution by remember { mutableStateOf(true) }
+    var checkSolutionAutomatically by remember { mutableStateOf(true) }
+    var manualRulesCheck by remember { mutableStateOf(false) }
+    var manualSolutionCheck by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf<List<List<CellState>>>(emptyList()) }
     var redoStack by remember { mutableStateOf<List<List<CellState>>>(emptyList()) }
-    val conflicts = remember(puzzle, cells, showErrors) { if (showErrors) conflictsFor(puzzle, cells) else emptySet() }
+    val rulesResult = remember(puzzle, cells, checkRules, checkRulesAutomatically, includeSpecialRules, manualRulesCheck) {
+        if (checkRules && (checkRulesAutomatically || manualRulesCheck)) checkSudokuRules(puzzle, cells, includeSpecialRules) else PuzzleCheckResult()
+    }
+    val solutionResult = remember(puzzle, cells, checkSolution, checkSolutionAutomatically, manualSolutionCheck) {
+        if (checkSolution && (checkSolutionAutomatically || manualSolutionCheck)) checkAgainstSolution(puzzle, cells) else PuzzleCheckResult()
+    }
+    val checkResult = rulesResult + solutionResult
+    val hasActiveCheck = (checkRules && (checkRulesAutomatically || manualRulesCheck)) ||
+        (checkSolution && (checkSolutionAutomatically || manualSolutionCheck))
+
+    fun clearManualChecks() { manualRulesCheck = false; manualSolutionCheck = false }
+    fun checkNow() { manualRulesCheck = checkRules; manualSolutionCheck = checkSolution }
 
     fun update(transform: (MutableList<CellState>) -> Unit) {
-        history = history + listOf(cells); redoStack = emptyList(); cells = cells.toMutableList().also(transform)
+        history = history + listOf(cells); redoStack = emptyList(); cells = cells.toMutableList().also(transform); clearManualChecks()
     }
     fun enter(number: Int?) = update { next -> selected.forEach { position ->
         val old = next[position.index]
@@ -69,36 +90,33 @@ private fun SudokuApp() {
             InputMode.Centre -> old.copy(centreNotes = number?.let { old.centreNotes.toggle(it) } ?: emptySet(), value = null)
         }
     } }
-    fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1) } }
-    fun redo() { redoStack.firstOrNull()?.let { history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1) } }
+    fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); clearManualChecks() } }
+    fun redo() { redoStack.firstOrNull()?.let { history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); clearManualChecks() } }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Paper)) {
         val compact = maxWidth < 850.dp
         Column(Modifier.fillMaxSize()) {
-            TopBar({ showImport = true }, { showRules = true })
+            TopBar({ showImport = true }, { showRules = true }, { showChecking = true })
             if (compact) {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    PuzzleHeading(puzzle, conflicts.size); Spacer(Modifier.height(12.dp))
-                    SudokuBoard(puzzle, cells, selected, conflicts) { selected = setOf(it) }
-                    Spacer(Modifier.height(16.dp)); Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo); Spacer(Modifier.height(24.dp))
+                    PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck); Spacer(Modifier.height(12.dp))
+                    SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks) { selected = setOf(it) }
+                    Spacer(Modifier.height(16.dp)); Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow); Spacer(Modifier.height(24.dp))
                 }
             } else {
                 Row(Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PuzzleHeading(puzzle, conflicts.size); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, conflicts) { selected = setOf(it) }
+                        PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks) { selected = setOf(it) }
                     }
                     Column(Modifier.widthIn(min = 270.dp, max = 350.dp)) {
-                        SideCard("PLAY") { Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo) }
+                        SideCard("PLAY") { Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
                             puzzle.rules.forEachIndexed { index, rule -> Row(Modifier.padding(vertical = 6.dp)) {
                                 Text("${index + 1}", color = Moss, fontWeight = FontWeight.Bold, modifier = Modifier.width(26.dp)); Text(rule, style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
                             } }
                             HorizontalDivider(Modifier.padding(vertical = 10.dp), color = Color(0xFFE5E5DE))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Switch(showErrors, { showErrors = it }, colors = SwitchDefaults.colors(checkedTrackColor = Moss)); Spacer(Modifier.width(8.dp))
-                                Column { Text("Live mistake check", fontWeight = FontWeight.SemiBold); Text("Solution + puzzle rules", fontSize = 12.sp, color = Color.Gray) }
-                            }
+                            TextButton({ showChecking = true }, Modifier.fillMaxWidth()) { Text("Checking settings") }
                         }
                     }
                 }
@@ -106,39 +124,54 @@ private fun SudokuApp() {
         }
     }
     if (showImport) ImportDialog({ showImport = false }) { grid ->
-        puzzle = Puzzle("Imported classic", "Imported puzzle", grid); cells = puzzle.startingCells(); mode = InputMode.Digit; selected = setOf(CellPosition(0, 0)); history = emptyList(); redoStack = emptyList(); showImport = false
+        puzzle = Puzzle("Imported classic", "Imported puzzle", grid); cells = puzzle.startingCells(); mode = InputMode.Digit; selected = setOf(CellPosition(0, 0)); history = emptyList(); redoStack = emptyList(); clearManualChecks(); showImport = false
     }
     if (showRules) RulesDialog(puzzle) { showRules = false }
+    if (showChecking) CheckingDialog(
+        checkRules, { checkRules = it; manualRulesCheck = false },
+        checkRulesAutomatically, { checkRulesAutomatically = it; manualRulesCheck = false },
+        includeSpecialRules, { includeSpecialRules = it; manualRulesCheck = false },
+        checkSolution, { checkSolution = it; manualSolutionCheck = false },
+        checkSolutionAutomatically, { checkSolutionAutomatically = it; manualSolutionCheck = false },
+    ) { showChecking = false }
 }
 
 private fun Set<Int>.toggle(value: Int) = if (value in this) this - value else this + value
 
 @Composable
-private fun TopBar(onImport: () -> Unit, onRules: () -> Unit) {
+private fun TopBar(onImport: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit) {
     Surface(shadowElevation = 1.dp, color = Color.White) {
-        Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).background(Moss), contentAlignment = Alignment.Center) { Text("9", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp) }
-            Spacer(Modifier.width(10.dp)); Text("NINEFOLD", fontWeight = FontWeight.Black, letterSpacing = 1.2.sp); Spacer(Modifier.weight(1f))
-            TextButton(onRules) { Text("Rules") }; Spacer(Modifier.width(4.dp)); Button(onImport, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)) { Text("＋  Import") }
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val narrow = maxWidth < 480.dp
+            Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).background(Moss), contentAlignment = Alignment.Center) { Text("9", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp) }
+                if (!narrow) { Spacer(Modifier.width(10.dp)); Text("NINEFOLD", fontWeight = FontWeight.Black, letterSpacing = 1.2.sp) }
+                Spacer(Modifier.weight(1f))
+                TextButton(onRules) { Text("Rules") }; TextButton(onChecking) { Text("Checks") }; Spacer(Modifier.width(4.dp)); Button(onImport, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(horizontal = if (narrow) 10.dp else 16.dp, vertical = 10.dp)) { Text(if (narrow) "＋" else "＋  Import") }
+            }
         }
     }
 }
 
 @Composable
-private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int) {
+private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int, checked: Boolean) {
     Row(Modifier.widthIn(max = 660.dp).fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f)) {
             Text(if (puzzle.cages.isEmpty()) "CLASSIC" else "KILLER · CLASSIC", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
             Text(puzzle.title, fontSize = 28.sp, fontWeight = FontWeight.Bold); Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 13.sp)
         }
-        Surface(shape = RoundedCornerShape(50), color = if (errorCount > 0) Color(0xFFFFE7E3) else Sage) {
-            Text(if (errorCount > 0) "$errorCount conflict${if (errorCount == 1) "" else "s"}" else "Looking good", Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = if (errorCount > 0) ErrorRed else Moss, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Surface(shape = RoundedCornerShape(50), color = if (!checked) Butter else if (errorCount > 0) Color(0xFFFFE7E3) else Sage) {
+            Text(when {
+                !checked -> "Not checked"
+                errorCount > 0 -> "$errorCount issue${if (errorCount == 1) "" else "s"}"
+                else -> "Looking good"
+            }, Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = if (checked && errorCount > 0) ErrorRed else Moss, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
 @Composable
-internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), onSelect: (CellPosition) -> Unit) {
+internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), onSelect: (CellPosition) -> Unit) {
     Box(Modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f).background(Color.White).border(2.dp, Ink)) {
         Column(Modifier.fillMaxSize()) { repeat(9) { row -> Row(Modifier.weight(1f)) { repeat(9) { column ->
             val position = CellPosition(row, column); val cell = cells[position.index]; val isSelected = position in selected
@@ -152,8 +185,8 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             }, contentAlignment = Alignment.Center) {
                 when {
                     cell.value != null -> Text(cell.value.toString(), fontSize = 24.sp, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
-                    cell.cornerNotes.isNotEmpty() -> CornerNotes(cell.cornerNotes)
-                    cell.centreNotes.isNotEmpty() -> Text(cell.centreNotes.sorted().joinToString(""), fontSize = 10.sp, color = Moss, textAlign = TextAlign.Center)
+                    cell.cornerNotes.isNotEmpty() -> CornerNotes(cell.cornerNotes, invalidPencilMarks[position.index].orEmpty())
+                    cell.centreNotes.isNotEmpty() -> CentreNotes(cell.centreNotes, invalidPencilMarks[position.index].orEmpty())
                 }
                 puzzle.cages.firstOrNull { position in it.cells }?.let { cage -> if (position == cage.cells.minBy { it.index }) Text(cage.total.toString(), Modifier.align(Alignment.TopStart).padding(start = 3.dp, top = 1.dp), fontSize = 8.sp, color = Color(0xFF765A7C), fontWeight = FontWeight.Bold) }
             }
@@ -178,10 +211,19 @@ private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
 }
 
 @Composable
-private fun CornerNotes(notes: Set<Int>) {
+private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>) {
     Column(Modifier.fillMaxSize().padding(3.dp)) { repeat(3) { row -> Row(Modifier.weight(1f)) { repeat(3) { col ->
-        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { val number = row * 3 + col + 1; if (number in notes) Text(number.toString(), fontSize = 8.sp, color = Moss) }
+        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { val number = row * 3 + col + 1; if (number in notes) Text(number.toString(), fontSize = 8.sp, color = if (number in invalid) ErrorRed else Moss) }
     } } } }
+}
+
+@Composable
+private fun CentreNotes(notes: Set<Int>, invalid: Set<Int>) {
+    Text(buildAnnotatedString {
+        notes.sorted().forEach { number ->
+            withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
+        }
+    }, fontSize = 10.sp, textAlign = TextAlign.Center)
 }
 
 @Composable
@@ -192,7 +234,7 @@ private fun SideCard(label: String, content: @Composable ColumnScope.() -> Unit)
 }
 
 @Composable
-private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit) {
+private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { InputMode.entries.forEach { item -> val active = item == mode
         Surface(Modifier.weight(1f).clickable { onMode(item) }, shape = RoundedCornerShape(10.dp), color = if (active) Moss else Color(0xFFF0F1EA)) {
             Column(Modifier.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(item.mark, color = if (active) Color.White else Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold); Text(item.label, color = if (active) Color.White else Color.Gray, fontSize = 10.sp) }
@@ -205,6 +247,49 @@ private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (In
     } } } }
     Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onUndo, Modifier.weight(1f), enabled = canUndo) { Text("↶  Undo") }; TextButton({ onNumber(null) }, Modifier.weight(1f)) { Text("⌫  Erase") }; TextButton(onRedo, Modifier.weight(1f), enabled = canRedo) { Text("Redo  ↷") }
+    }
+    OutlinedButton(onCheck, Modifier.fillMaxWidth(), enabled = canCheck) { Text("Check sudoku") }
+}
+
+@Composable
+private fun CheckingDialog(
+    checkRules: Boolean, onCheckRules: (Boolean) -> Unit,
+    automaticRules: Boolean, onAutomaticRules: (Boolean) -> Unit,
+    includeSpecialRules: Boolean, onIncludeSpecialRules: (Boolean) -> Unit,
+    checkSolution: Boolean, onCheckSolution: (Boolean) -> Unit,
+    automaticSolution: Boolean, onAutomaticSolution: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { Button(onDismiss) { Text("Done") } },
+        title = { Text("Checking settings") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CheckOption("Check Sudoku rules", "Rows, columns, boxes, and impossible pencil marks.", checkRules, onCheckRules)
+            IndentedCheckOption("Check automatically", automaticRules, onAutomaticRules, checkRules)
+            IndentedCheckOption("Include special rules", includeSpecialRules, onIncludeSpecialRules, checkRules)
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            CheckOption("Check against solution", "Wrong digits and pencil marks that exclude the solution.", checkSolution, onCheckSolution)
+            IndentedCheckOption("Check automatically", automaticSolution, onAutomaticSolution, checkSolution)
+            Text("Checks that are not automatic run when you press Check sudoku.", color = Color.Gray, fontSize = 12.sp, lineHeight = 17.sp)
+        } },
+        shape = RoundedCornerShape(22.dp),
+    )
+}
+
+@Composable
+private fun CheckOption(label: String, description: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked, onChecked)
+        Column(Modifier.weight(1f)) { Text(label, fontWeight = FontWeight.SemiBold); Text(description, color = Color.Gray, fontSize = 12.sp) }
+    }
+}
+
+@Composable
+private fun IndentedCheckOption(label: String, checked: Boolean, onChecked: (Boolean) -> Unit, enabled: Boolean) {
+    Row(Modifier.padding(start = 32.dp), verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked, onChecked, enabled = enabled)
+        Text(label, color = if (enabled) Ink else Color.Gray)
     }
 }
 
