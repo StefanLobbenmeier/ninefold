@@ -50,16 +50,22 @@ private enum class InputMode(val label: String, val mark: String) {
 
 @Composable
 @androidx.compose.ui.tooling.preview.Preview
-fun App() {
+fun App(indexCache: SudokuIndexCache = MemorySudokuIndexCache()) {
     MaterialTheme(
         colorScheme = lightColorScheme(primary = Moss, onPrimary = Color.White, primaryContainer = Sage, background = Paper, surface = Color.White, onSurface = Ink, error = ErrorRed),
         typography = Typography(),
-    ) { SudokuApp() }
+    ) {
+        var activePuzzle by remember { mutableStateOf<Puzzle?>(null) }
+        val repository = remember(indexCache) { SudokuIndexRepository(indexCache) }
+        val current = activePuzzle
+        if (current == null) SudokuCatalog(repository) { activePuzzle = it }
+        else key(current) { SudokuApp(current) { activePuzzle = null } }
+    }
 }
 
 @Composable
-private fun SudokuApp() {
-    var puzzle by remember { mutableStateOf(DemoPuzzle) }
+private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
+    var puzzle by remember { mutableStateOf(initialPuzzle) }
     var cells by remember(puzzle) { mutableStateOf(puzzle.startingCells()) }
     var selected by remember { mutableStateOf(setOf(CellPosition(0, 2))) }
     var mode by remember { mutableStateOf(InputMode.Digit) }
@@ -105,7 +111,7 @@ private fun SudokuApp() {
     BoxWithConstraints(Modifier.fillMaxSize().background(Paper)) {
         val compact = maxWidth < 850.dp
         Column(Modifier.fillMaxSize()) {
-            TopBar({ showImport = true }, { showRules = true }, { showChecking = true })
+            TopBar({ showImport = true }, { showRules = true }, { showChecking = true }, onBrowse)
             if (compact) {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck); Spacer(Modifier.height(12.dp))
@@ -148,7 +154,7 @@ private fun SudokuApp() {
 private fun Set<Int>.toggle(value: Int) = if (value in this) this - value else this + value
 
 @Composable
-private fun TopBar(onImport: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit) {
+private fun TopBar(onImport: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, onBrowse: () -> Unit) {
     Surface(shadowElevation = 1.dp, color = Color.White) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val narrow = maxWidth < 480.dp
@@ -156,7 +162,7 @@ private fun TopBar(onImport: () -> Unit, onRules: () -> Unit, onChecking: () -> 
                 Box(Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).background(Moss), contentAlignment = Alignment.Center) { Text("9", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp) }
                 if (!narrow) { Spacer(Modifier.width(10.dp)); Text("NINEFOLD", fontWeight = FontWeight.Black, letterSpacing = 1.2.sp) }
                 Spacer(Modifier.weight(1f))
-                TextButton(onRules) { Text("Rules") }; TextButton(onChecking) { Text("Checks") }; Spacer(Modifier.width(4.dp)); Button(onImport, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(horizontal = if (narrow) 10.dp else 16.dp, vertical = 10.dp)) { Text(if (narrow) "＋" else "＋  Import") }
+                TextButton(onBrowse) { Text("Puzzles") }; TextButton(onRules) { Text("Rules") }; TextButton(onChecking) { Text("Checks") }; Spacer(Modifier.width(4.dp)); Button(onImport, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(horizontal = if (narrow) 10.dp else 16.dp, vertical = 10.dp)) { Text(if (narrow) "＋" else "＋  Import") }
             }
         }
     }
