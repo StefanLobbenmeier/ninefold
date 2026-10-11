@@ -6,7 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -18,6 +17,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -105,7 +106,7 @@ private fun SudokuApp() {
         }
     }
     if (showImport) ImportDialog({ showImport = false }) { grid ->
-        puzzle = Puzzle("Imported classic", "Imported puzzle", grid); selected = setOf(CellPosition(0, 0)); history = emptyList(); redoStack = emptyList(); showImport = false
+        puzzle = Puzzle("Imported classic", "Imported puzzle", grid); cells = puzzle.startingCells(); mode = InputMode.Digit; selected = setOf(CellPosition(0, 0)); history = emptyList(); redoStack = emptyList(); showImport = false
     }
     if (showRules) RulesDialog(puzzle) { showRules = false }
 }
@@ -127,7 +128,7 @@ private fun TopBar(onImport: () -> Unit, onRules: () -> Unit) {
 private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int) {
     Row(Modifier.widthIn(max = 660.dp).fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f)) {
-            Text("KILLER · CLASSIC", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            Text(if (puzzle.cages.isEmpty()) "CLASSIC" else "KILLER · CLASSIC", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
             Text(puzzle.title, fontSize = 28.sp, fontWeight = FontWeight.Bold); Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 13.sp)
         }
         Surface(shape = RoundedCornerShape(50), color = if (errorCount > 0) Color(0xFFFFE7E3) else Sage) {
@@ -137,14 +138,14 @@ private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int) {
 }
 
 @Composable
-private fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, onSelect: (CellPosition) -> Unit) {
+internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), onSelect: (CellPosition) -> Unit) {
     Box(Modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f).background(Color.White).border(2.dp, Ink)) {
         Column(Modifier.fillMaxSize()) { repeat(9) { row -> Row(Modifier.weight(1f)) { repeat(9) { column ->
             val position = CellPosition(row, column); val cell = cells[position.index]; val isSelected = position in selected
             val peer = selected.any { it.row == row || it.column == column || (it.row / 3 == row / 3 && it.column / 3 == column / 3) }
             val same = cell.value != null && selected.any { cells[it.index].value == cell.value }
-            val background = when { position.index in conflicts -> Color(0xFFFFE1DC); isSelected -> Butter; same -> Color(0xFFE6D9A8); peer -> Color(0xFFF1F3EC); else -> Color.Transparent }
-            Box(Modifier.weight(1f).fillMaxHeight().background(background).clickable { onSelect(position) }.drawBehind {
+            val background = when { position.index in conflicts -> Color(0xFFFFE1DC); isSelected -> Butter; position.index in uncertain -> Color(0xFFFFEDBD); same -> Color(0xFFE6D9A8); peer -> Color(0xFFF1F3EC); else -> Color.Transparent }
+            Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }.drawBehind {
                 val thin = .55.dp.toPx(); val thick = 1.5.dp.toPx()
                 drawLine(Ink.copy(alpha = .65f), Offset(size.width, 0f), Offset(size.width, size.height), if ((column + 1) % 3 == 0) thick else thin)
                 drawLine(Ink.copy(alpha = .65f), Offset(0f, size.height), Offset(size.width, size.height), if ((row + 1) % 3 == 0) thick else thin)
@@ -205,26 +206,6 @@ private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (In
     Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onUndo, Modifier.weight(1f), enabled = canUndo) { Text("↶  Undo") }; TextButton({ onNumber(null) }, Modifier.weight(1f)) { Text("⌫  Erase") }; TextButton(onRedo, Modifier.weight(1f), enabled = canRedo) { Text("Redo  ↷") }
     }
-}
-
-@Composable
-private fun ImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
-    var tab by remember { mutableStateOf(0) }; var code by remember { mutableStateOf("") }; val parsed = remember(code) { parseClassicGrid(code) }
-    Dialog(onDismissRequest = onDismiss) { Surface(Modifier.widthIn(max = 560.dp).fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = Color.White) { Column(Modifier.padding(24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Bring in a puzzle", fontSize = 24.sp, fontWeight = FontWeight.Bold); Text("Start from a photo, link, or puzzle code", color = Color.Gray, fontSize = 13.sp) }; TextButton(onDismiss) { Text("Close") } }
-        Spacer(Modifier.height(18.dp)); TabRow(tab, containerColor = Color.Transparent, contentColor = Moss) { Tab(tab == 0, { tab = 0 }, text = { Text("Image") }); Tab(tab == 1, { tab = 1 }, text = { Text("Link or code") }) }; Spacer(Modifier.height(18.dp))
-        if (tab == 0) {
-            Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFFF1F3EC)).border(1.dp, Color(0xFFD9DED4), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) { Surface(shape = CircleShape, color = Sage) { Text("▦", Modifier.padding(15.dp), color = Moss, fontSize = 28.sp) }; Spacer(Modifier.height(10.dp)); Text("Photograph a classic sudoku", fontWeight = FontWeight.Bold); Text("Grid recognition opens for review before importing.", color = Color.Gray, fontSize = 12.sp); Spacer(Modifier.height(14.dp)); OutlinedButton({ tab = 1 }) { Text("Choose image") } }
-            }
-            Text("Image recognition is designed for clean, straight-on 9×9 grids. You can correct every detected clue in the review step.", Modifier.padding(top = 12.dp), color = Color.Gray, fontSize = 12.sp, lineHeight = 17.sp)
-        } else {
-            OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth().heightIn(min = 150.dp), label = { Text("Puzzle URL or 81-character grid") }, placeholder = { Text("Paste a SudokuPad, f-puzzles, Penpa+ link, or classic grid…") }, shape = RoundedCornerShape(12.dp))
-            Spacer(Modifier.height(10.dp)); Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) { listOf("SudokuPad", "f-puzzles", "Penpa+").forEach { SuggestionChip(onClick = {}, label = { Text(it, fontSize = 11.sp) }) } }
-            if (code.isNotBlank() && parsed == null) Text("This looks like a link or variant code. Its format will be preserved for the variant importer.", color = Moss, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-        }
-        Spacer(Modifier.height(20.dp)); Button({ parsed?.let(onImport) }, Modifier.fillMaxWidth().height(48.dp), enabled = parsed != null, shape = RoundedCornerShape(12.dp)) { Text(if (parsed != null) "Review 81 detected cells" else "Paste a classic grid to continue") }
-    } } }
 }
 
 @Composable
