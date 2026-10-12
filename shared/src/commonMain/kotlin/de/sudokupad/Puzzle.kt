@@ -175,11 +175,19 @@ fun checkAgainstSolution(puzzle: Puzzle, cells: List<CellState>): PuzzleCheckRes
     val solution = puzzle.solution ?: return PuzzleCheckResult()
     val conflicts = mutableSetOf<Int>()
     val pencilMarks = mutableMapOf<Int, Set<Int>>()
+    fun block(index: Int): Int = index / 27 * 3 + index % 9 / 3
+    // Corner marks describe possible positions for a digit within a block.
+    // Accept the whole group when it includes the answer, without revealing its position.
+    val validCornerDigits = cells.indices.groupBy(::block).mapValues { (_, indices) ->
+        indices.mapNotNull { index ->
+            solution.getOrNull(index)?.digitToIntOrNull()?.takeIf { it in cells[index].cornerNotes }
+        }.toSet()
+    }
     cells.forEachIndexed { index, cell ->
         val answer = solution.getOrNull(index)?.digitToIntOrNull() ?: return@forEachIndexed
         if (!cell.given && cell.value != null && answer != cell.value) conflicts += index
         if (cell.cornerNotes.isNotEmpty()) {
-            val invalid = cell.cornerNotes - answer
+            val invalid = cell.cornerNotes - validCornerDigits[block(index)].orEmpty()
             if (invalid.isNotEmpty()) pencilMarks[index] = invalid
         }
         if (cell.centreNotes.isNotEmpty() && answer !in cell.centreNotes) {
