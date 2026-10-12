@@ -57,7 +57,11 @@ internal enum class InputMode(val label: String, val mark: String) {
 
 @Composable
 @androidx.compose.ui.tooling.preview.Preview
-fun App(indexCache: SudokuIndexCache? = null, storage: AppStorage = platformAppStorage()) {
+fun App(
+    indexCache: SudokuIndexCache? = null,
+    storage: AppStorage = platformAppStorage(),
+    indexRepository: SudokuIndexRepository? = null,
+) {
     val localIndexCache = remember(storage, indexCache) { indexCache ?: object : SudokuIndexCache {
         override fun read() = storage.read("ninefold.sudoku-index.v1")
         override fun write(payload: String) = storage.write("ninefold.sudoku-index.v1", payload)
@@ -69,7 +73,7 @@ fun App(indexCache: SudokuIndexCache? = null, storage: AppStorage = platformAppS
         typography = Typography(),
     ) {
         var activePuzzle by remember { mutableStateOf<Puzzle?>(null) }
-        val repository = remember(localIndexCache) { SudokuIndexRepository(localIndexCache) }
+        val repository = remember(localIndexCache, indexRepository) { indexRepository ?: SudokuIndexRepository(localIndexCache) }
         val current = activePuzzle
         Box(Modifier.fillMaxSize()) {
             if (current == null) SudokuCatalog(repository, games, downloadScope) { activePuzzle = it }

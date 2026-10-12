@@ -32,6 +32,9 @@ Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
 
 - Android tests: `./gradlew :shared:testAndroidHostTest`
 - Desktop tests: `./gradlew :shared:jvmTest`
+  - Includes a JVM UI startup smoke test that renders the app, loads a catalog through the real
+    HTTP engine from a local server, and opens Import. No internet connection is needed for the test.
+    On Linux without a display, use `xvfb-run --auto-servernum ./gradlew :shared:jvmTest` (as in CI).
 - Web tests:
     - Wasm target: `./gradlew :shared:wasmJsTest`
     - JS target: `./gradlew :shared:jsTest`

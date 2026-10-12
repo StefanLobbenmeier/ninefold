@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "group:kotlinMonorepo"
+  ],
+  "commitMessagePrefix": "REN - ",
+  "automerge": true,
+  "platformAutomerge": true,
+  "rebaseWhen": "auto",
+  "labels": ["dependencies"],
+  "enabledManagers": [
+    "gradle",
+    "gradle-wrapper",
+    "github-actions"
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "org.jetbrains.compose:org.jetbrains.compose.gradle.plugin"
+      ],
+      "allowedVersions": "/^\\d+\\.\\d+\\.\\d+$/"
+    }
+  ]
+}
