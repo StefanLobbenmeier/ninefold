@@ -96,7 +96,7 @@ fun App(
 }
 
 @Composable
-private fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl: String, onImport: (Puzzle) -> Unit, onBrowse: () -> Unit) {
+internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl: String, onImport: (Puzzle) -> Unit, onBrowse: () -> Unit) {
     val saved = remember(puzzle) { repository.game(puzzle) }
     var cells by remember(puzzle) { mutableStateOf(saved?.cells ?: puzzle.startingCells()) }
     var selected by remember { mutableStateOf(setOf(CellPosition(0, 2))) }
@@ -166,14 +166,20 @@ private fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl: 
 
     fun setMultiple(enabled: Boolean) {
         repository.saveSettings(repository.settings.copy(multiSelect = enabled))
-        if (!enabled) selected = selected.firstOrNull()?.let { setOf(it) } ?: emptySet()
     }
 
     fun select(position: CellPosition) {
-        selected = if (multiSelect) { if (position in selected) selected - position else selected + position } else setOf(position)
+        selected = if (multiSelect) selected + position else setOf(position)
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Paper).safeDrawingPadding()) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Paper).safeDrawingPadding().pointerInput(Unit) {
+        awaitEachGesture {
+            // Board gestures and controls consume their presses before the final pass.
+            // An unhandled press is on the background (including outside clues).
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+            if (!down.isConsumed) selected = emptySet()
+        }
+    }) {
         val compact = maxWidth < 850.dp
         Column(Modifier.fillMaxSize()) {
             TopBar({ showImport = true }, { showRules = true }, { showChecking = true }, onBrowse)
@@ -260,7 +266,6 @@ private fun PuzzleHeading(puzzle: Puzzle, compact: Boolean = false, elapsed: Lon
 @Composable
 internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onSelect: (CellPosition) -> Unit) {
     val currentSelection by rememberUpdatedState(selected)
-    val currentSelect by rememberUpdatedState(onSelect)
     val currentDragSelection by rememberUpdatedState(onDragSelection)
     val currentAdditive by rememberUpdatedState(additiveSelection)
     val hasOutside = (puzzle.overlays + puzzle.underlays).any { it.center.row !in 0.0..9.0 || it.center.column !in 0.0..9.0 } ||
@@ -284,7 +289,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                             var visited = setOf(start)
                             var previous = down.position
                             down.consume()
-                            currentSelect(start)
+                            currentDragSelection?.invoke(base + visited)
                             do {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
