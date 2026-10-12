@@ -12,6 +12,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import java.net.InetSocketAddress
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -47,19 +49,25 @@ class AppStartupTest {
         try {
             HttpClient().use { client ->
                 val cache = MemorySudokuIndexCache()
+                val storage = MemoryAppStorage().also {
+                    // Seed offline puzzle data so automatic preparation stays local.
+                    it.write("ninefold.puzzle.https://sudokupad.app/startup.v1",
+                        Json.encodeToString(Puzzle("Startup puzzle", "Test author", ".".repeat(81))))
+                }
                 val repository = SudokuIndexRepository(cache) {
                     client.get("http://127.0.0.1:${server.address.port}/index.json").bodyAsText()
                 }
                 FileKit.init(appId = "de.sudokupad")
-                compose.setContent { App(indexCache = cache, indexRepository = repository) }
+                compose.setContent { App(indexCache = cache, storage = storage, indexRepository = repository) }
 
                 compose.onNodeWithText("NINEFOLD").assertIsDisplayed()
-                compose.onNodeWithText("Sudokus").assertIsDisplayed()
+                compose.onNodeWithText("Browse sudokus").assertIsDisplayed()
                 compose.waitUntil(timeoutMillis = 10_000) {
-                    compose.onAllNodesWithText("Startup puzzle").fetchSemanticsNodes().isNotEmpty()
+                    compose.onAllNodesWithText("1 puzzles · 1 ready offline · Updated 2026-10-12")
+                        .fetchSemanticsNodes().isNotEmpty()
                 }
                 compose.onNodeWithText("Startup puzzle").assertIsDisplayed()
-                compose.onNodeWithText("1 puzzles · Updated 2026-10-12").assertIsDisplayed()
+                compose.onNodeWithText("1 puzzles · 1 ready offline · Updated 2026-10-12").assertIsDisplayed()
                 compose.onNodeWithText("Play").assertIsEnabled()
                 assertEquals("Startup puzzle", repository.cached()?.entries?.single()?.title)
 

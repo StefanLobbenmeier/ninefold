@@ -106,25 +106,39 @@ The app starts with the newest puzzles from
 `https://stefanlobbenmeier.github.io/sudoku-index/index.json`. Select Play to load a puzzle into the
 player, or Puzzles to return to the list. Import remains available from either screen.
 
-The web app saves the last valid index in localStorage and displays it immediately on subsequent
+The app saves the last valid index locally and displays it immediately on subsequent
 visits while refreshing. Failed requests or invalid index responses preserve the saved list. Refresh
 retries the request; first visits without a connection show an error until a download succeeds.
-A service worker caches the app shell and loaded Wasm assets, so the catalog can reopen offline after
-an online visit. Previously opened puzzle packages are also cached; opening a new puzzle needs a
-connection. Browser storage must be available for persistent offline access.
+All catalog puzzles are eagerly fetched, converted, and saved with up to four downloads at once,
+including while playing. Each entry shows waiting, fetching/converting, ready offline, or failed status.
+Ready offline means the converted puzzle was successfully stored; opening it makes no puzzle request.
+Refresh or an entry's Retry button retries failures. Preparing a large catalog can take longer than a
+few seconds, depending on the connection. A service worker caches the web app shell and loaded Wasm
+assets and fetched fallback fonts so it can reopen offline after an online visit. Browser storage must be available for persistent
+offline access.
+
+Every move (including pencil marks, erase, undo, and redo) saves the board and undo/redo history.
+The timer saves independently whenever its displayed second changes and when leaving the player.
+Reopening resumes from the last saved board and elapsed time; time away from the player does not count.
+Completed grids retain their frozen timer. The menu has Continue sudokus and Solved sudokus sections,
+including manually imported games. Checking preferences, input mode, and multiple selection persist
+across puzzles and restarts. Native storage uses Android preferences, iOS user defaults, and local files
+in `~/.ninefold` on Desktop. Failed local saves display an error.
 
 Catalog parsing, refresh, cache preservation, and unavailable storage are covered by
 `./gradlew :shared:jvmTest`.
 
 ### Playing on a phone
 
-The player keeps the board and a two-row number keypad within the available screen height,
+The player keeps the board and a T9-style number keypad within the available screen height,
 including native safe areas. Each new puzzle opens its rules first, with links to the source
 video and original SudokuPad when available. Tap Okay to start the timer; a correct completed
 grid freezes it, and undoing the final digit resumes it. Completion uses the supplied solution,
 or the supported Sudoku rules when a solution is unavailable.
 
-Enable Select multiple and tap cells to add or remove them from the selection. Choose Corner or
+Drag across cells to select a group, or enable Select multiple to add to the current selection
+by tapping or dragging. The keypad places 1–9 in three rows with 0 below as an erase shortcut;
+Digit, Corner, and Centre sit beside the numbers. Choose Corner or
 Centre to enter pencil marks in all empty selected cells. A note is added to every selected cell
 if any are missing it; tapping that number again removes it from all of them. Filled digits and
 givens are preserved when adding notes. Erase clears editable selected cells; Undo restores the
