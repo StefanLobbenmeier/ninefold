@@ -6,23 +6,28 @@ internal fun boardCellAt(x: Float, y: Float): CellPosition? {
     return CellPosition((y * 9).toInt(), (x * 9).toInt())
 }
 
-/** Include cells crossed between pointer events, even during a fast sweep. */
+/** Drag targets are centered half-size squares, leaving lanes between cells to dodge neighbors. */
 internal fun boardCellsAlongSegment(startX: Float, startY: Float, endX: Float, endY: Float): Set<CellPosition> {
+    if (!listOf(startX, startY, endX, endY).all { it.isFinite() }) return emptySet()
     val dx = endX - startX
     val dy = endY - startY
-    val crossings = mutableListOf(0f, 1f)
-    for (boundary in 0..9) {
-        val edge = boundary / 9f
-        if (dx != 0f) ((edge - startX) / dx).takeIf { it > 0f && it < 1f }?.let(crossings::add)
-        if (dy != 0f) ((edge - startY) / dy).takeIf { it > 0f && it < 1f }?.let(crossings::add)
-    }
-    val stops = crossings.sorted()
     return buildSet {
-        boardCellAt(startX, startY)?.let(::add)
-        stops.zipWithNext { a, b ->
-            val midpoint = (a + b) / 2f
-            boardCellAt(startX + dx * midpoint, startY + dy * midpoint)?.let(::add)
+        for (row in 0..8) for (column in 0..8) {
+            var enter = 0f
+            var exit = 1f
+            fun intersectsAxis(start: Float, delta: Float, min: Float, max: Float): Boolean {
+                if (delta == 0f) return start in min..max
+                val a = (min - start) / delta
+                val b = (max - start) / delta
+                enter = maxOf(enter, minOf(a, b))
+                exit = minOf(exit, maxOf(a, b))
+                return enter <= exit
+            }
+            // Intersect the whole segment so fast drags still include every crossed target.
+            if (intersectsAxis(startX, dx, (column + .25f) / 9f, (column + .75f) / 9f) &&
+                intersectsAxis(startY, dy, (row + .25f) / 9f, (row + .75f) / 9f)) {
+                add(CellPosition(row, column))
+            }
         }
-        boardCellAt(endX, endY)?.let(::add)
     }
 }
