@@ -1,5 +1,6 @@
-const CACHE = 'ninefold-offline-v1';
+const CACHE = 'ninefold-offline-v2';
 const scope = new URL(self.registration.scope);
+const isFontAsset = url => url.origin === 'https://fonts.gstatic.com';
 const isAppAsset = url => url.origin === scope.origin && url.pathname.startsWith(scope.pathname) && !url.pathname.endsWith('/sw.js');
 
 self.addEventListener('install', event => {
@@ -15,7 +16,7 @@ self.addEventListener('message', event => {
     if (event.data?.type !== 'cache-assets' || !Array.isArray(event.data.urls)) return;
     event.waitUntil(caches.open(CACHE).then(cache => Promise.allSettled(
         event.data.urls.filter(value => {
-            try { return isAppAsset(new URL(value)); } catch { return false; }
+            try { const url = new URL(value); return isAppAsset(url) || isFontAsset(url); } catch { return false; }
         }).map(async url => {
             if (!await cache.match(url)) await cache.add(url);
         })
@@ -26,9 +27,13 @@ self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
     const puzzle = (url.origin === 'https://sudokupad.svencodes.com' && url.pathname.startsWith('/ctclegacy/')) ||
         (url.origin === 'https://sudokupad.app' && url.pathname.startsWith('/api/puzzle/'));
-    if (!isAppAsset(url) && !puzzle) return;
+    if (!isAppAsset(url) && !puzzle && !isFontAsset(url)) return;
     event.respondWith((async () => {
         const cache = await caches.open(CACHE);
+        if (puzzle || isFontAsset(url)) {
+            const saved = await cache.match(event.request);
+            if (saved) return saved;
+        }
         try {
             const response = await fetch(event.request);
             if (response.ok) {

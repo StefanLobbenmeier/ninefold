@@ -57,49 +57,64 @@ internal enum class InputMode(val label: String, val mark: String) {
 
 @Composable
 @androidx.compose.ui.tooling.preview.Preview
-fun App(indexCache: SudokuIndexCache = MemorySudokuIndexCache()) {
+fun App(indexCache: SudokuIndexCache? = null, storage: AppStorage = platformAppStorage()) {
+    val localIndexCache = remember(storage, indexCache) { indexCache ?: object : SudokuIndexCache {
+        override fun read() = storage.read("ninefold.sudoku-index.v1")
+        override fun write(payload: String) = storage.write("ninefold.sudoku-index.v1", payload)
+    } }
+    val games = remember(storage) { GameRepository(storage) }
+    val downloadScope = rememberCoroutineScope()
     MaterialTheme(
         colorScheme = lightColorScheme(primary = Moss, onPrimary = Color.White, primaryContainer = Sage, background = Paper, surface = Color.White, onSurface = Ink, error = ErrorRed),
         typography = Typography(),
     ) {
         var activePuzzle by remember { mutableStateOf<Puzzle?>(null) }
-        val repository = remember(indexCache) { SudokuIndexRepository(indexCache) }
+        val repository = remember(localIndexCache) { SudokuIndexRepository(localIndexCache) }
         val current = activePuzzle
-        if (current == null) SudokuCatalog(repository) { activePuzzle = it }
-        else key(current) { SudokuApp(current) { activePuzzle = null } }
+        Box(Modifier.fillMaxSize()) {
+            if (current == null) SudokuCatalog(repository, games, downloadScope) { activePuzzle = it }
+            else key(current) { SudokuApp(current, games, onImport = { activePuzzle = it }) { activePuzzle = null } }
+            games.storageError?.let { message -> Snackbar(Modifier.align(Alignment.BottomCenter)) { Text(message) } }
+        }
     }
 }
 
 @Composable
-private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
-    var puzzle by remember { mutableStateOf(initialPuzzle) }
-    var cells by remember(puzzle) { mutableStateOf(puzzle.startingCells()) }
+private fun SudokuApp(puzzle: Puzzle, repository: GameRepository, onImport: (Puzzle) -> Unit, onBrowse: () -> Unit) {
+    val saved = remember(puzzle) { repository.game(puzzle) }
+    var cells by remember(puzzle) { mutableStateOf(saved?.cells ?: puzzle.startingCells()) }
     var selected by remember { mutableStateOf(setOf(CellPosition(0, 2))) }
-    var mode by remember { mutableStateOf(InputMode.Digit) }
+    val mode = InputMode.entries.firstOrNull { it.name == repository.settings.inputMode } ?: InputMode.Digit
     var showImport by remember { mutableStateOf(false) }
-    var showRules by remember { mutableStateOf(true) }
-    var started by remember(puzzle) { mutableStateOf(false) }
-    var multiSelect by remember { mutableStateOf(false) }
-    val clock = remember(puzzle) { GameClock() }
-    var elapsed by remember(puzzle) { mutableStateOf(0L) }
+    var showRules by remember { mutableStateOf(saved?.started != true) }
+    var started by remember(puzzle) { mutableStateOf(saved?.started ?: false) }
+    val multiSelect = repository.settings.multiSelect
+    val clock = remember(puzzle) { GameClock().also { it.restore(repository.elapsed(puzzle)) } }
+    var elapsed by remember(puzzle) { mutableStateOf(repository.elapsed(puzzle)) }
     val completed = remember(puzzle, cells) { puzzle.isComplete(cells) }
     LaunchedEffect(started, completed, puzzle) {
         if (started) {
             if (completed) clock.stop() else clock.start()
             elapsed = clock.elapsedSeconds()
-            while (!completed) { delay(200); elapsed = clock.elapsedSeconds() }
+            repository.saveElapsed(puzzle, elapsed)
+            while (!completed) {
+                delay(200)
+                val next = clock.elapsedSeconds()
+                if (next != elapsed) { elapsed = next; repository.saveElapsed(puzzle, elapsed) }
+            }
         }
     }
     var showChecking by remember { mutableStateOf(false) }
-    var checkRules by remember { mutableStateOf(true) }
-    var checkRulesAutomatically by remember { mutableStateOf(true) }
-    var includeSpecialRules by remember { mutableStateOf(true) }
-    var checkSolution by remember { mutableStateOf(true) }
-    var checkSolutionAutomatically by remember { mutableStateOf(true) }
+    val settings = repository.settings
+    val checkRules = settings.rules
+    val checkRulesAutomatically = settings.automaticRules
+    val includeSpecialRules = settings.specialRules
+    val checkSolution = settings.solution
+    val checkSolutionAutomatically = settings.automaticSolution
     var manualRulesCheck by remember { mutableStateOf(false) }
     var manualSolutionCheck by remember { mutableStateOf(false) }
-    var history by remember { mutableStateOf<List<List<CellState>>>(emptyList()) }
-    var redoStack by remember { mutableStateOf<List<List<CellState>>>(emptyList()) }
+    var history by remember { mutableStateOf(saved?.history ?: emptyList()) }
+    var redoStack by remember { mutableStateOf(saved?.redo ?: emptyList()) }
     val rulesResult = remember(puzzle, cells, checkRules, checkRulesAutomatically, includeSpecialRules, manualRulesCheck) {
         if (checkRules && (checkRulesAutomatically || manualRulesCheck)) checkSudokuRules(puzzle, cells, includeSpecialRules) else PuzzleCheckResult()
     }
@@ -110,6 +125,15 @@ private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
     val hasActiveCheck = (checkRules && (checkRulesAutomatically || manualRulesCheck)) ||
         (checkSolution && (checkSolutionAutomatically || manualSolutionCheck))
 
+    fun save() {
+        repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack))
+        if (puzzle.isComplete(cells)) clock.stop()
+        repository.saveElapsed(puzzle, clock.elapsedSeconds())
+    }
+    DisposableEffect(puzzle) {
+        onDispose { clock.stop(); repository.saveElapsed(puzzle, clock.elapsedSeconds()) }
+    }
+
     fun clearManualChecks() { manualRulesCheck = false; manualSolutionCheck = false }
     fun checkNow() { manualRulesCheck = checkRules; manualSolutionCheck = checkSolution }
 
@@ -117,17 +141,17 @@ private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
         if (!started) return
         val next = cells.toMutableList().also(transform)
         if (next == cells) return
-        history = history + listOf(cells); redoStack = emptyList(); cells = next; clearManualChecks()
+        history = history + listOf(cells); redoStack = emptyList(); cells = next; clearManualChecks(); save()
     }
     fun enter(number: Int?) = update { next ->
         val entered = applyInput(next, selected, mode, number)
         next.clear(); next.addAll(entered)
     }
-    fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); clearManualChecks() } }
-    fun redo() { redoStack.firstOrNull()?.let { history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); clearManualChecks() } }
+    fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); clearManualChecks(); save() } }
+    fun redo() { redoStack.firstOrNull()?.let { history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); clearManualChecks(); save() } }
 
     fun setMultiple(enabled: Boolean) {
-        multiSelect = enabled
+        repository.saveSettings(repository.settings.copy(multiSelect = enabled))
         if (!enabled) selected = selected.firstOrNull()?.let { setOf(it) } ?: emptySet()
     }
 
@@ -147,7 +171,7 @@ private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
                         SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { selected = it }, onSelect = ::select)
                     }
                     SelectionControls(multiSelect, ::setMultiple, selected.size)
-                    Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, compact = true)
+                    Controls(mode, { repository.saveSettings(repository.settings.copy(inputMode = it.name)) }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, compact = true)
                 }
             } else {
                 Row(Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
@@ -155,7 +179,7 @@ private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
                         PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck, elapsed = elapsed, completed = completed); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, additiveSelection = multiSelect, onDragSelection = { selected = it }) { select(it) }
                     }
                     Column(Modifier.widthIn(min = 270.dp, max = 350.dp)) {
-                        SideCard("PLAY") { SelectionControls(multiSelect, ::setMultiple, selected.size); Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow) }
+                        SideCard("PLAY") { SelectionControls(multiSelect, ::setMultiple, selected.size); Controls(mode, { repository.saveSettings(repository.settings.copy(inputMode = it.name)) }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
                             puzzle.rules.forEachIndexed { index, rule -> Row(Modifier.padding(vertical = 6.dp)) {
@@ -170,18 +194,18 @@ private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
         }
     }
     if (showImport) ImportDialog({ showImport = false }) { imported ->
-        puzzle = imported; cells = imported.startingCells(); mode = InputMode.Digit; selected = setOf(CellPosition(0, 0)); history = emptyList(); redoStack = emptyList(); clearManualChecks(); showImport = false; showRules = true; multiSelect = false; started = false; clock.reset(); elapsed = 0
+        showImport = false; onImport(imported)
     }
     if (showRules) RulesDialog(puzzle, starting = !started) {
-        if (!started) { clock.start(); started = true }
+        if (!started) { clock.start(); started = true; save() }
         showRules = false
     }
     if (showChecking) CheckingDialog(
-        checkRules, { checkRules = it; manualRulesCheck = false },
-        checkRulesAutomatically, { checkRulesAutomatically = it; manualRulesCheck = false },
-        includeSpecialRules, { includeSpecialRules = it; manualRulesCheck = false },
-        checkSolution, { checkSolution = it; manualSolutionCheck = false },
-        checkSolutionAutomatically, { checkSolutionAutomatically = it; manualSolutionCheck = false },
+        checkRules, { repository.saveSettings(settings.copy(rules = it)); manualRulesCheck = false },
+        checkRulesAutomatically, { repository.saveSettings(settings.copy(automaticRules = it)); manualRulesCheck = false },
+        includeSpecialRules, { repository.saveSettings(settings.copy(specialRules = it)); manualRulesCheck = false },
+        checkSolution, { repository.saveSettings(settings.copy(solution = it)); manualSolutionCheck = false },
+        checkSolutionAutomatically, { repository.saveSettings(settings.copy(automaticSolution = it)); manualSolutionCheck = false },
     ) { showChecking = false }
 }
 
@@ -195,7 +219,7 @@ private fun TopBar(onImport: () -> Unit, onRules: () -> Unit, onChecking: () -> 
                 Box(Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).background(Moss), contentAlignment = Alignment.Center) { Text("9", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp) }
                 if (!narrow) { Spacer(Modifier.width(10.dp)); Text("NINEFOLD", fontWeight = FontWeight.Black, letterSpacing = 1.2.sp) }
                 Spacer(Modifier.weight(1f))
-                TextButton(onBrowse) { Text("Puzzles") }; TextButton(onRules) { Text("Rules") }; TextButton(onChecking) { Text("Checks") }; Spacer(Modifier.width(4.dp)); Button(onImport, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(horizontal = if (narrow) 10.dp else 16.dp, vertical = 10.dp)) { Text(if (narrow) "＋" else "＋  Import") }
+                TextButton(onBrowse) { Text("Puzzles") }; TextButton(onRules) { Text("Rules") }; TextButton(onChecking) { Text("Checks") }; Spacer(Modifier.width(4.dp)); Button(onImport, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(horizontal = if (narrow) 10.dp else 16.dp, vertical = 10.dp)) { Text(if (narrow) "+" else "+  Import") }
             }
         }
     }
@@ -434,7 +458,7 @@ private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (In
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Spacer(Modifier.weight(1f))
                 OutlinedButton({ onNumber(null) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = "Zero, erase selected cells" }, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) { Text("0", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink) }
-                OutlinedButton({ onNumber(null) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = "Erase" }, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) { Text("⌫", fontSize = 22.sp) }
+                OutlinedButton({ onNumber(null) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = "Erase" }, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) { Text("Erase", fontSize = 13.sp) }
             }
         }
         Column(Modifier.width(72.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -447,8 +471,8 @@ private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (In
         }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        TextButton(onUndo, Modifier.weight(1f), enabled = canUndo) { Text("↶ Undo") }
-        TextButton(onRedo, Modifier.weight(1f), enabled = canRedo) { Text("Redo ↷") }
+        TextButton(onUndo, Modifier.weight(1f), enabled = canUndo) { Text("Undo") }
+        TextButton(onRedo, Modifier.weight(1f), enabled = canRedo) { Text("Redo") }
     }
 }
 
@@ -515,8 +539,8 @@ private fun RulesDialog(puzzle: Puzzle, starting: Boolean, onDismiss: () -> Unit
             Text("RULES", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
             puzzle.rules.forEach { Text("•  $it", Modifier.padding(vertical = 5.dp), lineHeight = 20.sp) }
             if (puzzle.videoUrl != null || puzzle.sourceUrl != null) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Watch source video ↗") } }
-            puzzle.sourceUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad ↗") } }
+            puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Watch source video") } }
+            puzzle.sourceUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad") } }
             if (starting) Text("Your timer starts when you tap Okay.", color = Color.Gray, fontSize = 12.sp)
         } }, shape = RoundedCornerShape(22.dp),
     )

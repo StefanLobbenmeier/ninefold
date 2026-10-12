@@ -1,0 +1,125 @@
+package de.sudokupad
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateMapOf
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+interface AppStorage {
+    fun read(key: String): String?
+    fun write(key: String, payload: String)
+}
+
+class MemoryAppStorage : AppStorage {
+    private val records = mutableMapOf<String, String>()
+    override fun read(key: String) = records[key]
+    override fun write(key: String, payload: String) { records[key] = payload }
+}
+
+expect fun platformAppStorage(): AppStorage
+
+@Serializable
+internal data class CheckingSettings(
+    val inputMode: String = "Digit", val multiSelect: Boolean = false,
+    val rules: Boolean = true, val automaticRules: Boolean = true,
+    val specialRules: Boolean = true, val solution: Boolean = true, val automaticSolution: Boolean = true,
+)
+
+@Serializable
+internal data class SavedGame(
+    val puzzle: Puzzle, val cells: List<CellState>, val started: Boolean,
+    val history: List<List<CellState>> = emptyList(), val redo: List<List<CellState>> = emptyList(),
+) {
+    val completed: Boolean get() = puzzle.isComplete(cells)
+}
+
+internal fun Puzzle.storageId(): String = sourceUrl ?: Json.encodeToString(copy(videoUrl = null))
+
+/** Converted puzzle data, moves, and small timer records have independent storage keys. */
+internal class GameRepository(
+    private val storage: AppStorage,
+    private val fetchPuzzleData: suspend (String) -> Puzzle = ::importSudokuPadPuzzle,
+) {
+    private val json = Json { ignoreUnknownKeys = true }
+    var storageError by mutableStateOf<String?>(null)
+        private set
+    private inline fun <reified T> read(key: String): T? = runCatching {
+        storage.read("ninefold.$key.v1")?.let { json.decodeFromString<T>(it) }
+    }.getOrNull()
+    private inline fun <reified T> write(key: String, value: T): Boolean = try {
+        storage.write("ninefold.$key.v1", json.encodeToString(value)); true
+    } catch (error: Throwable) {
+        storageError = "Could not save locally. Progress and offline access may be lost: ${error.message.orEmpty()}"
+        false
+    }
+    var settings by mutableStateOf(read<CheckingSettings>("settings") ?: CheckingSettings())
+        private set
+    var games by mutableStateOf(read<List<String>>("games").orEmpty().mapNotNull { id ->
+        read<SavedGame>("game.$id")?.takeIf { it.cells.size == 81 }?.let { id to it }
+    }.toMap())
+        private set
+    private val puzzles = mutableMapOf<String, Puzzle>()
+    private val fetchLocks = mutableMapOf<String, Mutex>()
+
+    val statuses = mutableStateMapOf<String, DownloadStatus>()
+    val downloadErrors = mutableStateMapOf<String, String>()
+    private val downloads = mutableMapOf<String, Job>()
+    private val slots = Semaphore(4)
+
+    fun prepare(entries: List<SudokuIndexEntry>, scope: CoroutineScope) {
+        entries.forEach { entry ->
+            if (cachedPuzzle(entry) != null) statuses[entry.id] = DownloadStatus.Ready
+            else if (downloads[entry.id]?.isActive != true) {
+                statuses[entry.id] = DownloadStatus.Waiting
+                downloadErrors.remove(entry.id)
+                downloads[entry.id] = scope.launch {
+                    slots.withPermit {
+                        statuses[entry.id] = DownloadStatus.Downloading
+                        try {
+                            fetchPuzzle(entry)
+                            statuses[entry.id] = DownloadStatus.Ready
+                        } catch (error: Throwable) {
+                            if (error is CancellationException && error !is kotlinx.coroutines.TimeoutCancellationException) throw error
+                            statuses[entry.id] = DownloadStatus.Failed
+                            downloadErrors[entry.id] = error.message ?: "Try again when connected to the internet."
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun saveSettings(value: CheckingSettings) { settings = value; write("settings", value) }
+    fun game(puzzle: Puzzle) = games[puzzle.storageId()]
+    fun saveGame(game: SavedGame) {
+        val id = game.puzzle.storageId()
+        games = games + (id to game)
+        write("game.$id", game)
+        write("games", games.keys.toList())
+    }
+    fun elapsed(puzzle: Puzzle): Long = (read<Long>("timer.${puzzle.storageId()}") ?: 0L).coerceAtLeast(0)
+    fun saveElapsed(puzzle: Puzzle, seconds: Long) { write("timer.${puzzle.storageId()}", seconds) }
+    fun cachedPuzzle(entry: SudokuIndexEntry): Puzzle? = puzzles[entry.puzzleUrl]
+        ?: read<Puzzle>("puzzle.${entry.puzzleUrl}")?.also { puzzles[entry.puzzleUrl] = it }
+
+    suspend fun fetchPuzzle(entry: SudokuIndexEntry, fetch: suspend (String) -> Puzzle = fetchPuzzleData): Puzzle = fetchLocks.getOrPut(entry.puzzleUrl) { Mutex() }.withLock {
+        cachedPuzzle(entry)?.let { return@withLock it }
+        val puzzle = withTimeout(15_000) { fetch(entry.puzzleUrl) }
+            .let { it.copy(videoUrl = entry.videoUrl ?: it.videoUrl) }
+        check(write("puzzle.${entry.puzzleUrl}", puzzle)) { "Puzzle converted, but could not save it for offline play." }
+        puzzles[entry.puzzleUrl] = puzzle
+        puzzle
+    }
+}
