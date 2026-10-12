@@ -80,6 +80,7 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(compose.desktop.currentOs)
+            implementation(libs.compose.uiTestJunit4)
         }
         jsMain.dependencies {
             implementation(libs.wrappers.browser)

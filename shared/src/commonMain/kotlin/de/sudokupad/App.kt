@@ -53,13 +53,16 @@ internal enum class InputMode(val label: String, val mark: String) {
 
 @Composable
 @androidx.compose.ui.tooling.preview.Preview
-fun App(indexCache: SudokuIndexCache = MemorySudokuIndexCache()) {
+fun App(
+    indexCache: SudokuIndexCache = MemorySudokuIndexCache(),
+    indexRepository: SudokuIndexRepository? = null,
+) {
     MaterialTheme(
         colorScheme = lightColorScheme(primary = Moss, onPrimary = Color.White, primaryContainer = Sage, background = Paper, surface = Color.White, onSurface = Ink, error = ErrorRed),
         typography = Typography(),
     ) {
         var activePuzzle by remember { mutableStateOf<Puzzle?>(null) }
-        val repository = remember(indexCache) { SudokuIndexRepository(indexCache) }
+        val repository = remember(indexCache, indexRepository) { indexRepository ?: SudokuIndexRepository(indexCache) }
         val current = activePuzzle
         if (current == null) SudokuCatalog(repository) { activePuzzle = it }
         else key(current) { SudokuApp(current) { activePuzzle = null } }
