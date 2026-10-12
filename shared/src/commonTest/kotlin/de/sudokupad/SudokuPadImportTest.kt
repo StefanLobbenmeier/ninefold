@@ -27,6 +27,12 @@ class SudokuPadImportTest {
         } finally { client.close() }
     }
 
+    @Test fun retainsEmbeddedVideoLinks() {
+        val rows = List(9) { "[${List(9) { "{}" }.joinToString()}]" }.joinToString()
+        val puzzle = parseSudokuPadPayload("""scl{"cells":[$rows],"metadata":{"videos":["aaaaaaaaaaa"]}}""")
+        assertEquals("https://www.youtube.com/watch?v=aaaaaaaaaaa", puzzle.videoUrl)
+    }
+
     @Test fun reportsUnavailablePuzzlesWithoutParsingTheErrorBody() = runTest {
         val client = HttpClient(MockEngine { respond("Not found", HttpStatusCode.NotFound) })
         try {

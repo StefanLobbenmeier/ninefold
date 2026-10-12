@@ -22,16 +22,19 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.delay
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
@@ -44,7 +47,7 @@ private val Paper = Color(0xFFF7F6F0)
 private val Butter = Color(0xFFF1E6BD)
 private val ErrorRed = Color(0xFFC94E45)
 
-private enum class InputMode(val label: String, val mark: String) {
+internal enum class InputMode(val label: String, val mark: String) {
     Digit("Digit", "5"), Corner("Corner", "1·2"), Centre("Centre", "12")
 }
 
@@ -70,7 +73,19 @@ private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
     var selected by remember { mutableStateOf(setOf(CellPosition(0, 2))) }
     var mode by remember { mutableStateOf(InputMode.Digit) }
     var showImport by remember { mutableStateOf(false) }
-    var showRules by remember { mutableStateOf(false) }
+    var showRules by remember { mutableStateOf(true) }
+    var started by remember(puzzle) { mutableStateOf(false) }
+    var multiSelect by remember { mutableStateOf(false) }
+    val clock = remember(puzzle) { GameClock() }
+    var elapsed by remember(puzzle) { mutableStateOf(0L) }
+    val completed = remember(puzzle, cells) { puzzle.isComplete(cells) }
+    LaunchedEffect(started, completed, puzzle) {
+        if (started) {
+            if (completed) clock.stop() else clock.start()
+            elapsed = clock.elapsedSeconds()
+            while (!completed) { delay(200); elapsed = clock.elapsedSeconds() }
+        }
+    }
     var showChecking by remember { mutableStateOf(false) }
     var checkRules by remember { mutableStateOf(true) }
     var checkRulesAutomatically by remember { mutableStateOf(true) }
@@ -95,36 +110,48 @@ private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
     fun checkNow() { manualRulesCheck = checkRules; manualSolutionCheck = checkSolution }
 
     fun update(transform: (MutableList<CellState>) -> Unit) {
-        history = history + listOf(cells); redoStack = emptyList(); cells = cells.toMutableList().also(transform); clearManualChecks()
+        if (!started) return
+        val next = cells.toMutableList().also(transform)
+        if (next == cells) return
+        history = history + listOf(cells); redoStack = emptyList(); cells = next; clearManualChecks()
     }
-    fun enter(number: Int?) = update { next -> selected.forEach { position ->
-        val old = next[position.index]
-        if (!old.given) next[position.index] = when (mode) {
-            InputMode.Digit -> old.copy(value = number, cornerNotes = emptySet(), centreNotes = emptySet())
-            InputMode.Corner -> old.copy(cornerNotes = number?.let { old.cornerNotes.toggle(it) } ?: emptySet(), value = null)
-            InputMode.Centre -> old.copy(centreNotes = number?.let { old.centreNotes.toggle(it) } ?: emptySet(), value = null)
-        }
-    } }
+    fun enter(number: Int?) = update { next ->
+        val entered = applyInput(next, selected, mode, number)
+        next.clear(); next.addAll(entered)
+    }
     fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); clearManualChecks() } }
     fun redo() { redoStack.firstOrNull()?.let { history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); clearManualChecks() } }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Paper)) {
+    fun setMultiple(enabled: Boolean) {
+        multiSelect = enabled
+        if (!enabled) selected = selected.firstOrNull()?.let { setOf(it) } ?: emptySet()
+    }
+
+    fun select(position: CellPosition) {
+        selected = if (multiSelect) { if (position in selected) selected - position else selected + position } else setOf(position)
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize().background(Paper).safeDrawingPadding()) {
         val compact = maxWidth < 850.dp
         Column(Modifier.fillMaxSize()) {
             TopBar({ showImport = true }, { showRules = true }, { showChecking = true }, onBrowse)
             if (compact) {
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck); Spacer(Modifier.height(12.dp))
-                    SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks) { selected = setOf(it) }
-                    Spacer(Modifier.height(16.dp)); Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow); Spacer(Modifier.height(24.dp))
+                Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck, compact = true, elapsed = elapsed, completed = completed)
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                        val boardSize = minOf(maxWidth, maxHeight)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), onSelect = ::select)
+                    }
+                    SelectionControls(multiSelect, ::setMultiple, selected.size)
+                    Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, compact = true)
                 }
             } else {
                 Row(Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks) { selected = setOf(it) }
+                        PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck, elapsed = elapsed, completed = completed); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks) { select(it) }
                     }
                     Column(Modifier.widthIn(min = 270.dp, max = 350.dp)) {
-                        SideCard("PLAY") { Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow) }
+                        SideCard("PLAY") { SelectionControls(multiSelect, ::setMultiple, selected.size); Controls(mode, { mode = it }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
                             puzzle.rules.forEachIndexed { index, rule -> Row(Modifier.padding(vertical = 6.dp)) {
@@ -139,9 +166,12 @@ private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
         }
     }
     if (showImport) ImportDialog({ showImport = false }) { imported ->
-        puzzle = imported; cells = imported.startingCells(); mode = InputMode.Digit; selected = setOf(CellPosition(0, 0)); history = emptyList(); redoStack = emptyList(); clearManualChecks(); showImport = false
+        puzzle = imported; cells = imported.startingCells(); mode = InputMode.Digit; selected = setOf(CellPosition(0, 0)); history = emptyList(); redoStack = emptyList(); clearManualChecks(); showImport = false; showRules = true; multiSelect = false; started = false; clock.reset(); elapsed = 0
     }
-    if (showRules) RulesDialog(puzzle) { showRules = false }
+    if (showRules) RulesDialog(puzzle, starting = !started) {
+        if (!started) { clock.start(); started = true }
+        showRules = false
+    }
     if (showChecking) CheckingDialog(
         checkRules, { checkRules = it; manualRulesCheck = false },
         checkRulesAutomatically, { checkRulesAutomatically = it; manualRulesCheck = false },
@@ -151,14 +181,13 @@ private fun SudokuApp(initialPuzzle: Puzzle, onBrowse: () -> Unit) {
     ) { showChecking = false }
 }
 
-private fun Set<Int>.toggle(value: Int) = if (value in this) this - value else this + value
 
 @Composable
 private fun TopBar(onImport: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, onBrowse: () -> Unit) {
     Surface(shadowElevation = 1.dp, color = Color.White) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val narrow = maxWidth < 480.dp
-            Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().height(if (narrow) 52.dp else 64.dp).padding(horizontal = if (narrow) 12.dp else 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).background(Moss), contentAlignment = Alignment.Center) { Text("9", color = Color.White, fontWeight = FontWeight.Black, fontSize = 20.sp) }
                 if (!narrow) { Spacer(Modifier.width(10.dp)); Text("NINEFOLD", fontWeight = FontWeight.Black, letterSpacing = 1.2.sp) }
                 Spacer(Modifier.weight(1f))
@@ -169,7 +198,7 @@ private fun TopBar(onImport: () -> Unit, onRules: () -> Unit, onChecking: () -> 
 }
 
 @Composable
-private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int, checked: Boolean) {
+private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int, checked: Boolean, compact: Boolean = false, elapsed: Long = 0, completed: Boolean = false) {
     Row(Modifier.widthIn(max = 660.dp).fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f)) {
             val types = buildList {
@@ -180,26 +209,31 @@ private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int, checked: Boolean) {
                 if (isEmpty()) add("CLASSIC")
             }
             Text(types.joinToString(" · "), color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-            Text(puzzle.title, fontSize = 28.sp, fontWeight = FontWeight.Bold); Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 13.sp)
+            Text(puzzle.title, fontSize = if (compact) 20.sp else 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis); Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        Column(horizontalAlignment = Alignment.End) {
+        Text(formatElapsed(elapsed), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Surface(shape = RoundedCornerShape(50), color = if (!checked) Butter else if (errorCount > 0) Color(0xFFFFE7E3) else Sage) {
             Text(when {
+                completed -> "Completed"
                 !checked -> "Not checked"
                 errorCount > 0 -> "$errorCount issue${if (errorCount == 1) "" else "s"}"
                 else -> "Looking good"
             }, Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = if (checked && errorCount > 0) ErrorRed else Moss, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
+        }
     }
 }
 
 @Composable
-internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), onSelect: (CellPosition) -> Unit) {
+internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, onSelect: (CellPosition) -> Unit) {
     val hasOutside = (puzzle.overlays + puzzle.underlays).any { it.center.row !in 0.0..9.0 || it.center.column !in 0.0..9.0 } ||
         puzzle.arrows.any { arrow -> arrow.points.any { it.row !in 0.0..9.0 || it.column !in 0.0..9.0 } }
     val padCells = if (hasOutside) 1 else 0
     val litCells = remember(puzzle, cells) { puzzle.litCells(cells) }
     val measurer = rememberTextMeasurer()
-    BoxWithConstraints(Modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f)) {
+    BoxWithConstraints(modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f)) {
+        val digitSize = minOf(24f, maxWidth.value / (9 + padCells * 2) * .6f).sp
         val inset = maxWidth * (padCells.toFloat() / (9 + padCells * 2))
         Box(Modifier.fillMaxSize().background(if (hasOutside) Paper else Color.White)) {
             Box(Modifier.fillMaxSize().padding(inset).background(Color.White).border(2.dp, Ink))
@@ -209,19 +243,22 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             val position = CellPosition(row, column); val cell = cells[position.index]; val isSelected = position in selected
             val peer = selected.any { it.row == row || it.column == column || (it.row / 3 == row / 3 && it.column / 3 == column / 3) }
             val same = cell.value != null && selected.any { cells[it.index].value == cell.value }
-            val background = when { position.index in conflicts -> Color(0xEFFFF1EC); isSelected -> Butter.copy(alpha = .82f); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); peer -> Color(0xCCF1F3EC); else -> Color.Transparent }
+            val background = when { isSelected -> Butter.copy(alpha = .92f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); peer -> Color(0xCCF1F3EC); else -> Color.Transparent }
             val fogged = puzzle.fogLights != null && position !in litCells
-            Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }.drawBehind {
+            Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }.drawBehind {
                 val thin = .55.dp.toPx(); val thick = 1.5.dp.toPx()
                 drawLine(Ink.copy(alpha = .65f), Offset(size.width, 0f), Offset(size.width, size.height), if ((column + 1) % 3 == 0) thick else thin)
                 drawLine(Ink.copy(alpha = .65f), Offset(0f, size.height), Offset(size.width, size.height), if ((row + 1) % 3 == 0) thick else thin)
             }, contentAlignment = Alignment.Center) {
                 if (fogged) Box(Modifier.matchParentSize().background(Color(0xFFB4B7B5)))
                 when {
-                    cell.value != null && (!cell.given || !fogged) -> Text(cell.value.toString(), fontSize = 24.sp, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
-                    cell.cornerNotes.isNotEmpty() -> CornerNotes(cell.cornerNotes, invalidPencilMarks[position.index].orEmpty())
-                    cell.centreNotes.isNotEmpty() -> CentreNotes(cell.centreNotes, invalidPencilMarks[position.index].orEmpty())
+                    cell.value != null && (!cell.given || !fogged) -> Text(cell.value.toString(), fontSize = digitSize, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
+                    cell.value == null -> {
+                        if (cell.cornerNotes.isNotEmpty()) CornerNotes(cell.cornerNotes, invalidPencilMarks[position.index].orEmpty())
+                        if (cell.centreNotes.isNotEmpty()) CentreNotes(cell.centreNotes, invalidPencilMarks[position.index].orEmpty())
+                    }
                 }
+                if (isSelected) Box(Modifier.matchParentSize().border(2.dp, Moss))
                 if (!fogged) puzzle.cages.firstOrNull { position in it.cells }?.let { cage -> if (position == cage.cells.minBy { it.index }) Text(cage.total.toString(), Modifier.align(Alignment.TopStart).padding(start = 3.dp, top = 1.dp), fontSize = 8.sp, color = Color(0xFF765A7C), fontWeight = FontWeight.Bold) }
             }
                 } } } }
@@ -323,17 +360,20 @@ private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
 @Composable
 private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>) {
     Column(Modifier.fillMaxSize().padding(3.dp)) { repeat(3) { row -> Row(Modifier.weight(1f)) { repeat(3) { col ->
-        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { val number = row * 3 + col + 1; if (number in notes) Text(number.toString(), fontSize = 8.sp, color = if (number in invalid) ErrorRed else Moss) }
+        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { val number = row * 3 + col + 1; if (number in notes) Text(number.toString(), fontSize = 8.sp, lineHeight = 8.sp, color = if (number in invalid) ErrorRed else Moss) }
     } } } }
 }
 
 @Composable
 private fun CentreNotes(notes: Set<Int>, invalid: Set<Int>) {
-    Text(buildAnnotatedString {
-        notes.sorted().forEach { number ->
-            withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
-        }
-    }, fontSize = 10.sp, textAlign = TextAlign.Center)
+    BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        val noteSize = minOf(10f, maxWidth.value / notes.size.coerceAtLeast(1)).sp
+        Text(buildAnnotatedString {
+            notes.sorted().forEach { number ->
+                withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
+            }
+        }, fontSize = noteSize, lineHeight = noteSize, maxLines = 1, textAlign = TextAlign.Center)
+    }
 }
 
 @Composable
@@ -344,21 +384,31 @@ private fun SideCard(label: String, content: @Composable ColumnScope.() -> Unit)
 }
 
 @Composable
-private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit) {
+private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, compact: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { InputMode.entries.forEach { item -> val active = item == mode
-        Surface(Modifier.weight(1f).clickable { onMode(item) }, shape = RoundedCornerShape(10.dp), color = if (active) Moss else Color(0xFFF0F1EA)) {
+        Surface(Modifier.weight(1f).semantics { selected = active }.clickable { onMode(item) }, shape = RoundedCornerShape(10.dp), color = if (active) Moss else Color(0xFFF0F1EA)) {
             Column(Modifier.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(item.mark, color = if (active) Color.White else Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold); Text(item.label, color = if (active) Color.White else Color.Gray, fontSize = 10.sp) }
         }
     } }
-    Spacer(Modifier.height(12.dp))
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { repeat(3) { row -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(3) { col ->
-        val number = row * 3 + col + 1
-        OutlinedButton({ onNumber(number) }, Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) { Text(number.toString(), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Ink) }
-    } } } }
-    Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TextButton(onUndo, Modifier.weight(1f), enabled = canUndo) { Text("↶  Undo") }; TextButton({ onNumber(null) }, Modifier.weight(1f)) { Text("⌫  Erase") }; TextButton(onRedo, Modifier.weight(1f), enabled = canRedo) { Text("Redo  ↷") }
+    Spacer(Modifier.height(8.dp))
+    val rows = if (compact) listOf((1..5).toList(), (6..9).toList()) else (1..9).chunked(3)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        rows.forEach { numbers ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                numbers.forEach { number ->
+                    OutlinedButton({ onNumber(number) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp), shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) { Text(number.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink) }
+                }
+                if (compact && numbers.size == 4) OutlinedButton({ onNumber(null) }, Modifier.weight(1f).height(44.dp).semantics { contentDescription = "Erase" }, contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(10.dp)) { Text("⌫", fontSize = 22.sp) }
+            }
+        }
     }
-    OutlinedButton(onCheck, Modifier.fillMaxWidth(), enabled = canCheck) { Text("Check sudoku") }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TextButton(onUndo, Modifier.weight(1f), enabled = canUndo) { Text("↶ Undo") }
+        if (!compact) TextButton({ onNumber(null) }, Modifier.weight(1f)) { Text("⌫ Erase") }
+        TextButton(onRedo, Modifier.weight(1f), enabled = canRedo) { Text("Redo ↷") }
+        if (compact) TextButton(onCheck, Modifier.weight(1f), enabled = canCheck) { Text("Check") }
+    }
+    if (!compact) OutlinedButton(onCheck, Modifier.fillMaxWidth(), enabled = canCheck) { Text("Check sudoku") }
 }
 
 @Composable
@@ -404,8 +454,29 @@ private fun IndentedCheckOption(label: String, checked: Boolean, onChecked: (Boo
 }
 
 @Composable
-private fun RulesDialog(puzzle: Puzzle, onDismiss: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, confirmButton = { Button(onDismiss) { Text("Got it") } }, title = { Text(puzzle.title) }, text = { Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
-        Text("RULES", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp); Spacer(Modifier.height(8.dp)); puzzle.rules.forEach { Text("•  $it", Modifier.padding(vertical = 5.dp), lineHeight = 20.sp) }; Spacer(Modifier.height(8.dp)); Text(if (puzzle.solution != null) "This puzzle includes a solution, so incorrect digits can be highlighted immediately." else "No solution was included. Rule conflicts can still be detected.", color = Color.Gray, fontSize = 12.sp)
-    } }, shape = RoundedCornerShape(22.dp))
+private fun SelectionControls(multiple: Boolean, onMultiple: (Boolean) -> Unit, count: Int) {
+    Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+        FilterChip(selected = multiple, onClick = { onMultiple(!multiple) }, label = { Text("Select multiple") }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Sage, selectedLabelColor = Moss))
+        Spacer(Modifier.weight(1f))
+        Text(if (multiple) "$count cells selected" else "Tap a cell to select", color = Moss, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun RulesDialog(puzzle: Puzzle, starting: Boolean, onDismiss: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
+    AlertDialog(
+        onDismissRequest = { if (!starting) onDismiss() },
+        confirmButton = { Button(onDismiss) { Text(if (starting) "Okay, start puzzle" else "Okay") } },
+        containerColor = Color.White,
+        title = { Column { Text(puzzle.title, maxLines = 2, overflow = TextOverflow.Ellipsis); Text("by ${puzzle.author}", style = MaterialTheme.typography.bodyMedium, color = Moss) } },
+        text = { Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+            Text("RULES", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+            puzzle.rules.forEach { Text("•  $it", Modifier.padding(vertical = 5.dp), lineHeight = 20.sp) }
+            if (puzzle.videoUrl != null || puzzle.sourceUrl != null) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Watch source video ↗") } }
+            puzzle.sourceUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad ↗") } }
+            if (starting) Text("Your timer starts when you tap Okay.", color = Color.Gray, fontSize = 12.sp)
+        } }, shape = RoundedCornerShape(22.dp),
+    )
 }

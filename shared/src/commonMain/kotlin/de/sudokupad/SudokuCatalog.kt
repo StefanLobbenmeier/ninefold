@@ -70,7 +70,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, onOpen: (Puzzle) -
                                     opening = entry.id
                                     openError = null
                                     scope.launch {
-                                        try { onOpen(importSudokuPadPuzzle(entry.puzzleUrl)) }
+                                        try { onOpen(importSudokuPadPuzzle(entry.puzzleUrl).let { it.copy(videoUrl = entry.videoUrl ?: it.videoUrl) }) }
                                         catch (error: Throwable) {
                                             if (error is CancellationException) throw error
                                             openError = "Could not open ${entry.title}. ${error.message.orEmpty()}"

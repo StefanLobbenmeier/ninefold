@@ -21,6 +21,12 @@ class SudokuIndexTest {
         assertEquals("other", index.entries.last().source)
     }
 
+    @Test fun retainsSourceVideoWhenPresent() {
+        val index = parseSudokuIndex(payload().replace("\"links\":[]", "\"links\":[{\"mediaType\":\"video\",\"url\":\"https://www.youtube.com/watch?v=aaaaaaaaaaa\"}]"))
+        assertEquals("https://www.youtube.com/watch?v=aaaaaaaaaaa", index.entries.first().videoUrl)
+        assertNull(index.entries.last().videoUrl)
+    }
+
     @Test fun refreshPersistsValidIndexForNextVisit() = runTest {
         val cache = MemorySudokuIndexCache()
         val repository = SudokuIndexRepository(cache) { payload() }

@@ -48,7 +48,7 @@ data class Puzzle(
     val overlays: List<PuzzleOverlay> = emptyList(), val underlays: List<PuzzleOverlay> = emptyList(),
     val outsideClues: List<OutsideClue> = emptyList(),
     /** Present (even when empty) when this is a fog puzzle. */
-    val fogLights: Set<CellPosition>? = null, val sourceUrl: String? = null,
+    val fogLights: Set<CellPosition>? = null, val sourceUrl: String? = null, val videoUrl: String? = null,
 ) {
     fun startingCells(): List<CellState> = givens.map { char ->
         val value = char.digitToIntOrNull()?.takeIf { it in 1..9 }

@@ -170,6 +170,16 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         outsideClues = outsideClues,
         fogLights = fog.takeIf { hasFog },
         sourceUrl = sourceUrl,
+        videoUrl = (metadata.string("video") ?: metadata.string("videoUrl")
+            ?: (metadata.array("videos") ?: root.array("videos"))?.firstOrNull()?.let { video ->
+                (video as? JsonPrimitive)?.contentOrNull ?: (video as? JsonObject)?.string("url")
+            })?.let { video ->
+                when {
+                    video.startsWith("https://") -> video
+                    Regex("[A-Za-z0-9_-]{11}").matches(video) -> "https://www.youtube.com/watch?v=$video"
+                    else -> null
+                }
+            },
     )
 }
 
