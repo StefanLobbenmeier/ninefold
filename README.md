@@ -76,7 +76,7 @@ There are no separate platform OCR implementations to add.
 
 ### SudokuPad URL import
 
-Import → SudokuPad link accepts links such as `https://sudokupad.app/hDNMJqPmTh`. The app fetches the
+Import → Puzzle link accepts links such as `https://sudokupad.app/hDNMJqPmTh`. The app fetches the
 corresponding package through SudokuPad's own CORS-enabled
 `https://sudokupad.svencodes.com/ctclegacy/{encoded-id}` endpoint and decodes both SudokuPad's
 `scl`/compact-JSON representation and the common `fpuz` representation. The main site's
@@ -143,3 +143,19 @@ Centre to enter pencil marks in all empty selected cells. A note is added to eve
 if any are missing it; tapping that number again removes it from all of them. Filled digits and
 givens are preserved when adding notes. Erase clears editable selected cells; Undo restores the
 whole group in one step.
+
+### Sharing puzzles
+
+Rules includes a selectable Puzzle link and Copy puzzle link for every puzzle, including catalog,
+SudokuPad, screenshot, and manual imports. Opening the link in the web app imports the puzzle and
+shows its rules. The link contains the complete puzzle (including variant clues, assigned line rules,
+artwork, metadata, and solution when available); moves, notes, and elapsed time are not shared.
+Existing progress on the receiving device resumes if it already has that puzzle saved.
+The puzzle data is encoded in the URL fragment, so no upload or puzzle hosting service is needed.
+Native apps generate links to the hosted web app; web builds use their current host and path.
+
+On Desktop, iOS, Android, or an installed PWA, open Import → Puzzle link, paste the shared URL,
+and select Load puzzle. Review it, confirm the clues, and select Import puzzle. Shared links decode
+locally and work offline. This tab also accepts SudokuPad URLs (which require a connection).
+Opening a shared HTTPS link directly currently targets the web app; native app deep linking is not
+configured. Pasting inside the installed app or PWA imports into that app’s own saved games.
