@@ -94,3 +94,19 @@ Before shipping native builds, smoke-test on devices:
 - Android: gallery selection/cancellation, PNG/JPEG decoding, and review on a small screen.
 - iOS: Photos picker presentation/dismissal, file decoding, and safe-area/scroll behavior.
 - Desktop: native picker behavior on each packaged OS (including Linux's desktop portal).
+
+### Puzzle catalog and offline browsing
+
+The app starts with the newest puzzles from
+`https://stefanlobbenmeier.github.io/sudoku-index/index.json`. Select Play to load a puzzle into the
+player, or Puzzles to return to the list. Import remains available from either screen.
+
+The web app saves the last valid index in localStorage and displays it immediately on subsequent
+visits while refreshing. Failed requests or invalid index responses preserve the saved list. Refresh
+retries the request; first visits without a connection show an error until a download succeeds.
+A service worker caches the app shell and loaded Wasm assets, so the catalog can reopen offline after
+an online visit. Previously opened puzzle packages are also cached; opening a new puzzle needs a
+connection. Browser storage must be available for persistent offline access.
+
+Catalog parsing, refresh, cache preservation, and unavailable storage are covered by
+`./gradlew :shared:jvmTest`.
