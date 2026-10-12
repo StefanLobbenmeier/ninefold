@@ -20,7 +20,7 @@ class MemorySudokuIndexCache : SudokuIndexCache {
     override fun write(payload: String) { this.payload = payload }
 }
 
-data class SudokuIndexEntry(val id: String, val title: String, val source: String, val publishedAt: String, val puzzleUrl: String)
+data class SudokuIndexEntry(val id: String, val title: String, val source: String, val publishedAt: String, val puzzleUrl: String, val videoUrl: String? = null)
 data class SudokuIndex(val generatedAt: String, val entries: List<SudokuIndexEntry>)
 
 internal fun parseSudokuIndex(payload: String): SudokuIndex {
@@ -40,6 +40,9 @@ internal fun parseSudokuIndex(payload: String): SudokuIndex {
             sources[entry.getValue("sourceId").jsonPrimitive.content] ?: entry.getValue("sourceId").jsonPrimitive.content,
             entry.getValue("publishedAt").jsonPrimitive.content,
             url,
+            entry["links"]?.jsonArray?.firstOrNull { link ->
+                link.jsonObject["mediaType"]?.jsonPrimitive?.content == "video"
+            }?.jsonObject?.get("url")?.jsonPrimitive?.content?.takeIf { it.startsWith("https://") },
         )
     }.distinctBy { it.id }.sortedByDescending { it.publishedAt }
     return SudokuIndex(root.getValue("generatedAt").jsonPrimitive.content, entries)
