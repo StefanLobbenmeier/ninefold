@@ -23,13 +23,43 @@ class PuzzleCheckingTest {
     }
 
     @Test
-    fun cornerNotesAreCheckedIndividuallyAgainstSolutionPosition() {
+    fun cornerNotesPassForEveryPlacementOfADigitWhenOneMatchesInTheBlock() {
         val puzzle = Puzzle("", "", ".".repeat(81), solution)
         val cells = puzzle.startingCells().toMutableList().also {
             it[0] = CellState(cornerNotes = setOf(3, 5, 7))
+            it[1] = CellState(cornerNotes = setOf(3, 5, 7))
+            it[10] = CellState(cornerNotes = setOf(3, 5, 7))
         }
 
-        assertEquals(setOf(3, 7), checkAgainstSolution(puzzle, cells).pencilMarks[0])
+        assertTrue(checkAgainstSolution(puzzle, cells).pencilMarks.isEmpty())
+    }
+
+    @Test
+    fun cornerNotesFailForEveryPlacementOfADigitWhenNoneMatchesInTheBlock() {
+        val puzzle = Puzzle("", "", ".".repeat(81), solution)
+        val cells = puzzle.startingCells().toMutableList().also {
+            it[0] = CellState(cornerNotes = setOf(3, 5, 7))
+            it[9] = CellState(cornerNotes = setOf(3, 5, 7))
+            it[19] = CellState(cornerNotes = setOf(3, 5, 7))
+        }
+
+        assertEquals(mapOf(0 to setOf(3, 7), 9 to setOf(3, 7), 19 to setOf(3, 7)),
+            checkAgainstSolution(puzzle, cells).pencilMarks)
+    }
+
+    @Test
+    fun matchingCornerNotesDoNotValidateAnotherBlockOrCentreNotes() {
+        val puzzle = Puzzle("", "", ".".repeat(81), solution)
+        val cells = puzzle.startingCells().toMutableList().also {
+            it[0] = CellState(cornerNotes = setOf(5))
+            it[1] = CellState(cornerNotes = setOf(5), centreNotes = setOf(2, 8))
+            it[3] = CellState(cornerNotes = setOf(5))
+            it[27] = CellState(cornerNotes = setOf(5))
+            it[28] = CellState(centreNotes = setOf(5))
+        }
+
+        assertEquals(mapOf(1 to setOf(2, 8), 3 to setOf(5), 27 to setOf(5)),
+            checkAgainstSolution(puzzle, cells).pencilMarks)
     }
 
     @Test
