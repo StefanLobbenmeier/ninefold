@@ -308,7 +308,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             val position = CellPosition(row, column); val cell = cells[position.index]; val isSelected = position in selected
             val peer = selected.any { it.row == row || it.column == column || (it.row / 3 == row / 3 && it.column / 3 == column / 3) }
             val same = cell.value != null && selected.any { cells[it.index].value == cell.value }
-            val background = when { isSelected -> Butter.copy(alpha = .92f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); peer -> Color(0xCCF1F3EC); else -> Color.Transparent }
+            val background = when { isSelected -> Butter.copy(alpha = .92f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); peer -> Color(0x33F1F3EC); else -> Color.Transparent }
             val fogged = puzzle.fogLights != null && position !in litCells
             Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }.drawBehind {
                 val thin = .55.dp.toPx(); val thick = 1.5.dp.toPx()
