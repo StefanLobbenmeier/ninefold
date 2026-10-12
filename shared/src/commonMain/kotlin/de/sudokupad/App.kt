@@ -126,8 +126,6 @@ private fun SudokuApp(puzzle: Puzzle, repository: GameRepository, onImport: (Puz
         if (checkSolution && (checkSolutionAutomatically || manualSolutionCheck)) checkAgainstSolution(puzzle, cells) else PuzzleCheckResult()
     }
     val checkResult = rulesResult + solutionResult
-    val hasActiveCheck = (checkRules && (checkRulesAutomatically || manualRulesCheck)) ||
-        (checkSolution && (checkSolutionAutomatically || manualSolutionCheck))
 
     fun save() {
         repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack))
@@ -169,7 +167,7 @@ private fun SudokuApp(puzzle: Puzzle, repository: GameRepository, onImport: (Puz
             TopBar({ showImport = true }, { showRules = true }, { showChecking = true }, onBrowse)
             if (compact) {
                 Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck, compact = true, elapsed = elapsed, completed = completed)
+                    PuzzleHeading(puzzle, compact = true, elapsed = elapsed)
                     BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                         val boardSize = minOf(maxWidth, maxHeight)
                         SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { selected = it }, onSelect = ::select)
@@ -180,7 +178,7 @@ private fun SudokuApp(puzzle: Puzzle, repository: GameRepository, onImport: (Puz
             } else {
                 Row(Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PuzzleHeading(puzzle, checkResult.issueCount, hasActiveCheck, elapsed = elapsed, completed = completed); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, additiveSelection = multiSelect, onDragSelection = { selected = it }) { select(it) }
+                        PuzzleHeading(puzzle, elapsed = elapsed); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, additiveSelection = multiSelect, onDragSelection = { selected = it }) { select(it) }
                     }
                     Column(Modifier.widthIn(min = 270.dp, max = 350.dp)) {
                         SideCard("PLAY") { SelectionControls(multiSelect, ::setMultiple, selected.size); Controls(mode, { repository.saveSettings(repository.settings.copy(inputMode = it.name)) }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow) }
@@ -230,7 +228,7 @@ private fun TopBar(onImport: () -> Unit, onRules: () -> Unit, onChecking: () -> 
 }
 
 @Composable
-private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int, checked: Boolean, compact: Boolean = false, elapsed: Long = 0, completed: Boolean = false) {
+private fun PuzzleHeading(puzzle: Puzzle, compact: Boolean = false, elapsed: Long = 0) {
     Row(Modifier.widthIn(max = 660.dp).fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f)) {
             val types = buildList {
@@ -243,17 +241,7 @@ private fun PuzzleHeading(puzzle: Puzzle, errorCount: Int, checked: Boolean, com
             Text(types.joinToString(" · "), color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
             Text(puzzle.title, fontSize = if (compact) 20.sp else 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis); Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Column(horizontalAlignment = Alignment.End) {
         Text(formatElapsed(elapsed), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Surface(shape = RoundedCornerShape(50), color = if (!checked) Butter else if (errorCount > 0) Color(0xFFFFE7E3) else Sage) {
-            Text(when {
-                completed -> "Completed"
-                !checked -> "Not checked"
-                errorCount > 0 -> "$errorCount issue${if (errorCount == 1) "" else "s"}"
-                else -> "Looking good"
-            }, Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = if (checked && errorCount > 0) ErrorRed else Moss, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        }
-        }
     }
 }
 
