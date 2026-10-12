@@ -126,11 +126,11 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
         job = scope.launch {
             busy = true; message = null
             try {
-                val puzzle = importSudokuPadPuzzle(link)
+                val puzzle = importPuzzleLink(link)
                 importedPuzzle = puzzle; grid = puzzle.givens; uncertain = emptySet()
-                if (puzzle.lines.isNotEmpty()) showLineRules = true
+                if (!link.trim().substringAfter('#', "").startsWith("puzzle=") && puzzle.lines.isNotEmpty()) showLineRules = true
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { message = e.message ?: "Could not import this SudokuPad puzzle." }
+            catch (e: Exception) { message = e.message ?: "Could not import this puzzle link." }
             finally { busy = false }
         }
     }
@@ -146,7 +146,7 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
                     PrimaryTabRow(tab) {
                         Tab(tab == 0, { tab = 0 }, enabled = !busy, text = { Text("Image") })
                         Tab(tab == 1, { tab = 1 }, enabled = !busy, text = { Text("Puzzle code") })
-                        Tab(tab == 2, { tab = 2 }, enabled = !busy, text = { Text("SudokuPad link") })
+                        Tab(tab == 2, { tab = 2 }, enabled = !busy, text = { Text("Puzzle link") })
                     }
                     if (tab == 0) {
                         Text("Choose a screenshot of a classic 9×9 sudoku. Keep the whole grid visible. Recognition happens on your device.")
@@ -156,13 +156,13 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
                         if (code.isNotBlank() && parsed == null) Text("Enter exactly 81 cells. Puzzle links and variants are not supported here.", color = MaterialTheme.colorScheme.error)
                         Button({ grid = parsed; uncertain = emptySet() }, enabled = parsed != null && !busy) { Text("Review grid") }
                     } else {
-                        Text("Paste a sudokupad.app puzzle URL. Its givens, rules, cages, arrows, lines, marks, outside clues, solution, and fog data will be imported when available.")
-                        OutlinedTextField(link, { link = it }, Modifier.fillMaxWidth(), label = { Text("SudokuPad URL") }, singleLine = true,
+                        Text("Paste a Ninefold share link or a sudokupad.app puzzle URL. Shared links work offline and preserve the puzzle’s clues, rules, graphics, and metadata.")
+                        OutlinedTextField(link, { link = it }, Modifier.fillMaxWidth(), label = { Text("Puzzle URL") }, singleLine = true,
                             placeholder = { Text("https://sudokupad.app/hDNMJqPmTh") })
-                        Button(::loadLink, enabled = sudokuPadPuzzleId(link) != null && !busy) { Text("Fetch puzzle") }
+                        Button(::loadLink, enabled = link.isNotBlank() && !busy) { Text("Load puzzle") }
                     }
                 }
-                if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Reading the screenshot…") }
+                if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(if (tab == 2) "Loading puzzle…" else "Reading the screenshot…") }
                 message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (grid != null) {
                     Text(if (importedPuzzle == null) "Compare every clue with the original, even if the checks pass. Select any cell to add, replace, or erase a digit."
@@ -230,7 +230,7 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
                     val warning = importedPuzzle == null && (status == ImportStatus.Conflicts || status == ImportStatus.Unsolvable || (!checking && status == null))
                     Surface(color = if (warning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(10.dp)) {
                         Text(when {
-                            importedPuzzle != null -> "SudokuPad metadata and graphics loaded. Unsupported or unassigned visual rules remain display-only; the original rule text is included."
+                            importedPuzzle != null -> "Puzzle metadata and graphics loaded. Unsupported or unassigned visual rules remain display-only; the original rule text is included."
                             checking -> "Checking starting clues and solutions…"
                             status == ImportStatus.Conflicts -> "Starting clues break sudoku rules. Red cells repeat a digit in a row, column, or box. This may be an import error; correct the clues before playing."
                             status == ImportStatus.Unsolvable -> "No immediate rule conflicts, but this grid has no solution. Check for a misread or extra clue; the original puzzle may also be invalid."

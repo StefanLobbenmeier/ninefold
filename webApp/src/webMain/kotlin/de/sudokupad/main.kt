@@ -5,7 +5,10 @@ import androidx.compose.ui.window.ComposeViewport
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    val pageUrl = browserPageUrl()
     ComposeViewport {
-        App(BrowserIndexCache)
+        App(BrowserIndexCache, initialShareLink = pageUrl, shareBaseUrl = pageUrl)
     }
 }
+
+internal expect fun browserPageUrl(): String

@@ -22,7 +22,7 @@ class BoardSelectionInteractionTest {
         compose.setContent {
             MaterialTheme {
                 Box(if (compact) Modifier.width(400.dp) else Modifier) {
-                    SudokuApp(puzzle, repository, onImport = {}, onBrowse = {})
+                    SudokuApp(puzzle, repository, shareBaseUrl = "https://example.com/", onImport = {}, onBrowse = {})
                 }
             }
         }
