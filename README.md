@@ -115,13 +115,15 @@ Catalog parsing, refresh, cache preservation, and unavailable storage are covere
 
 ### Playing on a phone
 
-The player keeps the board and a two-row number keypad within the available screen height,
+The player keeps the board and a T9-style number keypad within the available screen height,
 including native safe areas. Each new puzzle opens its rules first, with links to the source
 video and original SudokuPad when available. Tap Okay to start the timer; a correct completed
 grid freezes it, and undoing the final digit resumes it. Completion uses the supplied solution,
 or the supported Sudoku rules when a solution is unavailable.
 
-Enable Select multiple and tap cells to add or remove them from the selection. Choose Corner or
+Drag across cells to select a group, or enable Select multiple to add to the current selection
+by tapping or dragging. The keypad places 1–9 in three rows with 0 below as an erase shortcut;
+Digit, Corner, and Centre sit beside the numbers. Choose Corner or
 Centre to enter pencil marks in all empty selected cells. A note is added to every selected cell
 if any are missing it; tapping that number again removes it from all of them. Filled digits and
 givens are preserved when adding notes. Erase clears editable selected cells; Undo restores the
