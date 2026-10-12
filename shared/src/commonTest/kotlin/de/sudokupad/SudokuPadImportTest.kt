@@ -1,11 +1,40 @@
 package de.sudokupad
 
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun fetchesFromCorsEndpointAndEncodesNamespacedIds() = runTest {
+        val rows = List(9) { "[${List(9) { "{}" }.joinToString()}]" }.joinToString()
+        val engine = MockEngine { request ->
+            assertEquals("https://sudokupad.svencodes.com/ctclegacy/philip-newman%2Fa-puzzle", request.url.toString())
+            respond("""scl{"cells":[$rows],"metadata":{"title":"Fetched puzzle"}}""")
+        }
+        val client = HttpClient(engine)
+        try {
+            val puzzle = importSudokuPadPuzzle("https://sudokupad.app/philip-newman/a-puzzle", client)
+            assertEquals("Fetched puzzle", puzzle.title)
+            assertEquals("https://sudokupad.app/philip-newman/a-puzzle", puzzle.sourceUrl)
+            assertEquals(".".repeat(81), puzzle.givens)
+        } finally { client.close() }
+    }
+
+    @Test fun reportsUnavailablePuzzlesWithoutParsingTheErrorBody() = runTest {
+        val client = HttpClient(MockEngine { respond("Not found", HttpStatusCode.NotFound) })
+        try {
+            val error = assertFailsWith<IllegalArgumentException> { importSudokuPadPuzzle("missing", client) }
+            assertEquals("SudokuPad returned 404 for this puzzle.", error.message)
+        } finally { client.close() }
+    }
+
     @Test fun decompressesSudokuPadLzString() {
         assertEquals("Hello world!", lzStringDecompressFromBase64("BIUwNmD2AEDukCcwBMCEQ==="))
     }

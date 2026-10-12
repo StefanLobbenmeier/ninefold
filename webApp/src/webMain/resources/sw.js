@@ -24,7 +24,8 @@ self.addEventListener('message', event => {
 self.addEventListener('fetch', event => {
     if (event.request.method !== 'GET') return;
     const url = new URL(event.request.url);
-    const puzzle = url.origin === 'https://sudokupad.app' && url.pathname.startsWith('/api/puzzle/');
+    const puzzle = (url.origin === 'https://sudokupad.svencodes.com' && url.pathname.startsWith('/ctclegacy/')) ||
+        (url.origin === 'https://sudokupad.app' && url.pathname.startsWith('/api/puzzle/'));
     if (!isAppAsset(url) && !puzzle) return;
     event.respondWith((async () => {
         const cache = await caches.open(CACHE);
