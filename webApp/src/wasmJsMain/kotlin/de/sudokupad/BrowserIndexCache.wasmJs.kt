@@ -7,3 +7,6 @@ internal actual external fun readBrowserIndex(): String?
 
 @JsFun("(payload) => localStorage.setItem('ninefold.sudoku-index.v1', payload)")
 internal actual external fun writeBrowserIndex(payload: String)
+
+@JsFun("() => window.location.href")
+internal actual external fun browserPageUrl(): String

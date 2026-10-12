@@ -1,11 +1,16 @@
 package de.sudokupad
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.isToggleable
 import com.sun.net.httpserver.HttpServer
 import io.github.vinceglb.filekit.FileKit
 import io.ktor.client.HttpClient
@@ -21,6 +26,52 @@ import kotlin.test.assertEquals
 class AppStartupTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun pastedSharedLinkReviewsAndImportsWithoutChangingAssignedRules() {
+        FileKit.init(appId = "de.sudokupad")
+        val storage = MemoryAppStorage()
+        val puzzle = DemoPuzzle.copy(title = "Pasted puzzle", lines = listOf(
+            PuzzleLine(listOf(GridPoint(.5, .5), GridPoint(1.5, .5)), rule = LineRule.GermanWhisper),
+            PuzzleLine(listOf(GridPoint(2.5, 2.5), GridPoint(3.5, 2.5))),
+        ))
+        compose.setContent { App(storage = storage, initialShareLink = puzzleShareLink(DemoPuzzle)) }
+        compose.onNodeWithText("Okay, start puzzle").performClick()
+        compose.onNodeWithText("+  Import").performClick()
+        compose.onNodeWithText("Puzzle link").performClick()
+        compose.onNodeWithText("Puzzle URL").performTextInput("https://example.com/#puzzle=v1.???")
+        compose.onNodeWithText("Load puzzle").performClick()
+        compose.onNodeWithText("This puzzle link is damaged or incomplete.").assertIsDisplayed()
+        assertEquals(1, GameRepository(storage).games.size)
+        compose.onNodeWithText("Puzzle URL").performTextClearance()
+        compose.onNodeWithText("Puzzle URL").performTextInput("  " + puzzleShareLink(puzzle) + "  ")
+        compose.onNodeWithText("Load puzzle").performClick()
+        compose.onNodeWithText("Double-check your import").assertIsDisplayed()
+        compose.onNodeWithText("Assign line rules (1 display only)").assertIsDisplayed()
+        compose.onNode(isToggleable()).performScrollTo().performClick()
+        compose.onNodeWithText("Import puzzle").performScrollTo().performClick()
+        compose.onAllNodesWithText("Pasted puzzle").assertCountEquals(2)
+        compose.onNodeWithText("Okay, start puzzle").performClick()
+        compose.waitForIdle()
+        assertEquals(puzzle, GameRepository(storage).game(puzzle)?.puzzle)
+        assertEquals(DemoPuzzle, GameRepository(storage).game(DemoPuzzle)?.puzzle)
+    }
+
+    @Test
+    fun sharedPuzzleOpensRulesAndIsSavedWhenStarted() {
+        val storage = MemoryAppStorage()
+        val puzzle = DemoPuzzle.copy(title = "Shared puzzle")
+        compose.setContent { App(storage = storage, initialShareLink = puzzleShareLink(puzzle)) }
+        compose.onAllNodesWithText("Shared puzzle").assertCountEquals(2)
+        compose.onNodeWithText("Puzzle link").assertIsDisplayed()
+        compose.onNodeWithText("Copy puzzle link").assertIsEnabled()
+        compose.onNodeWithText("Okay, start puzzle").performClick()
+        compose.waitForIdle()
+        assertEquals(puzzle, GameRepository(storage).game(puzzle)?.puzzle)
+        compose.onNodeWithText("Rules").performClick()
+        compose.onNodeWithText("Copy puzzle link").performClick()
+        compose.onNodeWithText("Copied!").assertIsDisplayed()
+    }
 
     @Test
     fun applicationStartsAndLoadsCatalog() {
@@ -73,7 +124,7 @@ class AppStartupTest {
 
                 // Opening Import also composes the FileKit picker integration.
                 compose.onNodeWithText("Import").performClick()
-                compose.onNodeWithText("SudokuPad link").assertIsDisplayed()
+                compose.onNodeWithText("Puzzle link").assertIsDisplayed()
             }
         } finally {
             server.stop(0)
