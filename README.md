@@ -74,9 +74,11 @@ There are no separate platform OCR implementations to add.
 ### SudokuPad URL import
 
 Import → SudokuPad link accepts links such as `https://sudokupad.app/hDNMJqPmTh`. The app fetches the
-corresponding `/api/puzzle/{id}` package and decodes both SudokuPad's `scl`/compact-JSON representation
-and the common `fpuz` representation. The API permits cross-origin GET requests, so this works in the
-JS and Wasm web builds as well as the native builds.
+corresponding package through SudokuPad's own CORS-enabled
+`https://sudokupad.svencodes.com/ctclegacy/{encoded-id}` endpoint and decodes both SudokuPad's
+`scl`/compact-JSON representation and the common `fpuz` representation. The main site's
+`/api/puzzle/{id}` endpoint restricts cross-origin requests to `https://localhost`; the alternate
+endpoint works from the JS and Wasm web builds as well as the native builds.
 
 Imported puzzles retain metadata, givens, solutions, killer cages, sum arrows, colored lines, fog,
 cell marks, and generic overlays such as Kropki/XV marks and outside-grid clues. Explicit fpuz

@@ -5,6 +5,7 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
+import io.ktor.http.encodeURLParameter
 import kotlinx.serialization.json.*
 import kotlin.math.abs
 import kotlin.math.pow
@@ -19,9 +20,13 @@ fun sudokuPadPuzzleId(input: String): String? {
     return id?.trim('/')?.takeIf { it.isNotEmpty() && safePuzzleId.matches(it) && ".." !in it }
 }
 
-suspend fun importSudokuPadPuzzle(input: String): Puzzle {
+suspend fun importSudokuPadPuzzle(input: String): Puzzle = importSudokuPadPuzzle(input, sudokuPadClient)
+
+internal suspend fun importSudokuPadPuzzle(input: String, client: HttpClient): Puzzle {
     val id = sudokuPadPuzzleId(input) ?: throw IllegalArgumentException("Enter a sudokupad.app puzzle link.")
-    val response: HttpResponse = sudokuPadClient.get("https://sudokupad.app/api/puzzle/$id")
+    // SudokuPad's own loader uses this CORS-enabled endpoint. The main site's API
+    // only allows https://localhost, which blocks our JS and Wasm apps.
+    val response: HttpResponse = client.get("https://sudokupad.svencodes.com/ctclegacy/${id.encodeURLParameter()}")
     if (!response.status.isSuccess()) throw IllegalArgumentException("SudokuPad returned ${response.status.value} for this puzzle.")
     return parseSudokuPadPayload(response.body(), "https://sudokupad.app/$id")
 }
