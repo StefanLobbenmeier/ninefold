@@ -103,12 +103,24 @@ The app starts with the newest puzzles from
 `https://stefanlobbenmeier.github.io/sudoku-index/index.json`. Select Play to load a puzzle into the
 player, or Puzzles to return to the list. Import remains available from either screen.
 
-The web app saves the last valid index in localStorage and displays it immediately on subsequent
+The app saves the last valid index locally and displays it immediately on subsequent
 visits while refreshing. Failed requests or invalid index responses preserve the saved list. Refresh
 retries the request; first visits without a connection show an error until a download succeeds.
-A service worker caches the app shell and loaded Wasm assets, so the catalog can reopen offline after
-an online visit. Previously opened puzzle packages are also cached; opening a new puzzle needs a
-connection. Browser storage must be available for persistent offline access.
+All catalog puzzles are eagerly fetched, converted, and saved with up to four downloads at once,
+including while playing. Each entry shows waiting, fetching/converting, ready offline, or failed status.
+Ready offline means the converted puzzle was successfully stored; opening it makes no puzzle request.
+Refresh or an entry's Retry button retries failures. Preparing a large catalog can take longer than a
+few seconds, depending on the connection. A service worker caches the web app shell and loaded Wasm
+assets and fetched fallback fonts so it can reopen offline after an online visit. Browser storage must be available for persistent
+offline access.
+
+Every move (including pencil marks, erase, undo, and redo) saves the board and undo/redo history.
+The timer saves independently whenever its displayed second changes and when leaving the player.
+Reopening resumes from the last saved board and elapsed time; time away from the player does not count.
+Completed grids retain their frozen timer. The menu has Continue sudokus and Solved sudokus sections,
+including manually imported games. Checking preferences, input mode, and multiple selection persist
+across puzzles and restarts. Native storage uses Android preferences, iOS user defaults, and local files
+in `~/.ninefold` on Desktop. Failed local saves display an error.
 
 Catalog parsing, refresh, cache preservation, and unavailable storage are covered by
 `./gradlew :shared:jvmTest`.

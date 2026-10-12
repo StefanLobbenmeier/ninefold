@@ -1,8 +1,14 @@
 package de.sudokupad
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class CellPosition(val row: Int, val column: Int) { val index: Int get() = row * 9 + column }
+@Serializable
 data class CellState(val value: Int? = null, val given: Boolean = false, val cornerNotes: Set<Int> = emptySet(), val centreNotes: Set<Int> = emptySet())
+@Serializable
 data class KillerCage(val total: Int, val cells: Set<CellPosition>)
+@Serializable
 data class GridPoint(val row: Double, val column: Double)
 
 enum class LineRule(val label: String) {
@@ -11,20 +17,24 @@ enum class LineRule(val label: String) {
     Palindrome("Palindrome"), Thermometer("Thermometer"), RegionSum("Region sum"),
 }
 
+@Serializable
 data class PuzzleLine(
     val points: List<GridPoint>, val color: String = "#A0A0A0", val thickness: Double = 6.0,
     val rule: LineRule = LineRule.Unspecified,
 )
+@Serializable
 data class PuzzleArrow(
     val points: List<GridPoint>, val color: String = "#777777", val thickness: Double = 3.0,
     val headLength: Double = .3, val circle: CellPosition? = null, val pathCells: List<CellPosition> = emptyList(),
 )
+@Serializable
 data class PuzzleOverlay(
     val center: GridPoint, val width: Double = .3, val height: Double = .3,
     val backgroundColor: String? = null, val borderColor: String? = null, val textColor: String? = null,
     val text: String? = null, val rounded: Boolean = false, val thickness: Double = 1.0,
 )
 enum class OutsideClueType { Unspecified, Skyscraper, DiagonalSum }
+@Serializable
 data class OutsideClue(val value: Int, val position: GridPoint, val cells: List<CellPosition>, val type: OutsideClueType)
 
 data class PuzzleCheckResult(
@@ -41,6 +51,7 @@ data class PuzzleCheckResult(
     }
 }
 
+@Serializable
 data class Puzzle(
     val title: String, val author: String, val givens: String, val solution: String? = null,
     val cages: List<KillerCage> = emptyList(), val rules: List<String> = listOf("Normal sudoku rules apply."),

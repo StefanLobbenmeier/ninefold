@@ -9,7 +9,8 @@ internal class GameClock(private val nowMillis: (() -> Long)? = null) {
     private var runningSince: Long? = null
     private var accumulated = 0L
 
-    fun reset() { runningSince = null; accumulated = 0L }
+    fun reset() { restore(0) }
+    fun restore(seconds: Long) { runningSince = null; accumulated = seconds.coerceAtLeast(0) * 1000 }
     fun start() { if (runningSince == null) runningSince = now() }
     fun stop() {
         runningSince?.let { accumulated += now() - it }
