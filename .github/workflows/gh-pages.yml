@@ -34,6 +34,9 @@ jobs:
       - name: Build web app (Wasm)
         run: ./gradlew :webApp:wasmJsBrowserDistribution --console=plain
 
+      - name: Test offline startup and release updates
+        run: node --test scripts/test-offline.mjs
+
       - name: Run JVM tests
         run: xvfb-run --auto-servernum ./gradlew :shared:jvmTest --console=plain
 
