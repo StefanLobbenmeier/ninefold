@@ -162,4 +162,39 @@ class BoardSelectionInteractionTest {
         compose.onNodeWithText("Selection test").performTouchInput { click() }
         assertSelection()
     }
+    @Test fun colourPaletteSupportsGroupUndoRedoAndIndependentErase() {
+        openPlayer(compact = true)
+        drag(2, 1, 3)
+        compose.onNode(hasText("5") and !hasText("Digit")).performClick()
+        compose.onNodeWithText("Colour").performClick()
+        compose.onNodeWithContentDescription("Red, colour 7").performClick()
+        compose.onNodeWithContentDescription("Blue, colour 9").performClick()
+        for (column in 1..3) cell(2, column).assertContentDescriptionContains("colours Red, Blue", substring = true)
+        compose.onNodeWithText("Undo").performClick()
+        cell(2, 2).assertContentDescriptionContains("colours Red", substring = true)
+        compose.onNodeWithText("Redo").performClick()
+        cell(2, 2).assertContentDescriptionContains("colours Red, Blue", substring = true)
+        compose.onNodeWithContentDescription("Erase colours").performClick()
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, 5, selected")
+        assertSelection(2 to 1, 2 to 2, 2 to 3)
+    }
+
+    @Test fun colourStripesStayVisibleOnSelectedCellsAndUnderPuzzleLines() {
+        val puzzle = Puzzle("Colour rendering", "Test", ".".repeat(81), lines = listOf(
+            PuzzleLine(listOf(GridPoint(.5, .1), GridPoint(.5, .9)), color = "#000000", thickness = 4.0)
+        ))
+        val cells = puzzle.startingCells().toMutableList().also { it[0] = CellState(colours = setOf(7, 9)) }
+        compose.setContent {
+            MaterialTheme {
+                SudokuBoard(puzzle, cells, setOf(CellPosition(0, 0)), emptySet(), modifier = Modifier.width(450.dp), onSelect = {})
+            }
+        }
+        val pixels = cell(1, 1).captureToImage().toPixelMap()
+        val red = pixels[pixels.width / 4, pixels.height / 4]
+        val blue = pixels[pixels.width * 3 / 4, pixels.height / 4]
+        kotlin.test.assertTrue(red.red > red.blue)
+        kotlin.test.assertTrue(blue.blue > blue.red)
+        kotlin.test.assertTrue(pixels[pixels.width / 2, pixels.height / 2].red < .3f)
+    }
+
 }

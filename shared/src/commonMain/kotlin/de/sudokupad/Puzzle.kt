@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class CellPosition(val row: Int, val column: Int) { val index: Int get() = row * 9 + column }
 @Serializable
-data class CellState(val value: Int? = null, val given: Boolean = false, val cornerNotes: Set<Int> = emptySet(), val centreNotes: Set<Int> = emptySet())
+data class CellState(val value: Int? = null, val given: Boolean = false, val cornerNotes: Set<Int> = emptySet(), val centreNotes: Set<Int> = emptySet(), val colours: Set<Int> = emptySet())
 @Serializable
 data class KillerCage(val total: Int, val cells: Set<CellPosition>)
 @Serializable

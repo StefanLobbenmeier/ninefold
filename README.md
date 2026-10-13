@@ -144,11 +144,18 @@ or the supported Sudoku rules when a solution is unavailable.
 Drag across cells to select a group, or enable Select multiple to add to the current selection
 by tapping or dragging. Start on a selected cell to remove it and any cells you drag across;
 untouched cells stay selected. Adjacent selected cells share a bold outside outline. The keypad places 1–9 in three rows with 0 below as an erase shortcut;
-Digit, Corner, and Centre sit beside the numbers. Choose Corner or
+Digit, Corner, Centre, and Colour sit beside the keypad. Choose Corner or
 Centre to enter pencil marks in all empty selected cells. A note is added to every selected cell
 if any are missing it; tapping that number again removes it from all of them. Filled digits and
 givens are preserved when adding notes. Erase clears editable selected cells; Undo restores the
 whole group in one step.
+
+Choose Colour to replace the digits with SudokuPad's nine default swatches: light grey, grey,
+dark grey, green, purple, orange, red, yellow, and blue. Colours apply to all selected cells,
+including givens and filled digits. Selecting a colour adds it to the group if any cell lacks it;
+selecting it again removes it from the group. Multiple colours appear as stripes behind the
+puzzle clues and digits. In Colour mode, Erase and 0 clear only colours. Colours and colour
+undo/redo history are saved with the game.
 
 ### Sharing puzzles
 
