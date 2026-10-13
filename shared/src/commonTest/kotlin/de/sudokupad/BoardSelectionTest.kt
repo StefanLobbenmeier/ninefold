@@ -3,6 +3,46 @@ package de.sudokupad
 import kotlin.test.*
 
 class BoardSelectionTest {
+    @Test fun removalKeepsUntouchedCellsAndNeverAddsOrRetogglesVisitedCells() {
+        val first = CellPosition(0, 0)
+        val second = CellPosition(0, 1)
+        val untouched = CellPosition(1, 0)
+        val unselected = CellPosition(0, 2)
+        for (additive in listOf(false, true)) {
+            val gesture = BoardSelectionGesture(setOf(first, second, untouched), first, additive)
+            assertEquals(setOf(second, untouched), gesture.visit())
+            assertEquals(setOf(untouched), gesture.visit(setOf(second, unselected)))
+            assertEquals(setOf(untouched), gesture.visit(setOf(first, second)))
+        }
+    }
+
+    @Test fun addingKeepsItsOperationAcrossPreviouslySelectedCells() {
+        val first = CellPosition(0, 0)
+        val second = CellPosition(0, 1)
+        val untouched = CellPosition(1, 0)
+        val initial = setOf(second, untouched)
+        assertEquals(setOf(first, second), BoardSelectionGesture(initial, first, false).visit(setOf(second)))
+        assertEquals(setOf(first, second, untouched), BoardSelectionGesture(initial, first, true).visit(setOf(second)))
+    }
+
+    @Test fun selectedBlockOnlyHasBordersOnItsPerimeter() {
+        val block = (0..2).flatMap { row -> (0..2).map { CellPosition(row, it) } }.toSet()
+        assertEquals(emptySet(), selectionBorders(CellPosition(1, 1), block))
+        assertEquals(setOf(SelectionBorder.Top, SelectionBorder.Left), selectionBorders(CellPosition(0, 0), block))
+        assertEquals(setOf(SelectionBorder.Right, SelectionBorder.Bottom), selectionBorders(CellPosition(2, 2), block))
+        assertEquals(emptySet(), selectionBorders(CellPosition(3, 3), block))
+    }
+
+    @Test fun outlinesFollowHolesConcaveCornersAndDisconnectedCells() {
+        val block = (0..2).flatMap { row -> (0..2).map { CellPosition(row, it) } }.toSet()
+        val ring = block - CellPosition(1, 1)
+        assertEquals(setOf(SelectionBorder.Top, SelectionBorder.Bottom), selectionBorders(CellPosition(0, 1), ring))
+        val corner = setOf(CellPosition(0, 0), CellPosition(0, 1), CellPosition(1, 0))
+        assertEquals(setOf(SelectionBorder.Top, SelectionBorder.Right, SelectionBorder.Bottom), selectionBorders(CellPosition(0, 1), corner))
+        val diagonal = setOf(CellPosition(0, 0), CellPosition(1, 1), CellPosition(8, 8))
+        diagonal.forEach { assertEquals(SelectionBorder.entries.toSet(), selectionBorders(it, diagonal)) }
+    }
+
     @Test fun fastSweepIncludesEveryCrossedCell() {
         assertEquals((0..8).map { CellPosition(0, it) }.toSet(), boardCellsAlongSegment(.01f, .05f, .99f, .05f))
         assertEquals((0..8).map { CellPosition(it, 4) }.toSet(), boardCellsAlongSegment(.5f, .99f, .5f, .01f))

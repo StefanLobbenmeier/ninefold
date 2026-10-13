@@ -1,5 +1,33 @@
 package de.sudokupad
 
+/** Keep the gesture's initial operation even when it crosses cells in the opposite state. */
+internal class BoardSelectionGesture(
+    private val initial: Set<CellPosition>,
+    start: CellPosition,
+    additive: Boolean,
+) {
+    private val removing = start in initial
+    private val base = if (removing || additive) initial else emptySet()
+    private val visited = mutableSetOf(start)
+
+    fun visit(cells: Set<CellPosition> = emptySet()): Set<CellPosition> {
+        visited.addAll(cells)
+        return if (removing) base - visited else base + visited
+    }
+}
+
+internal enum class SelectionBorder { Top, Right, Bottom, Left }
+
+internal fun selectionBorders(position: CellPosition, selected: Set<CellPosition>): Set<SelectionBorder> {
+    if (position !in selected) return emptySet()
+    return buildSet {
+        if (CellPosition(position.row - 1, position.column) !in selected) add(SelectionBorder.Top)
+        if (CellPosition(position.row, position.column + 1) !in selected) add(SelectionBorder.Right)
+        if (CellPosition(position.row + 1, position.column) !in selected) add(SelectionBorder.Bottom)
+        if (CellPosition(position.row, position.column - 1) !in selected) add(SelectionBorder.Left)
+    }
+}
+
 /** Board coordinates are normalized to 0..1; outside clues never select a cell. */
 internal fun boardCellAt(x: Float, y: Float): CellPosition? {
     if (!x.isFinite() || !y.isFinite() || x < 0f || y < 0f || x >= 1f || y >= 1f) return null
