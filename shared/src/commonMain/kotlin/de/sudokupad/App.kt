@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -100,6 +101,8 @@ fun App(
 internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl: String, onImport: (Puzzle) -> Unit, onBrowse: () -> Unit) {
     val saved = remember(puzzle) { repository.game(puzzle) }
     var cells by remember(puzzle) { mutableStateOf(saved?.cells ?: puzzle.startingCells()) }
+    var finalized by remember(puzzle) { mutableStateOf(cells) }
+    var colourSettings by remember { mutableStateOf<CellColour?>(null) }
     var selected by remember { mutableStateOf(setOf(CellPosition(0, 2))) }
     val mode = InputMode.entries.firstOrNull { it.name == repository.settings.inputMode } ?: InputMode.Digit
     var showImport by remember { mutableStateOf(false) }
@@ -108,7 +111,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val multiSelect = repository.settings.multiSelect
     val clock = remember(puzzle) { GameClock().also { it.restore(repository.elapsed(puzzle)) } }
     var elapsed by remember(puzzle) { mutableStateOf(repository.elapsed(puzzle)) }
-    val completed = remember(puzzle, cells) { puzzle.isComplete(cells) }
+    val completed = remember(puzzle, finalized) { puzzle.isComplete(finalized) }
     LaunchedEffect(started, completed, puzzle) {
         if (started) {
             if (completed) clock.stop() else clock.start()
@@ -135,14 +138,13 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val rulesResult = remember(puzzle, cells, checkRules, checkRulesAutomatically, includeSpecialRules, manualRulesCheck) {
         if (checkRules && (checkRulesAutomatically || manualRulesCheck)) checkSudokuRules(puzzle, cells, includeSpecialRules) else PuzzleCheckResult()
     }
-    val solutionResult = remember(puzzle, cells, checkSolution, checkSolutionAutomatically, manualSolutionCheck) {
-        if (checkSolution && (checkSolutionAutomatically || manualSolutionCheck)) checkAgainstSolution(puzzle, cells) else PuzzleCheckResult()
+    val solutionResult = remember(puzzle, finalized, selected, checkSolution, checkSolutionAutomatically, manualSolutionCheck) {
+        if (checkSolution && (checkSolutionAutomatically || manualSolutionCheck)) checkAgainstSolution(puzzle, finalized).excluding(selected) else PuzzleCheckResult()
     }
     val checkResult = rulesResult + solutionResult
 
     fun save() {
         repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack))
-        if (puzzle.isComplete(cells)) clock.stop()
         repository.saveElapsed(puzzle, clock.elapsedSeconds())
     }
     DisposableEffect(puzzle) {
@@ -156,63 +158,82 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         if (!started) return
         val next = cells.toMutableList().also(transform)
         if (next == cells) return
-        history = history + listOf(cells); redoStack = emptyList(); cells = next; clearManualChecks(); save()
+        history = history + listOf(cells); redoStack = emptyList(); cells = next; finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save()
     }
     fun enter(number: Int?) = update { next ->
         val entered = applyInput(next, selected, mode, number)
         next.clear(); next.addAll(entered)
     }
-    fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); clearManualChecks(); save() } }
-    fun redo() { redoStack.firstOrNull()?.let { history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); clearManualChecks(); save() } }
+    fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
+    fun redo() { redoStack.firstOrNull()?.let { history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
 
     fun setMultiple(enabled: Boolean) {
         repository.saveSettings(repository.settings.copy(multiSelect = enabled))
     }
 
-    fun select(position: CellPosition) {
-        selected = BoardSelectionGesture(selected, position, multiSelect).visit()
+    fun changeSelection(next: Set<CellPosition>) {
+        val leaving = selected - next
+        if (started && leaving.isNotEmpty()) {
+            update { board ->
+                val coloured = applyAutomaticColours(board, leaving, repository.settings.automaticColours)
+                board.clear(); board.addAll(coloured)
+            }
+        }
+        selected = next
+        finalized = finalizedCells(cells, finalized, next)
     }
+    fun select(position: CellPosition) {
+        if (colourSettings != null) return
+        changeSelection(BoardSelectionGesture(selected, position, multiSelect).visit())
+    }
+    val clearSelection by rememberUpdatedState { changeSelection(emptySet()) }
+
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Paper).safeDrawingPadding().pointerInput(Unit) {
         awaitEachGesture {
             // Board gestures and controls consume their presses before the final pass.
             // An unhandled press is on the background (including outside clues).
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
-            if (!down.isConsumed) selected = emptySet()
+            if (!down.isConsumed && colourSettings == null) clearSelection()
         }
     }) {
         val compact = maxWidth < 850.dp
         Column(Modifier.fillMaxSize()) {
-            TopBar({ showImport = true }, { showRules = true }, { showChecking = true }, onBrowse)
+            TopBar({ clearSelection(); showImport = true }, { clearSelection(); showRules = true }, { clearSelection(); showChecking = true }, { clearSelection(); onBrowse() })
             if (compact) {
                 Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     PuzzleHeading(puzzle, compact = true, elapsed = elapsed)
                     BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                         val boardSize = minOf(maxWidth, maxHeight)
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { selected = it }, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onSelect = ::select)
                     }
                     SelectionControls(multiSelect, ::setMultiple, selected.size)
-                    Controls(mode, { repository.saveSettings(repository.settings.copy(inputMode = it.name)) }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, compact = true)
+                    Controls(mode, { repository.saveSettings(repository.settings.copy(inputMode = it.name)) }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = settings.automaticColours, compact = true)
                 }
             } else {
                 Row(Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PuzzleHeading(puzzle, elapsed = elapsed); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, additiveSelection = multiSelect, onDragSelection = { selected = it }) { select(it) }
+                        PuzzleHeading(puzzle, elapsed = elapsed); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, invalidPencilMarks = checkResult.pencilMarks, additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }) { select(it) }
                     }
                     Column(Modifier.widthIn(min = 270.dp, max = 350.dp)) {
-                        SideCard("PLAY") { SelectionControls(multiSelect, ::setMultiple, selected.size); Controls(mode, { repository.saveSettings(repository.settings.copy(inputMode = it.name)) }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow) }
+                        SideCard("PLAY") { SelectionControls(multiSelect, ::setMultiple, selected.size); Controls(mode, { repository.saveSettings(repository.settings.copy(inputMode = it.name)) }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = settings.automaticColours) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
                             puzzle.rules.forEachIndexed { index, rule -> Row(Modifier.padding(vertical = 6.dp)) {
                                 Text("${index + 1}", color = Moss, fontWeight = FontWeight.Bold, modifier = Modifier.width(26.dp)); Text(rule, style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
                             } }
                             HorizontalDivider(Modifier.padding(vertical = 10.dp), color = Color(0xFFE5E5DE))
-                            TextButton({ showChecking = true }, Modifier.fillMaxWidth()) { Text("Checking settings") }
+                            TextButton({ clearSelection(); showChecking = true }, Modifier.fillMaxWidth()) { Text("Checking settings") }
                         }
                     }
                 }
             }
         }
+    }
+    colourSettings?.let { colour ->
+        AutomaticColourDialog(colour, settings.automaticColours[colour.number] ?: AutomaticColourRule(), { rule ->
+            repository.saveSettings(repository.settings.copy(automaticColours = repository.settings.automaticColours + (colour.number to rule)))
+        }) { colourSettings = null }
     }
     if (showImport) ImportDialog({ showImport = false }) { imported ->
         showImport = false; onImport(imported)
@@ -494,18 +515,25 @@ private fun SideCard(label: String, content: @Composable ColumnScope.() -> Unit)
 }
 
 @Composable
-private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, compact: Boolean = false) {
+private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, onColourSettings: (CellColour) -> Unit, automaticColours: Map<Int, AutomaticColourRule>, compact: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             (1..9).chunked(3).forEach { numbers ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     numbers.forEach { number ->
                         val colour = if (mode == InputMode.Colour) CellColour.fromNumber(number) else null
-                        OutlinedButton({ onNumber(number) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics {
-                            if (colour != null) contentDescription = "${colour.label}, colour $number"
-                        }, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) {
-                            if (colour != null) Box(Modifier.fillMaxSize().padding(7.dp).clip(RoundedCornerShape(5.dp)).background(colour.swatch))
-                            else Text(number.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                        val buttonModifier = Modifier.weight(1f).height(if (compact) 44.dp else 52.dp)
+                        if (colour != null) Surface(
+                            modifier = buttonModifier.semantics { contentDescription = "${colour.label}, colour $number" }
+                                .combinedClickable(onClick = { onNumber(number) }, onLongClickLabel = "Automatic colouring settings", onLongClick = { onColourSettings(colour) }),
+                            shape = RoundedCornerShape(10.dp), color = Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD)),
+                        ) {
+                            Box(Modifier.fillMaxSize().padding(7.dp).clip(RoundedCornerShape(5.dp)).background(colour.swatch), contentAlignment = Alignment.Center) {
+                                if (automaticColours[number]?.enabled == true) Text("A", color = if (colour == CellColour.DarkGrey) Color.White else Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        } else OutlinedButton({ onNumber(number) }, buttonModifier, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) {
+                            Text(number.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
                         }
                     }
                 }
@@ -539,6 +567,32 @@ private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (In
 }
 
 @Composable
+private fun AutomaticColourDialog(colour: CellColour, rule: AutomaticColourRule, onRule: (AutomaticColourRule) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(24.dp).clip(RoundedCornerShape(5.dp)).background(colour.swatch))
+            Text("${colour.label} colouring")
+        } },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CheckOption("Automatic colouring", "Apply when you leave a cell.", rule.enabled) { onRule(rule.copy(enabled = it)) }
+            Text("Choose matching numbers", fontWeight = FontWeight.SemiBold)
+            (1..9).chunked(3).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { number ->
+                        FilterChip(selected = number in rule.numbers, onClick = {
+                            onRule(rule.copy(numbers = if (number in rule.numbers) rule.numbers - number else rule.numbers + number))
+                        }, label = { Text(number.toString()) }, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            Text("Matches an entered digit or centre marks made up entirely of these numbers. Already coloured cells are skipped. If several colours match, the first in the palette applies.", color = Color.Gray, fontSize = 12.sp)
+        } },
+        confirmButton = { Button(onDismiss) { Text("Done") } },
+    )
+}
+
+@Composable
 private fun CheckingDialog(
     checkRules: Boolean, onCheckRules: (Boolean) -> Unit,
     automaticRules: Boolean, onAutomaticRules: (Boolean) -> Unit,
@@ -558,7 +612,7 @@ private fun CheckingDialog(
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
             CheckOption("Check against solution", "Wrong digits and pencil marks that exclude the solution.", checkSolution, onCheckSolution)
             IndentedCheckOption("Check automatically", automaticSolution, onAutomaticSolution, checkSolution)
-            Text("Checks that are not automatic run when you press Check sudoku.", color = Color.Gray, fontSize = 12.sp, lineHeight = 17.sp)
+            Text("Solution checks wait until you leave a cell. Rule checks can run while you type. Checks that are not automatic run when you press Check.", color = Color.Gray, fontSize = 12.sp, lineHeight = 17.sp)
         } },
         shape = RoundedCornerShape(22.dp),
     )

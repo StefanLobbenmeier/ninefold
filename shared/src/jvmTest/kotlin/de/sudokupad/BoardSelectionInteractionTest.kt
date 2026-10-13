@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
@@ -195,6 +196,29 @@ class BoardSelectionInteractionTest {
         kotlin.test.assertTrue(red.red > red.blue)
         kotlin.test.assertTrue(blue.blue > blue.red)
         kotlin.test.assertTrue(pixels[pixels.width / 2, pixels.height / 2].red < .3f)
+    }
+
+    @Test fun longPressConfiguresColourWithoutPaintingAndAppliesOnlyOnLeavingCell() {
+        openPlayer(compact = true)
+        clickCell(2, 2)
+        compose.onNodeWithText("Colour").performClick()
+        cell(2, 2).assertIsSelected()
+        compose.onNodeWithContentDescription("Red, colour 7").performTouchInput { longClick() }
+        cell(2, 2).assertIsSelected()
+        compose.onNodeWithText("Red colouring").assertExists()
+        compose.onNode(isToggleable()).performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("2").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNodeWithText("Done").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, selected")
+        compose.onNodeWithText("Centre").performClick()
+        compose.onNodeWithText("2").performSemanticsAction(SemanticsActions.OnClick) { it() }
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, selected, centre notes 2")
+        clickCell(3, 3)
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, centre notes 2, colours Red")
+        compose.onNodeWithText("Undo").performClick()
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, centre notes 2")
+        compose.onNodeWithText("Redo").performClick()
+        cell(2, 2).assertContentDescriptionContains("colours Red", substring = true)
     }
 
 }
