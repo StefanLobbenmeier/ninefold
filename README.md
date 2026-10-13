@@ -142,7 +142,8 @@ grid freezes it, and undoing the final digit resumes it. Completion uses the sup
 or the supported Sudoku rules when a solution is unavailable.
 
 Drag across cells to select a group, or enable Select multiple to add to the current selection
-by tapping or dragging. The keypad places 1–9 in three rows with 0 below as an erase shortcut;
+by tapping or dragging. Start on a selected cell to remove it and any cells you drag across;
+untouched cells stay selected. Adjacent selected cells share a bold outside outline. The keypad places 1–9 in three rows with 0 below as an erase shortcut;
 Digit, Corner, and Centre sit beside the numbers. Choose Corner or
 Centre to enter pencil marks in all empty selected cells. A note is added to every selected cell
 if any are missing it; tapping that number again removes it from all of them. Filled digits and

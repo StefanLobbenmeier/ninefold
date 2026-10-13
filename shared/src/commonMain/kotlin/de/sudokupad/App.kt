@@ -169,7 +169,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     }
 
     fun select(position: CellPosition) {
-        selected = if (multiSelect) selected + position else setOf(position)
+        selected = BoardSelectionGesture(selected, position, multiSelect).visit()
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Paper).safeDrawingPadding().pointerInput(Unit) {
@@ -285,11 +285,11 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                         val start = boardCellAt(down.position.x / size.width, down.position.y / size.height)
                         if (start != null) {
-                            val base = if (currentAdditive) currentSelection else emptySet()
-                            var visited = setOf(start)
+                            val gesture = BoardSelectionGesture(currentSelection, start, currentAdditive)
+                            var gestureSelection = gesture.visit()
                             var previous = down.position
                             down.consume()
-                            currentDragSelection?.invoke(base + visited)
+                            currentDragSelection?.invoke(gestureSelection)
                             do {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -297,10 +297,10 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                                     previous.x / size.width, previous.y / size.height,
                                     change.position.x / size.width, change.position.y / size.height,
                                 )
-                                val next = visited + crossed
-                                if (next != visited) {
-                                    visited = next
-                                    currentDragSelection?.invoke(base + visited)
+                                val next = gesture.visit(crossed)
+                                if (next != gestureSelection) {
+                                    gestureSelection = next
+                                    currentDragSelection?.invoke(next)
                                 }
                                 previous = change.position
                                 change.consume()
@@ -328,7 +328,18 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                         if (cell.centreNotes.isNotEmpty()) CentreNotes(cell.centreNotes, invalidPencilMarks[position.index].orEmpty())
                     }
                 }
-                if (isSelected) Box(Modifier.matchParentSize().border(2.dp, Moss))
+                if (isSelected) Canvas(Modifier.matchParentSize()) {
+                    val width = 2.dp.toPx()
+                    // Paint inside exposed edges so neighboring cells share one continuous outline.
+                    selectionBorders(position, selected).forEach { edge ->
+                        when (edge) {
+                            SelectionBorder.Top -> drawRect(Moss, size = Size(size.width, width))
+                            SelectionBorder.Right -> drawRect(Moss, Offset(size.width - width, 0f), Size(width, size.height))
+                            SelectionBorder.Bottom -> drawRect(Moss, Offset(0f, size.height - width), Size(size.width, width))
+                            SelectionBorder.Left -> drawRect(Moss, size = Size(width, size.height))
+                        }
+                    }
+                }
                 if (!fogged) puzzle.cages.firstOrNull { position in it.cells }?.let { cage -> if (position == cage.cells.minBy { it.index }) Text(cage.total.toString(), Modifier.align(Alignment.TopStart).padding(start = 3.dp, top = 1.dp), fontSize = 8.sp, color = Color(0xFF765A7C), fontWeight = FontWeight.Bold) }
             }
                 } } } }
