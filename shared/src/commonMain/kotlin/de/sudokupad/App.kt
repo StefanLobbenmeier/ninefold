@@ -429,9 +429,21 @@ private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
 
 @Composable
 private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>) {
-    Column(Modifier.fillMaxSize().padding(3.dp)) { repeat(3) { row -> Row(Modifier.weight(1f)) { repeat(3) { col ->
-        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { val number = row * 3 + col + 1; if (number in notes) Text(number.toString(), fontSize = 8.sp, lineHeight = 8.sp, color = if (number in invalid) ErrorRed else Moss) }
-    } } } }
+    val sortedNotes = notes.sorted()
+    val corners = listOf(Alignment.TopStart, Alignment.TopEnd, Alignment.BottomStart, Alignment.BottomEnd)
+    Box(Modifier.fillMaxSize().padding(3.dp)) {
+        corners.forEachIndexed { corner, alignment ->
+            // Fill the corners first, then pack additional marks beside them.
+            val cornerNotes = sortedNotes.filterIndexed { index, _ -> index % corners.size == corner }
+            if (cornerNotes.isNotEmpty()) {
+                Text(buildAnnotatedString {
+                    cornerNotes.forEach { number ->
+                        withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
+                    }
+                }, modifier = Modifier.align(alignment), fontSize = 8.sp, lineHeight = 8.sp, maxLines = 1)
+            }
+        }
+    }
 }
 
 @Composable
