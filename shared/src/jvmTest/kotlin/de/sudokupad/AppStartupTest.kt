@@ -1,5 +1,9 @@
 package de.sudokupad
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -86,7 +90,8 @@ class AppStartupTest {
                 "sourceId": "test",
                 "title": "Startup puzzle",
                 "publishedAt": "2026-10-12T00:00:00Z",
-                "puzzleUrl": "https://sudokupad.app/startup"
+                "puzzleUrl": "https://sudokupad.app/startup",
+                "links": [{"mediaType": "video", "url": "https://www.youtube.com/watch?v=startup"}]
             }]
         }"""
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
@@ -109,7 +114,15 @@ class AppStartupTest {
                     client.get("http://127.0.0.1:${server.address.port}/index.json").bodyAsText()
                 }
                 FileKit.init(appId = "de.sudokupad")
-                compose.setContent { App(indexCache = cache, storage = storage, indexRepository = repository) }
+                val openedUrls = mutableListOf<String>()
+                val uriHandler = object : UriHandler {
+                    override fun openUri(uri: String) { openedUrls += uri }
+                }
+                compose.setContent {
+                    CompositionLocalProvider(LocalUriHandler provides uriHandler) {
+                        App(indexCache = cache, storage = storage, indexRepository = repository)
+                    }
+                }
 
                 compose.onNodeWithText("NINEFOLD").assertIsDisplayed()
                 compose.onNodeWithText("Browse sudokus").assertIsDisplayed()
@@ -119,12 +132,21 @@ class AppStartupTest {
                 }
                 compose.onNodeWithText("Startup puzzle").assertIsDisplayed()
                 compose.onNodeWithText("1 puzzles · 1 ready offline · Updated 2026-10-12").assertIsDisplayed()
-                compose.onNodeWithText("Play").assertIsEnabled()
+                compose.onNodeWithContentDescription("Play Startup puzzle").assertIsEnabled()
+                compose.onNodeWithText("SudokuPad").performClick()
+                compose.onNodeWithText("Source video").performClick()
+                assertEquals(listOf("https://sudokupad.app/startup", "https://www.youtube.com/watch?v=startup"), openedUrls)
+                compose.onNodeWithText("Browse sudokus").assertIsDisplayed()
                 assertEquals("Startup puzzle", repository.cached()?.entries?.single()?.title)
 
                 // Opening Import also composes the FileKit picker integration.
                 compose.onNodeWithText("Import").performClick()
                 compose.onNodeWithText("Puzzle link").assertIsDisplayed()
+                compose.onNodeWithText("Cancel").performClick()
+
+                // The card body opens the player, independently of the source buttons.
+                compose.onNodeWithText("Startup puzzle").performClick()
+                compose.onNodeWithText("Okay, start puzzle").assertIsDisplayed()
             }
         } finally {
             server.stop(0)
