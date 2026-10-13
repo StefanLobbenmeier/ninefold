@@ -26,3 +26,18 @@ kotlin {
         }
     }
 }
+
+// Include every emitted chunk, Wasm module, font and other runtime resource.
+// Run after distribution copying so sw.js always starts from the source template.
+listOf("js", "wasmJs").forEach { target ->
+    val preparation = providers.exec {
+        commandLine(
+            "python3", rootProject.file("scripts/prepare-offline-release.py"),
+            layout.buildDirectory.dir("dist/$target/productionExecutable").get().asFile,
+        )
+    }.result
+    tasks.named("${target}BrowserDistribution") {
+        inputs.file(rootProject.file("scripts/prepare-offline-release.py"))
+        doLast { preparation.get().assertNormalExitValue() }
+    }
+}

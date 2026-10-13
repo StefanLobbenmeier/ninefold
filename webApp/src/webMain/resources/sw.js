@@ -1,53 +1,84 @@
-const CACHE = 'ninefold-offline-v2';
+// Replaced by prepare-offline-release.py after the production distribution is built.
+const RELEASE = null;
+const APP_CACHE_PREFIX = 'ninefold-app-';
+const APP_CACHE = APP_CACHE_PREFIX + RELEASE?.version;
+const DATA_CACHE = 'ninefold-offline-data-v1';
 const scope = new URL(self.registration.scope);
+const assetUrls = new Set((RELEASE?.assets || []).map(asset => new URL(asset.path, scope).href));
 const isFontAsset = url => url.origin === 'https://fonts.gstatic.com';
-const isAppAsset = url => url.origin === scope.origin && url.pathname.startsWith(scope.pathname) && !url.pathname.endsWith('/sw.js');
 
 self.addEventListener('install', event => {
-    event.waitUntil(caches.open(CACHE).then(cache => cache.addAll([
-        scope.href, new URL('index.html', scope).href, new URL('styles.css', scope).href,
-        new URL('offline.js', scope).href, new URL('webApp.js', scope).href,
-    ])).then(() => self.skipWaiting()));
+    event.waitUntil((async () => {
+        if (!RELEASE) throw new Error('Offline release has not been prepared');
+        const cache = await caches.open(APP_CACHE);
+        // A failed install must never expose a partially downloaded release.
+        try {
+            for (const asset of RELEASE.assets) {
+                const url = new URL(asset.path, scope).href;
+                const response = await fetch(url, { cache: 'no-store' });
+                if (!response.ok) throw new Error(`Failed to download ${asset.path}`);
+                const bytes = await response.clone().arrayBuffer();
+                const digest = await crypto.subtle.digest('SHA-256', bytes);
+                const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+                if (hash !== asset.sha256) throw new Error(`Release mismatch for ${asset.path}`);
+                await cache.put(url, response);
+            }
+        } catch (error) {
+            await caches.delete(APP_CACHE);
+            throw error;
+        }
+        // Let existing tabs finish using their release. The complete new release
+        // activates once those tabs close; do not skipWaiting or claim an old page.
+    })());
 });
+
 self.addEventListener('activate', event => {
-    event.waitUntil(self.clients.claim());
+    event.waitUntil((async () => {
+        for (const name of await caches.keys()) {
+            if (name.startsWith(APP_CACHE_PREFIX) && name !== APP_CACHE) await caches.delete(name);
+        }
+    })());
 });
+
+// Fonts fetched by the first, uncontrolled page can also be saved for offline use.
 self.addEventListener('message', event => {
-    if (event.data?.type !== 'cache-assets' || !Array.isArray(event.data.urls)) return;
-    event.waitUntil(caches.open(CACHE).then(cache => Promise.allSettled(
-        event.data.urls.filter(value => {
-            try { const url = new URL(value); return isAppAsset(url) || isFontAsset(url); } catch { return false; }
+    if (event.data?.type !== 'cache-fonts' || !Array.isArray(event.data.urls)) return;
+    event.waitUntil((async () => {
+        const cache = await caches.open(DATA_CACHE);
+        await Promise.allSettled(event.data.urls.filter(value => {
+            try { return isFontAsset(new URL(value)); } catch { return false; }
         }).map(async url => {
             if (!await cache.match(url)) await cache.add(url);
-        })
-    )));
+        }));
+    })());
 });
+
 self.addEventListener('fetch', event => {
     if (event.request.method !== 'GET') return;
     const url = new URL(event.request.url);
+    const navigation = event.request.mode === 'navigate' && url.origin === scope.origin && url.pathname.startsWith(scope.pathname);
+    if (navigation || assetUrls.has(url.href)) {
+        event.respondWith((async () => {
+            const cache = await caches.open(APP_CACHE);
+            const saved = await cache.match(navigation ? new URL('index.html', scope).href : url.href);
+            // Never combine this release's HTML with files from another release.
+            return saved || new Response('The offline app is unavailable. Please reconnect and reopen the app.', {
+                status: 503, headers: { 'Content-Type': 'text/plain' },
+            });
+        })());
+        return;
+    }
     const puzzle = (url.origin === 'https://sudokupad.svencodes.com' && url.pathname.startsWith('/ctclegacy/')) ||
         (url.origin === 'https://sudokupad.app' && url.pathname.startsWith('/api/puzzle/'));
-    if (!isAppAsset(url) && !puzzle && !isFontAsset(url)) return;
+    if (!puzzle && !isFontAsset(url)) return;
     event.respondWith((async () => {
-        const cache = await caches.open(CACHE);
-        if (puzzle || isFontAsset(url)) {
-            const saved = await cache.match(event.request);
-            if (saved) return saved;
+        const cache = await caches.open(DATA_CACHE);
+        const saved = await cache.match(event.request);
+        if (saved) return saved;
+        const response = await fetch(event.request);
+        if (response.ok) {
+            try { await cache.put(event.request, response.clone()); } catch { /* Cache may be full. */ }
         }
-        try {
-            const response = await fetch(event.request);
-            if (response.ok) {
-                // A storage failure must not turn a successful request into a failure.
-                try { await cache.put(event.request, response.clone()); } catch { /* Cache may be full. */ }
-                return response;
-            }
-            const saved = await cache.match(event.request);
-            return saved || response;
-        } catch (error) {
-            const saved = await cache.match(event.request) ||
-                (event.request.mode === 'navigate' ? await cache.match(scope.href) : undefined);
-            if (saved) return saved;
-            throw error;
-        }
+        return response;
     })());
 });

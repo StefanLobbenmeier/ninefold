@@ -113,8 +113,13 @@ All catalog puzzles are eagerly fetched, converted, and saved with up to four do
 including while playing. Each entry shows waiting, fetching/converting, ready offline, or failed status.
 Ready offline means the converted puzzle was successfully stored; opening it makes no puzzle request.
 Refresh or an entry's Retry button retries failures. Preparing a large catalog can take longer than a
-few seconds, depending on the connection. A service worker caches the web app shell and loaded Wasm
-assets and fetched fallback fonts so it can reopen offline after an online visit. Browser storage must be available for persistent
+few seconds, depending on the connection. Production builds prepare a service worker that downloads
+and verifies the complete app (including all Wasm modules and chunks) before installing a release.
+Subsequent launches use that cached release immediately, even on a slow connection. Updates download
+into a separate cache; failed or interrupted downloads preserve the working release. A complete update
+takes over after all app tabs close. Fetched puzzles and fallback fonts have a separate cache that
+survives app updates. The first visit needs a connection until the app download completes.
+Browser storage must be available for persistent
 offline access.
 
 Every move (including pencil marks, erase, undo, and redo) saves the board and undo/redo history.
