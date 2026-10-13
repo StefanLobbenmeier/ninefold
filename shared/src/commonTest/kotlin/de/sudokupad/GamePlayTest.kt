@@ -52,4 +52,34 @@ class GamePlayTest {
             assertEquals(CellState(), erased[2])
         }
     }
+    @Test fun coloursToggleAcrossGivensDigitsAndNotesWithoutChangingThem() {
+        val cells = List(81) { index -> when (index) {
+            0 -> CellState(value = 5, given = true, colours = setOf(7))
+            1 -> CellState(value = 3, colours = setOf(9))
+            2 -> CellState(cornerNotes = setOf(1), centreNotes = setOf(2))
+            else -> CellState()
+        } }
+        val selected = (0..2).map { CellPosition(0, it) }.toSet()
+        val added = applyInput(cells, selected, InputMode.Colour, 7)
+        selected.forEach { assertEquals(cells[it.index].copy(colours = cells[it.index].colours + 7), added[it.index]) }
+        assertEquals(cells[3], added[3])
+        val removed = applyInput(added, selected, InputMode.Colour, 7)
+        assertEquals(emptySet(), removed[0].colours)
+        assertEquals(setOf(9), removed[1].colours)
+        val cleared = applyInput(added, selected, InputMode.Colour, null)
+        selected.forEach { assertEquals(cells[it.index].copy(colours = emptySet()), cleared[it.index]) }
+        assertEquals(cells, applyInput(cells, selected, InputMode.Colour, 10))
+        assertEquals(cells, applyInput(cells, emptySet(), InputMode.Colour, 7))
+    }
+
+    @Test fun digitsAndNotesPreserveColourAndNormalEraseClearsEditableCells() {
+        val cells = List(81) { CellState(colours = setOf(4, 9)) }
+        val selected = setOf(CellPosition(0, 0))
+        for (mode in listOf(InputMode.Digit, InputMode.Corner, InputMode.Centre)) {
+            val entered = applyInput(cells, selected, mode, 2)
+            assertEquals(setOf(4, 9), entered[0].colours)
+            assertEquals(CellState(), applyInput(entered, selected, mode, null)[0])
+        }
+    }
+
 }

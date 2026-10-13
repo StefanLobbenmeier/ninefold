@@ -116,4 +116,19 @@ class GamePersistenceTest {
         now = 100_000
         assertEquals(125, clock.elapsedSeconds())
     }
+    @Test fun coloursAndTheirHistorySurviveRestartAndOlderCellsStillDecode() {
+        val storage = MemoryAppStorage()
+        val repository = GameRepository(storage)
+        val puzzle = Puzzle("Colours", "Test", ".".repeat(81))
+        val initial = puzzle.startingCells()
+        val coloured = applyInput(initial, setOf(CellPosition(0, 0)), InputMode.Colour, 9)
+        repository.saveSettings(repository.settings.copy(inputMode = "Colour"))
+        repository.saveGame(SavedGame(puzzle, initial, started = true, history = listOf(initial), redo = listOf(coloured)))
+        val restored = GameRepository(storage)
+        assertEquals("Colour", restored.settings.inputMode)
+        assertEquals(setOf(9), restored.game(puzzle)!!.redo.single()[0].colours)
+        assertEquals(initial, restored.game(puzzle)!!.history.single())
+        assertEquals(CellState(value = 5), kotlinx.serialization.json.Json.decodeFromString<CellState>("""{"value":5}"""))
+    }
+
 }

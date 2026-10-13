@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
@@ -55,7 +56,7 @@ private val Butter = Color(0xFFF1E6BD)
 private val ErrorRed = Color(0xFFC94E45)
 
 internal enum class InputMode(val label: String, val mark: String) {
-    Digit("Digit", "5"), Corner("Corner", "1·2"), Centre("Centre", "12")
+    Digit("Digit", "5"), Corner("Corner", "1·2"), Centre("Centre", "12"), Colour("Colour", "")
 }
 
 @Composable
@@ -278,6 +279,21 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
         val inset = maxWidth * (padCells.toFloat() / (9 + padCells * 2))
         Box(Modifier.fillMaxSize().background(if (hasOutside) Paper else Color.White)) {
             Box(Modifier.fillMaxSize().padding(inset).background(Color.White).border(2.dp, Ink))
+            Canvas(Modifier.fillMaxSize().padding(inset)) {
+                val cellWidth = size.width / 9
+                val cellHeight = size.height / 9
+                val edge = 2.dp.toPx()
+                clipRect(edge, edge, size.width - edge, size.height - edge) {
+                    cells.forEachIndexed { index, cell ->
+                        val colours = cell.colours.sorted().mapNotNull(CellColour::fromNumber)
+                        colours.forEachIndexed { stripe, colour ->
+                            drawRect(colour.swatch,
+                                Offset((index % 9 + stripe.toFloat() / colours.size) * cellWidth, index / 9 * cellHeight),
+                                Size(cellWidth / colours.size, cellHeight))
+                        }
+                    }
+                }
+            }
             PuzzleGraphics(puzzle, padCells, measurer)
             Box(Modifier.fillMaxSize().padding(inset).then(
                 if (onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
@@ -313,19 +329,20 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             val position = CellPosition(row, column); val cell = cells[position.index]; val isSelected = position in selected
             val peer = selected.any { it.row == row || it.column == column || (it.row / 3 == row / 3 && it.column / 3 == column / 3) }
             val same = cell.value != null && selected.any { cells[it.index].value == cell.value }
-            val background = when { isSelected -> Butter.copy(alpha = .92f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); peer -> Color(0x33F1F3EC); else -> Color.Transparent }
+            val background = when { isSelected -> Butter.copy(alpha = .92f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); peer -> Color(0x33F1F3EC); else -> Color.Transparent }.let { if (cell.colours.isNotEmpty()) it.copy(alpha = minOf(it.alpha, .18f)) else it }
+            val textBackdrop = if (CellColour.DarkGrey.number in cell.colours) Color.White.copy(alpha = .85f) else Color.Transparent
             val fogged = puzzle.fogLights != null && position !in litCells
-            Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }.drawBehind {
+            Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (cell.colours.isNotEmpty()) ", colours ${cell.colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }.drawBehind {
                 val thin = .55.dp.toPx(); val thick = 1.5.dp.toPx()
                 drawLine(Ink.copy(alpha = .65f), Offset(size.width, 0f), Offset(size.width, size.height), if ((column + 1) % 3 == 0) thick else thin)
                 drawLine(Ink.copy(alpha = .65f), Offset(0f, size.height), Offset(size.width, size.height), if ((row + 1) % 3 == 0) thick else thin)
             }, contentAlignment = Alignment.Center) {
                 if (fogged) Box(Modifier.matchParentSize().background(Color(0xFFB4B7B5)))
                 when {
-                    cell.value != null && (!cell.given || !fogged) -> Text(cell.value.toString(), fontSize = digitSize, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
+                    cell.value != null && (!cell.given || !fogged) -> Text(cell.value.toString(), modifier = Modifier.background(textBackdrop), fontSize = digitSize, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
                     cell.value == null -> {
-                        if (cell.cornerNotes.isNotEmpty()) CornerNotes(cell.cornerNotes, invalidPencilMarks[position.index].orEmpty())
-                        if (cell.centreNotes.isNotEmpty()) CentreNotes(cell.centreNotes, invalidPencilMarks[position.index].orEmpty())
+                        if (cell.cornerNotes.isNotEmpty()) CornerNotes(cell.cornerNotes, invalidPencilMarks[position.index].orEmpty(), textBackdrop)
+                        if (cell.centreNotes.isNotEmpty()) CentreNotes(cell.centreNotes, invalidPencilMarks[position.index].orEmpty(), textBackdrop)
                     }
                 }
                 if (isSelected) Canvas(Modifier.matchParentSize()) {
@@ -439,7 +456,7 @@ private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
 }
 
 @Composable
-private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>) {
+private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Color.Transparent) {
     val sortedNotes = notes.sorted()
     val corners = listOf(Alignment.TopStart, Alignment.TopEnd, Alignment.BottomStart, Alignment.BottomEnd)
     Box(Modifier.fillMaxSize().padding(3.dp)) {
@@ -451,21 +468,21 @@ private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>) {
                     cornerNotes.forEach { number ->
                         withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
                     }
-                }, modifier = Modifier.align(alignment), fontSize = 8.sp, lineHeight = 8.sp, maxLines = 1)
+                }, modifier = Modifier.align(alignment).background(backdrop), fontSize = 8.sp, lineHeight = 8.sp, maxLines = 1)
             }
         }
     }
 }
 
 @Composable
-private fun CentreNotes(notes: Set<Int>, invalid: Set<Int>) {
+private fun CentreNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Color.Transparent) {
     BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         val noteSize = minOf(10f, maxWidth.value / notes.size.coerceAtLeast(1)).sp
         Text(buildAnnotatedString {
             notes.sorted().forEach { number ->
                 withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
             }
-        }, fontSize = noteSize, lineHeight = noteSize, maxLines = 1, textAlign = TextAlign.Center)
+        }, modifier = Modifier.background(backdrop), fontSize = noteSize, lineHeight = noteSize, maxLines = 1, textAlign = TextAlign.Center)
     }
 }
 
@@ -483,28 +500,41 @@ private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (In
             (1..9).chunked(3).forEach { numbers ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     numbers.forEach { number ->
-                        OutlinedButton({ onNumber(number) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp), shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) { Text(number.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink) }
+                        val colour = if (mode == InputMode.Colour) CellColour.fromNumber(number) else null
+                        OutlinedButton({ onNumber(number) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics {
+                            if (colour != null) contentDescription = "${colour.label}, colour $number"
+                        }, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) {
+                            if (colour != null) Box(Modifier.fillMaxSize().padding(7.dp).clip(RoundedCornerShape(5.dp)).background(colour.swatch))
+                            else Text(number.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                        }
                     }
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Spacer(Modifier.weight(1f))
-                OutlinedButton({ onNumber(null) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = "Zero, erase selected cells" }, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) { Text("0", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink) }
-                OutlinedButton({ onNumber(null) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = "Erase" }, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) { Text("Erase", fontSize = 13.sp) }
+                OutlinedButton({ onNumber(null) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = if (mode == InputMode.Colour) "Zero, clear selected colours" else "Zero, erase selected cells" }, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) { Text("0", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink) }
+                OutlinedButton({ onNumber(null) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = if (mode == InputMode.Colour) "Erase colours" else "Erase" }, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) { Text("Erase", fontSize = 13.sp) }
             }
         }
         Column(Modifier.width(72.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             InputMode.entries.forEach { item -> val active = item == mode
                 Surface(Modifier.fillMaxWidth().height(if (compact) 44.dp else 52.dp).semantics { selected = active }.clickable { onMode(item) }, shape = RoundedCornerShape(10.dp), color = if (active) Moss else Color(0xFFF0F1EA)) {
-                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text(item.mark, color = if (active) Color.White else Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold); Text(item.label, color = if (active) Color.White else Color.Gray, fontSize = 10.sp) }
+                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                        if (item == InputMode.Colour) Canvas(Modifier.size(24.dp, 18.dp)) {
+                            listOf(CellColour.Red, CellColour.Yellow, CellColour.Blue).forEachIndexed { index, colour ->
+                                drawRect(colour.swatch, Offset(index * size.width / 3, 2.dp.toPx()), Size(size.width / 3, size.height - 4.dp.toPx()))
+                            }
+                        } else Text(item.mark, color = if (active) Color.White else Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                        Text(item.label, color = if (active) Color.White else Color.Gray, fontSize = 10.sp)
+                    }
                 }
             }
-            OutlinedButton(onCheck, Modifier.fillMaxWidth().height(if (compact) 44.dp else 52.dp), enabled = canCheck, contentPadding = PaddingValues(0.dp), shape = RoundedCornerShape(10.dp)) { Text("Check") }
         }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         TextButton(onUndo, Modifier.weight(1f), enabled = canUndo) { Text("Undo") }
         TextButton(onRedo, Modifier.weight(1f), enabled = canRedo) { Text("Redo") }
+        TextButton(onCheck, Modifier.weight(1f), enabled = canCheck) { Text("Check") }
     }
 }
 
