@@ -122,6 +122,12 @@ survives app updates. The first visit needs a connection until the app download 
 Browser storage must be available for persistent
 offline access.
 
+Outbound links, including source videos and original SudokuPad pages, use a shared web link handler.
+They open in a separate browser tab, or hand off to the system from an iOS home-screen app without
+creating a blank popup. The browser and OS decide whether an installed app handles the link;
+iOS may present external web pages in a browser sheet. Verify the YouTube app handoff and return
+to the puzzle on a device when changing this behavior.
+
 Every move (including pencil marks, erase, undo, and redo) saves the board and undo/redo history.
 The timer saves independently whenever its displayed second changes and when leaving the player.
 Reopening resumes from the last saved board and elapsed time; time away from the player does not count.

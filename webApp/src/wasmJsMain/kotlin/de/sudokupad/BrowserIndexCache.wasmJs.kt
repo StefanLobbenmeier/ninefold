@@ -10,3 +10,6 @@ internal actual external fun writeBrowserIndex(payload: String)
 
 @JsFun("() => window.location.href")
 internal actual external fun browserPageUrl(): String
+
+@JsFun("(uri) => window.ninefoldOpenExternalLink(uri)")
+internal actual external fun openBrowserExternalLink(uri: String)
