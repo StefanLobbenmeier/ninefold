@@ -9,6 +9,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -91,31 +94,45 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 }
             }
             items(index?.entries.orEmpty(), key = { "catalog.${it.id}" }) { entry ->
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(entry.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("${entry.source} · ${entry.publishedAt.take(10)}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp))
-                        val status = statuses[entry.id] ?: DownloadStatus.Waiting
-                        Text(status.label, style = MaterialTheme.typography.bodySmall, color = if (status == DownloadStatus.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                        if (status == DownloadStatus.Failed) games.downloadErrors[entry.id]?.let { message ->
-                            Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                        }
-                        Button(onClick = {
-                            opening = entry.id
-                            openError = null
-                            scope.launch {
-                                try {
-                                    val puzzle = games.fetchPuzzle(entry)
-                                    statuses[entry.id] = DownloadStatus.Ready
-                                    onOpen(puzzle)
-                                } catch (error: Throwable) {
-                                    if (error is CancellationException && error !is kotlinx.coroutines.TimeoutCancellationException) throw error
-                                    statuses[entry.id] = DownloadStatus.Failed
-                                    games.downloadErrors[entry.id] = error.message.orEmpty()
-                                    openError = "Could not open ${entry.title}. ${error.message.orEmpty()}"
-                                } finally { opening = null }
+                val status = statuses[entry.id] ?: DownloadStatus.Waiting
+                val openPuzzle: () -> Unit = {
+                    opening = entry.id
+                    openError = null
+                    scope.launch {
+                        try {
+                            val puzzle = games.fetchPuzzle(entry)
+                            statuses[entry.id] = DownloadStatus.Ready
+                            onOpen(puzzle)
+                        } catch (error: Throwable) {
+                            if (error is CancellationException && error !is kotlinx.coroutines.TimeoutCancellationException) throw error
+                            statuses[entry.id] = DownloadStatus.Failed
+                            games.downloadErrors[entry.id] = error.message.orEmpty()
+                            openError = "Could not open ${entry.title}. ${error.message.orEmpty()}"
+                        } finally { opening = null }
+                    }
+                }
+                Card(
+                    onClick = openPuzzle, enabled = opening == null,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(entry.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("${entry.source} · ${entry.publishedAt.take(10)}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp))
+                            Text(status.label, style = MaterialTheme.typography.bodySmall, color = if (status == DownloadStatus.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                            if (status == DownloadStatus.Failed) games.downloadErrors[entry.id]?.let { message ->
+                                Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                             }
-                        }, enabled = opening == null) { Text(if (opening == entry.id) "Opening…" else if (status == DownloadStatus.Failed) "Retry" else "Play") }
+                            PuzzleSourceLinks(entry.puzzleUrl, entry.videoUrl)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        PuzzleOpenButton(
+                            action = if (status == DownloadStatus.Failed) "Retry" else "Play",
+                            title = entry.title, enabled = opening == null,
+                            opening = opening == entry.id, onOpen = openPuzzle,
+                        )
                     }
                 }
             }
@@ -127,13 +144,43 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
 
 @Composable
 private fun SavedGameCard(game: SavedGame, elapsed: Long, action: String, onOpen: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+    Card(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(game.puzzle.title, fontWeight = FontWeight.Bold)
                 Text("by ${game.puzzle.author} · ${formatElapsed(elapsed)}", style = MaterialTheme.typography.bodySmall)
+                PuzzleSourceLinks(game.puzzle.sourceUrl, game.puzzle.videoUrl)
             }
-            Button(onOpen) { Text(action) }
+            Spacer(Modifier.width(8.dp))
+            PuzzleOpenButton(action, game.puzzle.title, onOpen = onOpen)
         }
+    }
+}
+
+@Composable
+private fun PuzzleSourceLinks(sourceUrl: String?, videoUrl: String?) {
+    val uriHandler = LocalUriHandler.current
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        sourceUrl?.let { url ->
+            TextButton(onClick = { uriHandler.openUri(url) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("SudokuPad")
+            }
+        }
+        videoUrl?.let { url ->
+            TextButton(onClick = { uriHandler.openUri(url) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("Source video")
+            }
+        }
+    }
+}
+
+@Composable
+private fun PuzzleOpenButton(action: String, title: String, enabled: Boolean = true, opening: Boolean = false, onOpen: () -> Unit) {
+    FilledIconButton(
+        onClick = onOpen, enabled = enabled,
+        modifier = Modifier.semantics { contentDescription = if (opening) "Opening $title" else "$action $title" },
+    ) {
+        if (opening) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        else Text("›", style = MaterialTheme.typography.headlineSmall)
     }
 }
