@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -353,11 +352,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             val background = when { isSelected -> Butter.copy(alpha = .92f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); peer -> Color(0x33F1F3EC); else -> Color.Transparent }.let { if (cell.colours.isNotEmpty()) it.copy(alpha = minOf(it.alpha, .18f)) else it }
             val textBackdrop = if (CellColour.DarkGrey.number in cell.colours) Color.White.copy(alpha = .85f) else Color.Transparent
             val fogged = puzzle.fogLights != null && position !in litCells
-            Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (cell.colours.isNotEmpty()) ", colours ${cell.colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }.drawBehind {
-                val thin = .55.dp.toPx(); val thick = 1.5.dp.toPx()
-                drawLine(Ink.copy(alpha = .65f), Offset(size.width, 0f), Offset(size.width, size.height), if ((column + 1) % 3 == 0) thick else thin)
-                drawLine(Ink.copy(alpha = .65f), Offset(0f, size.height), Offset(size.width, size.height), if ((row + 1) % 3 == 0) thick else thin)
-            }, contentAlignment = Alignment.Center) {
+            Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (cell.colours.isNotEmpty()) ", colours ${cell.colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }, contentAlignment = Alignment.Center) {
                 if (fogged) Box(Modifier.matchParentSize().background(Color(0xFFB4B7B5)))
                 when {
                     cell.value != null && (!cell.given || !fogged) -> Text(cell.value.toString(), modifier = Modifier.background(textBackdrop), fontSize = digitSize, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
@@ -385,6 +380,19 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     val visible = cage.cells.intersect(litCells)
                     cage.copy(cells = visible).takeIf { visible.isNotEmpty() }
                 })
+            }
+            // Keep cell boundaries above the opaque fog layer.
+            Canvas(Modifier.fillMaxSize().padding(inset)) {
+                val thin = .55.dp.toPx()
+                val thick = 1.5.dp.toPx()
+                val color = Ink.copy(alpha = .65f)
+                for (line in 1..8) {
+                    val width = if (line % 3 == 0) thick else thin
+                    val x = size.width * line / 9f
+                    val y = size.height * line / 9f
+                    drawLine(color, Offset(x, 0f), Offset(x, size.height), width)
+                    drawLine(color, Offset(0f, y), Offset(size.width, y), width)
+                }
             }
         }
     }
