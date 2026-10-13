@@ -33,9 +33,13 @@ expect fun platformAppStorage(): AppStorage
 @Serializable
 internal data class CheckingSettings(
     val inputMode: String = "Digit", val multiSelect: Boolean = false,
+    val automaticColours: Map<Int, AutomaticColourRule> = DefaultAutomaticColours,
     val rules: Boolean = true, val automaticRules: Boolean = true,
     val specialRules: Boolean = true, val solution: Boolean = true, val automaticSolution: Boolean = true,
 )
+
+/** Fill missing presets without replacing saved enable switches or number selections. */
+private fun CheckingSettings.withColourDefaults() = copy(automaticColours = DefaultAutomaticColours + automaticColours)
 
 @Serializable
 internal data class SavedGame(
@@ -64,7 +68,7 @@ internal class GameRepository(
         storageError = "Could not save locally. Progress and offline access may be lost: ${error.message.orEmpty()}"
         false
     }
-    var settings by mutableStateOf(read<CheckingSettings>("settings") ?: CheckingSettings())
+    var settings by mutableStateOf((read<CheckingSettings>("settings") ?: CheckingSettings()).withColourDefaults())
         private set
     var games by mutableStateOf(read<List<String>>("games").orEmpty().mapNotNull { id ->
         read<SavedGame>("game.$id")?.takeIf { it.cells.size == 81 }?.let { id to it }
@@ -101,7 +105,7 @@ internal class GameRepository(
         }
     }
 
-    fun saveSettings(value: CheckingSettings) { settings = value; write("settings", value) }
+    fun saveSettings(value: CheckingSettings) { settings = value.withColourDefaults(); write("settings", settings) }
     fun game(puzzle: Puzzle) = games[puzzle.storageId()]
     fun saveGame(game: SavedGame) {
         val id = game.puzzle.storageId()

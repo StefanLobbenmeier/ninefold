@@ -157,6 +157,15 @@ selecting it again removes it from the group. Multiple colours appear as stripes
 puzzle clues and digits. In Colour mode, Erase and 0 clear only colours. Colours and colour
 undo/redo history are saved with the game.
 
+Long-press a colour swatch to configure automatic colouring. Each colour has its own enable switch
+and matching numbers, saved across puzzles and restarts. Disabled presets are green for 1–3,
+yellow for 4–6, red for 7–9, blue for even numbers, and orange for odd numbers. An A marks enabled swatches. When a cell
+leaves the selection, its entered digit or nonempty centre marks must all belong to the configured
+numbers. Corner marks do not trigger colouring. Existing colours are preserved; overlapping rules
+use the first matching colour in palette order. Automatic colour additions can be undone and redone.
+Solution feedback and completion wait until you leave the cell; Sudoku rule feedback remains live.
+Keypad presses and input-mode changes keep the current selection.
+
 ### Sharing puzzles
 
 Rules includes a selectable Puzzle link and Copy puzzle link for every puzzle, including catalog,
