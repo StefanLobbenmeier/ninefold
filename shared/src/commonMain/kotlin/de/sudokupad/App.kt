@@ -110,13 +110,24 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val multiSelect = repository.settings.multiSelect
     val clock = remember(puzzle) { GameClock().also { it.restore(repository.elapsed(puzzle)) } }
     var elapsed by remember(puzzle) { mutableStateOf(repository.elapsed(puzzle)) }
+    var foreground by remember(puzzle) { mutableStateOf(true) }
+    DisposableEffect(puzzle) {
+        val unsubscribe = observePageVisibility { visible ->
+            // Stop synchronously: rendering/coroutines may be suspended as soon as the page hides.
+            clock.setForeground(visible)
+            foreground = visible
+            elapsed = clock.elapsedSeconds()
+            repository.saveElapsed(puzzle, elapsed)
+        }
+        onDispose { unsubscribe() }
+    }
     val completed = remember(puzzle, finalized) { puzzle.isComplete(finalized) }
-    LaunchedEffect(started, completed, puzzle) {
+    LaunchedEffect(started, completed, puzzle, foreground) {
         if (started) {
             if (completed) clock.stop() else clock.start()
             elapsed = clock.elapsedSeconds()
             repository.saveElapsed(puzzle, elapsed)
-            while (!completed) {
+            while (!completed && foreground) {
                 delay(200)
                 val next = clock.elapsedSeconds()
                 if (next != elapsed) { elapsed = next; repository.saveElapsed(puzzle, elapsed) }

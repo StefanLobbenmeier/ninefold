@@ -131,6 +131,8 @@ to the puzzle on a device when changing this behavior.
 Every move (including pencil marks, erase, undo, and redo) saves the board and undo/redo history.
 The timer saves independently whenever its displayed second changes and when leaving the player.
 Reopening resumes from the last saved board and elapsed time; time away from the player does not count.
+In the browser/PWA, the timer also pauses while the page is hidden (such as when switching
+tabs or apps) and resumes when visible. Elapsed time is saved immediately on visibility changes.
 Completed grids retain their frozen timer. The menu has Continue sudokus and Solved sudokus sections,
 including manually imported games. Checking preferences, input mode, and multiple selection persist
 across puzzles and restarts. Native storage uses Android preferences, iOS user defaults, and local files
