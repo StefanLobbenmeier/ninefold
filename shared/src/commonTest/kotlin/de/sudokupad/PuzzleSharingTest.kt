@@ -39,7 +39,8 @@ class PuzzleSharingTest {
         val puzzle = SudokuFixtures.classic.copy(
             title = "霧 & Flüstern 🧩", author = "Zoë", sourceUrl = "https://sudokupad.app/example",
             videoUrl = "https://example.com/video", rules = listOf("差 ≥ 5", "Follow the arrows."),
-            cages = listOf(KillerCage(8, setOf(CellPosition(0, 0), CellPosition(0, 1)))),
+            cages = listOf(KillerCage(8, setOf(CellPosition(0, 0), CellPosition(0, 1))),
+                KillerCage(null, setOf(CellPosition(1, 0), CellPosition(1, 1)))),
             lines = listOf(PuzzleLine(listOf(GridPoint(.5, .5), GridPoint(1.5, .5)), rule = LineRule.GermanWhisper)),
             arrows = listOf(PuzzleArrow(listOf(GridPoint(.5, .5), GridPoint(.5, 1.5)), circle = CellPosition(0, 0), pathCells = listOf(CellPosition(0, 1)))),
             overlays = listOf(PuzzleOverlay(GridPoint(1.0, 1.0), text = "×")),
