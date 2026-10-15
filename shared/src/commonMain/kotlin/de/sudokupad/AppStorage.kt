@@ -33,18 +33,15 @@ expect fun platformAppStorage(): AppStorage
 @Serializable
 internal data class CheckingSettings(
     val inputMode: String = "Digit", val multiSelect: Boolean = false,
-    val automaticColours: Map<Int, AutomaticColourRule> = DefaultAutomaticColours,
     val rules: Boolean = true, val automaticRules: Boolean = true,
     val specialRules: Boolean = true, val solution: Boolean = true, val automaticSolution: Boolean = true,
 )
-
-/** Fill missing presets without replacing saved enable switches or number selections. */
-private fun CheckingSettings.withColourDefaults() = copy(automaticColours = DefaultAutomaticColours + automaticColours)
 
 @Serializable
 internal data class SavedGame(
     val puzzle: Puzzle, val cells: List<CellState>, val started: Boolean,
     val history: List<List<CellState>> = emptyList(), val redo: List<List<CellState>> = emptyList(),
+    val automaticColours: Map<Int, AutomaticColourRule> = DefaultAutomaticColours,
 ) {
     val completed: Boolean get() = puzzle.isComplete(cells)
 }
@@ -69,10 +66,10 @@ internal class GameRepository(
         storageError = "Could not save locally. Progress and offline access may be lost: ${error.message.orEmpty()}"
         false
     }
-    var settings by mutableStateOf((read<CheckingSettings>("settings") ?: CheckingSettings()).withColourDefaults())
+    var settings by mutableStateOf(read<CheckingSettings>("settings") ?: CheckingSettings())
         private set
     var games by mutableStateOf(read<List<String>>("games").orEmpty().mapNotNull { id ->
-        read<SavedGame>("game.$id")?.takeIf { it.cells.size == 81 }?.let { id to it }
+        read<SavedGame>("game.$id")?.takeIf { it.cells.size == 81 }?.let { id to it.copy(automaticColours = DefaultAutomaticColours + it.automaticColours) }
     }.toMap())
         private set
     private val puzzles = mutableMapOf<String, Puzzle>()
@@ -106,7 +103,7 @@ internal class GameRepository(
         }
     }
 
-    fun saveSettings(value: CheckingSettings) { settings = value.withColourDefaults(); write("settings", settings) }
+    fun saveSettings(value: CheckingSettings) { settings = value; write("settings", settings) }
     fun game(puzzle: Puzzle) = games[puzzle.storageId()]
     fun saveGame(game: SavedGame) {
         val id = game.puzzle.storageId()

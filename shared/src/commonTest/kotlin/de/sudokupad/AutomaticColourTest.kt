@@ -4,7 +4,6 @@ import kotlin.test.*
 
 class AutomaticColourTest {
     private val rules = mapOf(7 to AutomaticColourRule(true, setOf(1, 2, 3)))
-    private val positions = (0..8).map { CellPosition(0, it) }.toSet()
 
     @Test fun matchesDigitsAndNonemptySubsetsOfCentreMarksOnly() {
         val cells = listOf(
@@ -14,16 +13,24 @@ class AutomaticColourTest {
             CellState(value = 2, colours = setOf(9)), CellState(value = 2, given = true),
             CellState(value = 4, centreNotes = setOf(1)),
         )
-        val result = applyAutomaticColours(cells, positions, rules)
-        assertEquals(listOf(setOf(7), setOf(7), emptySet(), emptySet(), emptySet(), emptySet(), setOf(9), setOf(7), emptySet()), result.map { it.colours })
-        assertEquals(cells, applyAutomaticColours(cells, emptySet(), rules))
-        assertEquals(cells, applyAutomaticColours(cells, positions, mapOf(7 to AutomaticColourRule(false, setOf(1, 2, 3)))))
+        assertEquals(listOf(setOf(7), setOf(7), emptySet(), emptySet(), emptySet(), emptySet(), setOf(7, 9), setOf(7), emptySet()), cells.map { it.displayColours(rules) })
+        assertEquals(cells.map { it.colours }, cells.map { it.displayColours(mapOf(7 to AutomaticColourRule(false, setOf(1, 2, 3)))) })
     }
 
-    @Test fun overlappingRulesUsePaletteOrderAndEmptyRulesNeverMatch() {
-        val cells = listOf(CellState(value = 2))
-        assertEquals(setOf(4), applyAutomaticColours(cells, positions, rules + (4 to AutomaticColourRule(true, setOf(2))))[0].colours)
-        assertEquals(cells, applyAutomaticColours(cells, positions, mapOf(1 to AutomaticColourRule(true))))
+    @Test fun overlappingRulesCombineWithManualColoursAndEmptyRulesNeverMatch() {
+        val cell = CellState(value = 2, colours = setOf(9))
+        assertEquals(setOf(4, 7, 9), cell.displayColours(rules + (4 to AutomaticColourRule(true, setOf(2)))))
+        assertEquals(setOf(9), cell.displayColours(mapOf(1 to AutomaticColourRule(true))))
+        assertEquals(setOf(9), cell.colours)
+    }
+
+    @Test fun editingOrChangingRulesRecalculatesColoursWithoutChangingManualColours() {
+        val cell = CellState(centreNotes = setOf(1, 2), colours = setOf(9))
+        assertEquals(setOf(7, 9), cell.displayColours(rules))
+        assertEquals(setOf(9), cell.copy(centreNotes = setOf(1, 4)).displayColours(rules))
+        assertEquals(setOf(9), cell.displayColours(mapOf(7 to AutomaticColourRule(true, setOf(3)))))
+        assertEquals(setOf(9), cell.displayColours(emptyMap()))
+        assertEquals(setOf(9), cell.colours)
     }
 
     @Test fun solutionChecksWaitForFinalizationButRuleChecksStayLive() {
@@ -40,14 +47,28 @@ class AutomaticColourTest {
         assertEquals(setOf(0, 1), checkAgainstSolution(puzzle, finalizedCells(live, finalized, emptySet())).cells)
     }
 
-    @Test fun colourSettingsPersistWithIndependentEnableAndNumbers() {
+    @Test fun colourSettingsPersistPerGameWithoutPersistingDerivedColours() {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)
-        repository.saveSettings(repository.settings.copy(automaticColours = rules + (9 to AutomaticColourRule(false, setOf(5, 6)))))
-        assertEquals(repository.settings, GameRepository(storage).settings)
+        val puzzle = SudokuFixtures.empty
+        val other = puzzle.copy(title = "Another game")
+        val cells = puzzle.startingCells().toMutableList().also { it[0] = CellState(value = 2, colours = setOf(9)) }
+        val configured = rules + (9 to AutomaticColourRule(false, setOf(5, 6)))
+        repository.saveGame(SavedGame(puzzle, cells, true, automaticColours = configured))
+        repository.saveGame(SavedGame(other, other.startingCells(), true))
+
+        val restored = GameRepository(storage)
+        val game = assertNotNull(restored.game(puzzle))
+        assertEquals(DefaultAutomaticColours + configured, game.automaticColours)
+        assertEquals(DefaultAutomaticColours, restored.game(other)?.automaticColours)
+        assertEquals(setOf(7, 9), game.cells[0].displayColours(game.automaticColours))
+        assertEquals(setOf(9), game.cells[0].colours)
+        assertEquals(emptyList(), game.history)
+        assertEquals(emptyList(), game.redo)
     }
-    @Test fun defaultsAreDisabledAndOlderSettingsKeepCustomRules() {
-        val fresh = GameRepository(MemoryAppStorage()).settings.automaticColours
+
+    @Test fun defaultsAreDisabledAndOldGlobalRulesDoNotAffectGames() {
+        val fresh = SavedGame(SudokuFixtures.empty, SudokuFixtures.empty.startingCells(), true).automaticColours
         assertEquals(setOf(1, 2, 3), fresh[CellColour.Green.number]?.numbers)
         assertEquals(setOf(4, 5, 6), fresh[CellColour.Yellow.number]?.numbers)
         assertEquals(setOf(7, 8, 9), fresh[CellColour.Red.number]?.numbers)
@@ -56,13 +77,11 @@ class AutomaticColourTest {
         assertTrue(fresh.values.all { !it.enabled })
 
         val storage = MemoryAppStorage()
-        storage.write("ninefold.settings.v1", """{"automaticColours":{"7":{"enabled":true,"numbers":[2]},"9":{"numbers":[]}}}""")
-        val migrated = GameRepository(storage)
-        assertEquals(AutomaticColourRule(true, setOf(2)), migrated.settings.automaticColours[7])
-        assertEquals(AutomaticColourRule(), migrated.settings.automaticColours[9])
-        assertEquals(fresh[4], migrated.settings.automaticColours[4])
-        migrated.saveSettings(migrated.settings)
-        assertEquals(migrated.settings, GameRepository(storage).settings)
+        storage.write("ninefold.settings.v1", """{"inputMode":"Centre","automaticColours":{"7":{"enabled":true,"numbers":[2]}}}""")
+        val puzzle = SudokuFixtures.empty
+        val repository = GameRepository(storage)
+        assertEquals("Centre", repository.settings.inputMode)
+        repository.saveGame(SavedGame(puzzle, puzzle.startingCells(), true))
+        assertEquals(fresh, GameRepository(storage).game(puzzle)?.automaticColours)
     }
-
 }
