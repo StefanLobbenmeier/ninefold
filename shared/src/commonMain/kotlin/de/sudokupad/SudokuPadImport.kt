@@ -160,7 +160,9 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
             fog += cells
             fog += parseFogCells(JsonPrimitive(cage.string("value")!!.substringAfter(':', "")))
             null
-        } else value?.takeIf { cells.isNotEmpty() }?.let { KillerCage(it, cells) }
+        } else if (cells.isNotEmpty() && (value != null || cage.string("value").isNullOrBlank())) {
+            KillerCage(value, cells)
+        } else null
     }
     val lines = parseLines(root, fpuzzles)
     val overlays = root.array("overlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()

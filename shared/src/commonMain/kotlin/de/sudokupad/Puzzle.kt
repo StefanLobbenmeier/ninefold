@@ -6,8 +6,9 @@ import kotlinx.serialization.Serializable
 data class CellPosition(val row: Int, val column: Int) { val index: Int get() = row * 9 + column }
 @Serializable
 data class CellState(val value: Int? = null, val given: Boolean = false, val cornerNotes: Set<Int> = emptySet(), val centreNotes: Set<Int> = emptySet(), val colours: Set<Int> = emptySet())
+/** A null total preserves an unlabelled cage; its sum may be specified only in the rules. */
 @Serializable
-data class KillerCage(val total: Int, val cells: Set<CellPosition>)
+data class KillerCage(val total: Int?, val cells: Set<CellPosition>)
 @Serializable
 data class FogLink(val triggers: Set<CellPosition>, val cells: Set<CellPosition>)
 @Serializable
@@ -103,7 +104,8 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
         val indices = cage.cells.map(CellPosition::index)
         markDuplicates(indices)
         val values = indices.mapNotNull { cells[it].value }
-        if (values.sum() > cage.total || (values.size == indices.size && values.sum() != cage.total)) {
+        val total = cage.total
+        if (total != null && (values.sum() > total || (values.size == indices.size && values.sum() != total))) {
             conflicts.addAll(indices.filter { cells[it].value != null })
         }
         indices.filter { cells[it].value == null }.forEach { index ->
@@ -111,8 +113,8 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
             val cell = cells[index]
             val candidates = cell.cornerNotes + cell.centreNotes
             val invalid = candidates.filterTo(mutableSetOf()) { candidate ->
-                candidate in otherValues || otherValues.sum() + candidate > cage.total ||
-                    (otherValues.size == indices.size - 1 && otherValues.sum() + candidate != cage.total)
+                candidate in otherValues || (total != null && (otherValues.sum() + candidate > total ||
+                    (otherValues.size == indices.size - 1 && otherValues.sum() + candidate != total)))
             }
             if (invalid.isNotEmpty()) pencilMarks.getOrPut(index, ::mutableSetOf).addAll(invalid)
         }

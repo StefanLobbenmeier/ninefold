@@ -92,6 +92,23 @@ class PuzzleCheckingTest {
         assertFalse(2 in withSpecialRules.pencilMarks[1].orEmpty())
     }
 
+    @Test fun cagesWithoutTotalsCheckUniquenessWithoutInventingASum() {
+        val puzzle = SudokuFixtures.empty.copy(cages = listOf(KillerCage(null,
+            setOf(CellPosition(0, 0), CellPosition(4, 4), CellPosition(8, 8)))))
+        val cells = puzzle.startingCells().toMutableList().also {
+            it[0] = CellState(value = 8)
+            it[40] = CellState(value = 7)
+            it[80] = CellState(centreNotes = setOf(6, 7, 8, 9))
+        }
+        val partial = checkSudokuRules(puzzle, cells)
+        assertTrue(partial.cells.isEmpty())
+        assertEquals(setOf(7, 8), partial.pencilMarks[80])
+        cells[80] = CellState(value = 9)
+        assertTrue(checkSudokuRules(puzzle, cells).cells.isEmpty())
+        cells[80] = CellState(value = 8)
+        assertEquals(setOf(0, 80), checkSudokuRules(puzzle, cells).cells)
+    }
+
     @Test fun checksAssignedLinesAndSumArrows() {
         val line = PuzzleLine(listOf(GridPoint(.5, .5), GridPoint(.5, 1.5)), rule = LineRule.GermanWhisper)
         val arrow = PuzzleArrow(emptyList(), circle = CellPosition(1, 0), pathCells = listOf(CellPosition(1, 1), CellPosition(1, 2)))

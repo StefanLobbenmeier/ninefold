@@ -92,6 +92,9 @@ thermometers and palindromes retain their semantics. Styled custom lines default
 review's line-rule dialog lets the solver assign German/Dutch whisper, renban, palindrome, thermometer,
 or region-sum meaning without guessing based only on a color. Killer sums, sum arrows, assigned simple
 line rules, and recognizable skyscraper/diagonal-sum outside clues participate in optional rule checks.
+Cages without printed totals retain their outlines and uniqueness checks; totals stated only in prose
+remain in the rules text and are not inferred by the checker. Reimport previously saved puzzles to
+recover cages discarded by older versions.
 Unknown artwork is still rendered and its original rule text is kept.
 
 Validation: `./gradlew :shared:jvmTest` includes solver cases and generated screenshot fixtures covering

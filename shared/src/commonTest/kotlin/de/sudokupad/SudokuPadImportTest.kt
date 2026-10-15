@@ -73,6 +73,28 @@ class SudokuPadImportTest {
         assertNotNull(puzzle.solution)
     }
 
+    @Test fun retainsCagesWithoutPrintedTotalsAndKeepsFogSeparate() {
+        val payload = SudokuFixtures.sudokuPadPayload(properties = """"cages":[
+            {"cells":[[0,0],[0,1]],"unique":true},
+            {"cells":[[1,0],[1,1]],"value":""},
+            {"cells":[[2,0],[2,1]],"value":null},
+            {"cells":[[3,0],[3,1]],"value":"7"},
+            {"cells":[[4,0]],"value":"foglight"},
+            {"cells":[],"value":"title: Test"}
+        ]""")
+        val puzzle = parseSudokuPadPayload(payload)
+        assertEquals(listOf(null, null, null, 7), puzzle.cages.map { it.total })
+        assertEquals((0..3).map { row -> setOf(CellPosition(row, 0), CellPosition(row, 1)) },
+            puzzle.cages.map { it.cells })
+        assertEquals(setOf(CellPosition(4, 0)), puzzle.fogLights)
+    }
+
+    @Test fun retainsFpuzzlesCagesWithoutPrintedTotals() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties =
+            """"killercage":[{"cells":["R1C1","R1C2"]}]"""))
+        assertEquals(KillerCage(null, setOf(CellPosition(0, 0), CellPosition(0, 1))), puzzle.cages.single())
+    }
+
     @Test fun importsDynamicFogTriggersAndRectangularRevealsWithoutInitialFog() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties = """"triggereffect":[
             {"trigger":{"type":"cellvalue","cell":"r2c2r2c3"},"effect":{"type":"foglight","cells":"r7c7-r8c8, r9c9"}}
