@@ -84,7 +84,10 @@ corresponding package through SudokuPad's own CORS-enabled
 endpoint works from the JS and Wasm web builds as well as the native builds.
 
 Imported puzzles retain metadata, givens, solutions, killer cages, sum arrows, colored lines, fog,
-cell marks, and generic overlays such as Kropki/XV marks and outside-grid clues. Explicit fpuz
+cell marks, and generic overlays such as Kropki/XV marks and outside-grid clues. Dynamic fog retains
+SudokuPad trigger/effect links: all trigger cells must be correct to reveal the linked cells, instead
+of clearing a 3×3 neighborhood. Previously imported puzzles need to be imported again to recover
+links discarded by older versions. Explicit fpuz
 thermometers and palindromes retain their semantics. Styled custom lines default to display-only; the
 review's line-rule dialog lets the solver assign German/Dutch whisper, renban, palindrome, thermometer,
 or region-sum meaning without guessing based only on a color. Killer sums, sum arrows, assigned simple

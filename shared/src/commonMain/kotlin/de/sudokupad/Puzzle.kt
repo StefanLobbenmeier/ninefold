@@ -9,6 +9,8 @@ data class CellState(val value: Int? = null, val given: Boolean = false, val cor
 @Serializable
 data class KillerCage(val total: Int, val cells: Set<CellPosition>)
 @Serializable
+data class FogLink(val triggers: Set<CellPosition>, val cells: Set<CellPosition>)
+@Serializable
 data class GridPoint(val row: Double, val column: Double)
 
 enum class LineRule(val label: String) {
@@ -59,7 +61,9 @@ data class Puzzle(
     val overlays: List<PuzzleOverlay> = emptyList(), val underlays: List<PuzzleOverlay> = emptyList(),
     val outsideClues: List<OutsideClue> = emptyList(),
     /** Present (even when empty) when this is a fog puzzle. */
-    val fogLights: Set<CellPosition>? = null, val sourceUrl: String? = null, val videoUrl: String? = null,
+    val fogLights: Set<CellPosition>? = null,
+    /** Null uses regular 3×3 fog; a present list uses only the specified reveals. */
+    val fogLinks: List<FogLink>? = null, val sourceUrl: String? = null, val videoUrl: String? = null,
 ) {
     fun startingCells(): List<CellState> = givens.map { char ->
         val value = char.digitToIntOrNull()?.takeIf { it in 1..9 }

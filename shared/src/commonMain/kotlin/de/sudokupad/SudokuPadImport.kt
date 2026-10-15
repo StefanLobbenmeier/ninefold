@@ -140,12 +140,21 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     val rawCages = root.array(if (fpuzzles) "killercage" else "cages") ?: root.array("cages") ?: JsonArray(emptyList())
     val fog = mutableSetOf<CellPosition>()
     root.array("foglight")?.forEach { parseCell(it)?.let(fog::add) }
+    val fogLinks = root.array("triggereffect")?.mapNotNull { element ->
+        val entry = element.jsonObject
+        val effect = entry.obj("effect") ?: return@mapNotNull null
+        if (effect.string("type") != "foglight") return@mapNotNull null
+        val trigger = entry.obj("trigger") ?: return@mapNotNull null
+        FogLink(parseFogCells(trigger["cell"]), parseFogCells(effect["cells"]))
+    }
     val cages = rawCages.mapNotNull { element ->
         val cage = element.jsonObject
         val cells = cage.array("cells").orEmpty().mapNotNull(::parseCell).toSet()
         val value = cage.int("value")
         if (cage.string("value")?.startsWith("foglight", ignoreCase = true) == true) {
-            fog += cells; null
+            fog += cells
+            fog += parseFogCells(JsonPrimitive(cage.string("value")!!.substringAfter(':', "")))
+            null
         } else value?.takeIf { cells.isNotEmpty() }?.let { KillerCage(it, cells) }
     }
     val lines = parseLines(root, fpuzzles)
@@ -153,7 +162,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     val underlays = root.array("underlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
     val arrows = parseArrows(root, fpuzzles, overlays)
     val outsideClues = parseOutsideClues(rulesText, overlays, arrows)
-    val hasFog = root.containsKey("foglight") || rawCages.any {
+    val hasFog = fogLinks != null || root.containsKey("foglight") || rawCages.any {
         it.jsonObject.string("value")?.startsWith("foglight", ignoreCase = true) == true
     }
     return Puzzle(
@@ -169,6 +178,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         underlays = underlays,
         outsideClues = outsideClues,
         fogLights = fog.takeIf { hasFog },
+        fogLinks = fogLinks,
         sourceUrl = sourceUrl,
         videoUrl = (metadata.string("video") ?: metadata.string("videoUrl")
             ?: (metadata.array("videos") ?: root.array("videos"))?.firstOrNull()?.let { video ->
@@ -321,6 +331,22 @@ private fun parsePoint(element: JsonElement): GridPoint? {
     if (element is JsonPrimitive && element.isString) return parseCell(element)?.let { GridPoint(it.row + .5, it.column + .5) }
     val pair = element as? JsonArray ?: return null
     return GridPoint(pair.getOrNull(0)?.asDouble() ?: return null, pair.getOrNull(1)?.asDouble() ?: return null)
+}
+
+/** SudokuPad cell lists concatenate rNcN coordinates and rectangular ranges. */
+private fun parseFogCells(element: JsonElement?): Set<CellPosition> {
+    if (element is JsonArray) return element.mapNotNull(::parseCell).filter { it.row in 0..8 && it.column in 0..8 }.toSet()
+    val text = element?.asString()?.replace(Regex("[, ]+"), "") ?: return emptySet()
+    return buildSet {
+        Regex("r(\\d+)c(\\d+)(?:-r(\\d+)c(\\d+))?", RegexOption.IGNORE_CASE).findAll(text).forEach { match ->
+            val (r1, c1, r2, c2) = match.destructured
+            val rows = r1.toInt().coerceAtLeast(1)..(r2.toIntOrNull() ?: r1.toInt()).coerceAtMost(9)
+            val columns = c1.toInt().coerceAtLeast(1)..(c2.toIntOrNull() ?: c1.toInt()).coerceAtMost(9)
+            for (row in rows) for (column in columns) {
+                if (row in 1..9 && column in 1..9) add(CellPosition(row - 1, column - 1))
+            }
+        }
+    }
 }
 
 private fun parseCell(element: JsonElement): CellPosition? {

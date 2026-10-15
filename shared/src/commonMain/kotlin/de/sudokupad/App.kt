@@ -409,22 +409,6 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
     }
 }
 
-private fun Puzzle.litCells(cells: List<CellState>): Set<CellPosition> {
-    val initial = fogLights ?: return buildSet { repeat(9) { row -> repeat(9) { column -> add(CellPosition(row, column)) } } }
-    return buildSet {
-        addAll(initial)
-        cells.forEachIndexed { index, cell ->
-            val position = CellPosition(index / 9, index % 9)
-            if (cell.given) add(position)
-            else if (cell.value != null && (solution?.getOrNull(index)?.digitToIntOrNull() == cell.value || solution == null)) {
-                for (row in position.row - 1..position.row + 1) for (column in position.column - 1..position.column + 1) {
-                    if (row in 0..8 && column in 0..8) add(CellPosition(row, column))
-                }
-            }
-        }
-    }
-}
-
 @Composable
 private fun BoxScope.PuzzleGraphics(puzzle: Puzzle, padCells: Int, measurer: androidx.compose.ui.text.TextMeasurer) {
     Canvas(Modifier.matchParentSize()) {

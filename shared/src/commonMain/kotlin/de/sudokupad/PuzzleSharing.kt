@@ -34,6 +34,7 @@ fun puzzleFromShareLink(link: String): Puzzle? {
     fun GridPoint.valid() = row.isFinite() && column.isFinite()
     require(puzzle.cages.all { cage -> cage.cells.all { it.valid() } } &&
         puzzle.fogLights.orEmpty().all { it.valid() } &&
+        puzzle.fogLinks.orEmpty().all { link -> (link.triggers + link.cells).all { it.valid() } } &&
         puzzle.lines.all { line -> line.points.all { it.valid() } && line.thickness.isFinite() } &&
         puzzle.arrows.all { arrow -> arrow.points.all { it.valid() } && arrow.pathCells.all { it.valid() } &&
             (arrow.circle?.valid() != false) && arrow.thickness.isFinite() && arrow.headLength.isFinite() } &&
