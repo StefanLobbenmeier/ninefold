@@ -8,12 +8,21 @@ class BoardSelectionTest {
         val second = CellPosition(0, 1)
         val untouched = CellPosition(1, 0)
         val unselected = CellPosition(0, 2)
-        for (additive in listOf(false, true)) {
-            val gesture = BoardSelectionGesture(setOf(first, second, untouched), first, additive)
-            assertEquals(setOf(second, untouched), gesture.visit())
-            assertEquals(setOf(untouched), gesture.visit(setOf(second, unselected)))
-            assertEquals(setOf(untouched), gesture.visit(setOf(first, second)))
-        }
+        val gesture = BoardSelectionGesture(setOf(first, second, untouched), first, additive = true)
+        assertEquals(setOf(second, untouched), gesture.visit())
+        assertEquals(setOf(untouched), gesture.visit(setOf(second, unselected)))
+        assertEquals(setOf(untouched), gesture.visit(setOf(first, second)))
+    }
+
+    @Test fun nonAdditiveGestureStartsFreshEvenOnASelectedCell() {
+        val first = CellPosition(0, 0)
+        val second = CellPosition(0, 1)
+        val untouched = CellPosition(1, 0)
+        val unselected = CellPosition(0, 2)
+        val gesture = BoardSelectionGesture(setOf(first, second, untouched), first, additive = false)
+        assertEquals(setOf(first), gesture.visit())
+        assertEquals(setOf(first, second, unselected), gesture.visit(setOf(second, unselected)))
+        assertEquals(setOf(first, second, unselected), gesture.visit(setOf(first, second)))
     }
 
     @Test fun addingKeepsItsOperationAcrossPreviouslySelectedCells() {
