@@ -73,6 +73,16 @@ class FogTest {
         }
     }
 
+    @Test fun sudokuPadTextBoxDimensionsRevealXVFromEitherSide() {
+        for (text in listOf("v", "x")) {
+            val mark = PuzzleOverlay(GridPoint(5.5, 1.0), width = 0.0, height = 1.05, text = text)
+            assertTrue(mark.isRevealedEdgeMark(setOf(CellPosition(5, 0))))
+            assertTrue(mark.isRevealedEdgeMark(setOf(CellPosition(5, 1))))
+            assertFalse(mark.isRevealedEdgeMark(emptySet()))
+            assertFalse(mark.isRevealedEdgeMark(setOf(CellPosition(4, 0))))
+        }
+    }
+
     @Test fun otherArtworkDoesNotRevealAcrossFog() {
         val lit = (0..8).flatMap { row -> (0..8).map { CellPosition(row, it) } }.toSet()
         val dot = PuzzleOverlay(GridPoint(4.0, 4.5), rounded = true, backgroundColor = "#FFFFFF")

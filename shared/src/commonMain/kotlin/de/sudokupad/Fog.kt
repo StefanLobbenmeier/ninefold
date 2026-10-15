@@ -31,9 +31,12 @@ internal fun Puzzle.litCells(cells: List<CellState>): Set<CellPosition> {
 
 /** Reveal a whole XV/Kropki mark when either of the two cells sharing its edge is lit. */
 internal fun PuzzleOverlay.isRevealedEdgeMark(litCells: Set<CellPosition>): Boolean {
-    if (width <= 0 || height <= 0 || width > 1 || height > 1) return false
-    val isXV = text?.trim()?.uppercase() in setOf("V", "X")
-    val isDot = text.isNullOrBlank() && rounded && width <= .5 && height <= .5 && (backgroundColor != null || borderColor != null)
+    // SudokuPad exports XV labels with zero-width, 1.05-cell-high text boxes.
+    // Their box dimensions describe text sizing rather than the painted glyph bounds.
+    val isXV = text?.trim()?.uppercase() in setOf("V", "X") &&
+        width in 0.0..1.1 && height > 0 && height <= 1.1
+    val isDot = text.isNullOrBlank() && rounded && width > 0 && height > 0 &&
+        width <= .5 && height <= .5 && (backgroundColor != null || borderColor != null)
     if (!isXV && !isDot) return false
     fun near(a: Double, b: Double) = abs(a - b) < .001
     val row = round(center.row).toInt()

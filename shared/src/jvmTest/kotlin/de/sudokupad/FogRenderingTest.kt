@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class FogRenderingTest {
     @get:Rule val compose = createComposeRule()
@@ -51,6 +52,15 @@ class FogRenderingTest {
                 PuzzleOverlay(center, .5, .5, if (text == null) "#000000" else "#FFFFFF", text = text, rounded = text == null)
             }
         }
+        assertWholeEdgeMarks(marks)
+    }
+
+    @Test fun originalWetBlanketsCluesRenderWholeFromEitherSide() {
+        val puzzle = parseSudokuPadPayload(javaClass.getResource("/puzzles/hkzobuop6w.scl")!!.readText())
+        assertWholeEdgeMarks(puzzle.overlays + puzzle.underlays)
+    }
+
+    private fun assertWholeEdgeMarks(marks: List<PuzzleOverlay>) {
         var lit by mutableStateOf((0..8).flatMap { row -> (0..8).map { CellPosition(row, it) } }.toSet())
         compose.setContent {
             MaterialTheme {
@@ -72,11 +82,19 @@ class FogRenderingTest {
             marks.forEach { mark ->
                 val x = (mark.center.column * cell).toInt()
                 val y = (mark.center.row * cell).toInt()
-                val radius = (cell * .2f).toInt()
+                val radius = (cell * if (mark.text.isNullOrBlank()) minOf(.2, mark.width * .4, mark.height * .4) else .2).toInt()
+                var compared = 0
                 for (dy in -radius..radius) for (dx in -radius..radius) {
                     if (mark.rounded && dx * dx + dy * dy > radius * radius) continue
-                    assertEquals(fullyLit[x + dx, y + dy], halfLit[x + dx, y + dy], "${mark.text ?: "Dot"}, side $side, pixel $dx,$dy")
+                    val expected = fullyLit[x + dx, y + dy]
+                    // Transparent text boxes inherit fog behind antialiased edges. Compare
+                    // solid glyph pixels so the reference still catches a clipped V or X.
+                    if (mark.backgroundColor != null || expected == Color.Black) {
+                        compared++
+                        assertEquals(expected, halfLit[x + dx, y + dy], "${mark.text ?: "Dot"}, side $side, pixel $dx,$dy")
+                    }
                 }
+                assertTrue(compared > 0, "No solid pixels checked for ${mark.text ?: "Dot"}")
             }
         }
         compose.runOnIdle { lit = emptySet() }
