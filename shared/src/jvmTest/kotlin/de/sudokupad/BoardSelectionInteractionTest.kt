@@ -129,8 +129,8 @@ class BoardSelectionInteractionTest {
         }
         val topLeft = cell(1, 1).captureToImage().toPixelMap()
         val moss = Color(0xFF3D6547)
-        assertEquals(moss, topLeft[topLeft.width / 2, 1])
-        assertEquals(moss, topLeft[1, topLeft.height / 2])
+        assertEquals(Color(0xFF202522), topLeft[topLeft.width / 2, 1])
+        assertEquals(Color(0xFF202522), topLeft[1, topLeft.height / 2])
         assertNotEquals(moss, topLeft[topLeft.width - 2, topLeft.height / 2])
         assertNotEquals(moss, topLeft[topLeft.width / 2, topLeft.height - 2])
         val bottomRight = cell(2, 2).captureToImage().toPixelMap()
