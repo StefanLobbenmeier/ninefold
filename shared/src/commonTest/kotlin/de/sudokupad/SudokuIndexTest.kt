@@ -27,6 +27,28 @@ class SudokuIndexTest {
         assertNull(index.entries.last().videoUrl)
     }
 
+    @Test fun videoMetadataIsOptionalAndRejectsInvalidValues() {
+        fun entry(metadata: String) = parseSudokuIndex(payload().replace("\"metadata\":{}", "\"metadata\":$metadata")).entries.first()
+        val video = entry("""{"youtubeVideoId":"aaaaaaaaaaa","durationSeconds":3723}""")
+        assertEquals("https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg", video.thumbnailUrl)
+        assertEquals(3723, video.durationSeconds)
+        val invalid = entry("""{"thumbnailUrl":"http://example.com/image.jpg","youtubeVideoId":"../bad","durationSeconds":-1}""")
+        assertNull(invalid.thumbnailUrl)
+        assertNull(invalid.durationSeconds)
+        assertNull(entry("{}").thumbnailUrl)
+    }
+
+    @Test fun lastPlayedOrderSurvivesRestartAndRevisitingOlderGames() {
+        val storage = MemoryAppStorage()
+        val repository = GameRepository(storage)
+        val first = SudokuFixtures.classic.copy(title = "First")
+        val second = SudokuFixtures.classic.copy(title = "Second")
+        repository.markPlayed(first)
+        repository.markPlayed(second)
+        repository.markPlayed(first)
+        assertEquals(listOf(first.storageId(), second.storageId()), GameRepository(storage).recentGames)
+    }
+
     @Test fun refreshPersistsValidIndexForNextVisit() = runTest {
         val cache = MemorySudokuIndexCache()
         val repository = SudokuIndexRepository(cache) { payload() }

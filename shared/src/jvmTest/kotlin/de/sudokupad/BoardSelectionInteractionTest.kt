@@ -26,7 +26,7 @@ class BoardSelectionInteractionTest {
         compose.setContent {
             MaterialTheme {
                 Box(if (compact) Modifier.width(400.dp) else Modifier) {
-                    SudokuApp(puzzle, repository, shareBaseUrl = "https://example.com/", onImport = {}, onBrowse = {})
+                    SudokuApp(puzzle, repository, shareBaseUrl = "https://example.com/", onBrowse = {})
                 }
             }
         }
@@ -74,7 +74,7 @@ class BoardSelectionInteractionTest {
     @Test fun multipleAddsCellsAndSwitchingItOffMakesNextGestureReplaceTheGroup() {
         openPlayer()
         clickCell(2, 2)
-        compose.onNodeWithText("Select multiple").performTouchInput { click() }
+        compose.onNodeWithContentDescription("Select multiple").performTouchInput { click() }
         clickCell(2, 3)
         clickCell(2, 2)
         assertSelection(2 to 3)
@@ -82,7 +82,7 @@ class BoardSelectionInteractionTest {
         assertSelection(2 to 3, 3 to 1, 3 to 2, 3 to 3)
         drag(3, 2, 4)
         assertSelection(2 to 3, 3 to 1)
-        compose.onNodeWithText("Select multiple").performTouchInput { click() }
+        compose.onNodeWithContentDescription("Select multiple").performTouchInput { click() }
         assertSelection(2 to 3, 3 to 1)
         clickCell(3, 1)
         assertSelection(3 to 1)
@@ -91,7 +91,7 @@ class BoardSelectionInteractionTest {
     @Test fun revisitingCellsDuringRemovalDoesNotSelectThemAgain() {
         openPlayer()
         drag(2, 1, 3)
-        compose.onNodeWithText("Select multiple").performTouchInput { click() }
+        compose.onNodeWithContentDescription("Select multiple").performTouchInput { click() }
         val start = cell(2, 1).fetchSemanticsNode().boundsInRoot.center
         val end = cell(2, 4).fetchSemanticsNode().boundsInRoot.center
         compose.onRoot().performTouchInput { down(start); moveTo(end); moveTo(start); up() }
@@ -134,7 +134,7 @@ class BoardSelectionInteractionTest {
             }
         }
         val topLeft = cell(1, 1).captureToImage().toPixelMap()
-        val moss = Color(0xFF3D6547)
+        val moss = Moss
         assertEquals(Color(0xFF202522), topLeft[topLeft.width / 2, 1])
         assertEquals(Color(0xFF202522), topLeft[1, topLeft.height / 2])
         assertNotEquals(moss, topLeft[topLeft.width - 2, topLeft.height / 2])
@@ -164,7 +164,7 @@ class BoardSelectionInteractionTest {
         val boardY = cell(4, 4).fetchSemanticsNode().boundsInRoot.center.y
         compose.onRoot().performTouchInput { click(Offset(1f, boardY)) }
         assertSelection()
-        compose.onNodeWithText("Select multiple").performTouchInput { click() }
+        compose.onNodeWithContentDescription("Select multiple").performTouchInput { click() }
         clickCell(4, 4)
         compose.onNodeWithText("Selection test").performTouchInput { click() }
         assertSelection()
@@ -177,9 +177,9 @@ class BoardSelectionInteractionTest {
         compose.onNodeWithContentDescription("Red, colour 7").performClick()
         compose.onNodeWithContentDescription("Blue, colour 9").performClick()
         for (column in 1..3) cell(2, column).assertContentDescriptionContains("colours Red, Blue", substring = true)
-        compose.onNodeWithText("Undo").performClick()
+        compose.onNodeWithContentDescription("Undo").performClick()
         cell(2, 2).assertContentDescriptionContains("colours Red", substring = true)
-        compose.onNodeWithText("Redo").performClick()
+        compose.onNodeWithContentDescription("Redo").performClick()
         cell(2, 2).assertContentDescriptionContains("colours Red, Blue", substring = true)
         compose.onNodeWithContentDescription("Erase colours").performClick()
         cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, 5, selected")
@@ -212,7 +212,7 @@ class BoardSelectionInteractionTest {
         compose.onNodeWithContentDescription("Red, colour 7").performTouchInput { longClick() }
         cell(2, 2).assertIsSelected()
         compose.onNodeWithText("Red colouring").assertExists()
-        compose.onNode(isToggleable()).performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNode(isToggleable() and !hasContentDescription("Select multiple")).performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithText("2").performSemanticsAction(SemanticsActions.OnClick) { it() }
         compose.onNodeWithText("Done").performSemanticsAction(SemanticsActions.OnClick) { it() }
         cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, selected")
@@ -221,9 +221,9 @@ class BoardSelectionInteractionTest {
         cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, selected, centre notes 2, colours Red")
         clickCell(3, 3)
         cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, centre notes 2, colours Red")
-        compose.onNodeWithText("Undo").performClick()
+        compose.onNodeWithContentDescription("Undo").performClick()
         cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty")
-        compose.onNodeWithText("Redo").performClick()
+        compose.onNodeWithContentDescription("Redo").performClick()
         cell(2, 2).assertContentDescriptionContains("colours Red", substring = true)
         clickCell(2, 2)
         compose.onNodeWithText("Colour").performClick()
@@ -235,7 +235,7 @@ class BoardSelectionInteractionTest {
         cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, centre notes 2, colours Blue")
         compose.onNode(hasText("2") and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick) { it() }
         cell(2, 2).assertContentDescriptionContains("colours Red, Blue", substring = true)
-        compose.onNode(isToggleable()).performSemanticsAction(SemanticsActions.OnClick) { it() }
+        compose.onNode(isToggleable() and !hasContentDescription("Select multiple")).performSemanticsAction(SemanticsActions.OnClick) { it() }
         cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, centre notes 2, colours Blue")
         compose.onNodeWithText("Done").performSemanticsAction(SemanticsActions.OnClick) { it() }
     }

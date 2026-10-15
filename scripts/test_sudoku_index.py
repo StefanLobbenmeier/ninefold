@@ -30,6 +30,20 @@ class SudokuIndexTest(unittest.TestCase):
         self.assertEqual("2026-10-01T12:00:00Z", entries[0]["publishedAt"])
         self.assertEqual("https://www.youtube.com/watch?v=aaaaaaaaaaa", entries[0]["links"][0]["url"])
 
+    def test_video_metadata_enrichment_is_optional_and_uses_injected_fetch(self):
+        entries = publisher.youtube_entries(SOURCE, feed(video("aaaaaaaaaaa", "https://sudokupad.app/one")))
+        self.assertEqual("https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg", entries[0]["metadata"]["thumbnailUrl"])
+        self.assertNotIn("durationSeconds", entries[0]["metadata"])
+        requests = []
+        def fetch(url):
+            requests.append(url)
+            return {"items": [{"id": "aaaaaaaaaaa", "contentDetails": {"duration": "PT1H2M3S"}}]}
+        publisher.enrich_video_metadata(entries, "synthetic-key", fetch=fetch)
+        self.assertEqual(3723, entries[0]["metadata"]["durationSeconds"])
+        self.assertEqual(1, len(requests))
+        publisher.enrich_video_metadata(entries, "synthetic-key", fetch=lambda _: {"items": []})
+        self.assertEqual(3723, entries[0]["metadata"]["durationSeconds"])
+
     def test_unsafe_links_and_non_puzzle_uploads_are_omitted(self):
         payload = feed(video("aaaaaaaaaaa", "https://sudokupad.app/../escape https://sudokupad.app/ https://sudokupad.app.evil/puzzle"), video("bbbbbbbbbbb", "No puzzle"), video("bad", "https://sudokupad.app/one"))
         self.assertEqual([], publisher.youtube_entries(SOURCE, payload))

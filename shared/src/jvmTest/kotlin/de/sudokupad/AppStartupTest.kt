@@ -15,6 +15,10 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.geometry.Offset
 import com.sun.net.httpserver.HttpServer
 import io.github.vinceglb.filekit.FileKit
 import io.ktor.client.HttpClient
@@ -31,6 +35,23 @@ class AppStartupTest {
     @get:Rule
     val compose = createComposeRule()
 
+    private fun emptyIndex() = SudokuIndexRepository(MemorySudokuIndexCache()) {
+        """{"schemaVersion":1,"generatedAt":"2026-10-15","sources":[],"entries":[]}"""
+    }
+
+    @Test
+    fun edgeSwipeReturnsToPlayAndKeepsTheGame() {
+        val storage = MemoryAppStorage()
+        val puzzle = SudokuFixtures.classic.copy(title = "Swipe puzzle")
+        compose.setContent { App(storage = storage, indexRepository = emptyIndex(), initialShareLink = puzzleShareLink(puzzle)) }
+        compose.onNodeWithText("Okay, start puzzle").performClick()
+        compose.onRoot().performTouchInput { swipe(Offset(2f, 100f), Offset(180f, 100f)) }
+        compose.onNodeWithText("Welcome back.").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Continue Swipe puzzle").performClick()
+        compose.onNodeWithContentDescription("Back to puzzles").assertIsDisplayed()
+        assertEquals(puzzle, GameRepository(storage).game(puzzle)?.puzzle)
+    }
+
     @Test
     fun pastedSharedLinkReviewsAndImportsWithoutChangingAssignedRules() {
         FileKit.init(appId = "de.sudokupad")
@@ -39,9 +60,10 @@ class AppStartupTest {
             PuzzleLine(listOf(GridPoint(.5, .5), GridPoint(1.5, .5)), rule = LineRule.GermanWhisper),
             PuzzleLine(listOf(GridPoint(2.5, 2.5), GridPoint(3.5, 2.5))),
         ))
-        compose.setContent { App(storage = storage, initialShareLink = puzzleShareLink(SudokuFixtures.classic)) }
+        compose.setContent { App(storage = storage, indexRepository = emptyIndex(), initialShareLink = puzzleShareLink(SudokuFixtures.classic)) }
         compose.onNodeWithText("Okay, start puzzle").performClick()
-        compose.onNodeWithText("+  Import").performClick()
+        compose.onNodeWithContentDescription("Back to puzzles").performClick()
+        compose.onNodeWithText("Import").performClick()
         compose.onNodeWithText("Puzzle link").performClick()
         compose.onNodeWithText("Puzzle URL").performTextInput("https://example.com/#puzzle=v1.???")
         compose.onNodeWithText("Load puzzle").performClick()
@@ -65,7 +87,7 @@ class AppStartupTest {
     fun sharedPuzzleOpensRulesAndIsSavedWhenStarted() {
         val storage = MemoryAppStorage()
         val puzzle = SudokuFixtures.classic.copy(title = "Shared puzzle")
-        compose.setContent { App(storage = storage, initialShareLink = puzzleShareLink(puzzle)) }
+        compose.setContent { App(storage = storage, indexRepository = emptyIndex(), initialShareLink = puzzleShareLink(puzzle)) }
         compose.onAllNodesWithText("Shared puzzle").assertCountEquals(2)
         compose.onNodeWithText("Puzzle link").assertIsDisplayed()
         compose.onNodeWithText("Copy puzzle link").assertIsEnabled()
@@ -125,7 +147,8 @@ class AppStartupTest {
                 }
 
                 compose.onNodeWithText("NINEFOLD").assertIsDisplayed()
-                compose.onNodeWithText("Browse sudokus").assertIsDisplayed()
+                compose.onNodeWithText("Browse").performClick()
+                compose.onNodeWithText("Find your next challenge.").assertIsDisplayed()
                 compose.waitUntil(timeoutMillis = 10_000) {
                     compose.onAllNodesWithText("1 puzzles · 1 ready offline · Updated 2026-10-12")
                         .fetchSemanticsNodes().isNotEmpty()
@@ -136,7 +159,7 @@ class AppStartupTest {
                 compose.onNodeWithText("SudokuPad").performClick()
                 compose.onNodeWithText("Source video").performClick()
                 assertEquals(listOf("https://sudokupad.app/startup", "https://www.youtube.com/watch?v=startup"), openedUrls)
-                compose.onNodeWithText("Browse sudokus").assertIsDisplayed()
+                compose.onNodeWithText("Find your next challenge.").assertIsDisplayed()
                 assertEquals("Startup puzzle", repository.cached()?.entries?.single()?.title)
 
                 // Opening Import also composes the FileKit picker integration.
@@ -147,6 +170,11 @@ class AppStartupTest {
                 // The card body opens the player, independently of the source buttons.
                 compose.onNodeWithText("Startup puzzle").performClick()
                 compose.onNodeWithText("Okay, start puzzle").assertIsDisplayed()
+                compose.onNodeWithText("Okay, start puzzle").performClick()
+                compose.onNodeWithContentDescription("Back to puzzles").performClick()
+                compose.onNodeWithText("Find your next challenge.").assertIsDisplayed()
+                compose.onNodeWithText("Play").performClick()
+                compose.onNodeWithContentDescription("Continue Startup puzzle").assertIsDisplayed()
             }
         } finally {
             server.stop(0)

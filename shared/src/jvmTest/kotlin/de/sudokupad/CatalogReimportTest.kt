@@ -11,6 +11,33 @@ import kotlin.test.assertEquals
 class CatalogReimportTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun failedPuzzleOffersRetryAndOpensOnlyAfterSuccessfulConversion() {
+        var fail = true
+        val puzzle = SudokuFixtures.empty.copy(title = "Unavailable puzzle")
+        val games = GameRepository(MemoryAppStorage(), fetchPuzzleData = {
+            if (fail) error("Synthetic conversion failure")
+            puzzle
+        })
+        val index = SudokuIndexRepository(MemorySudokuIndexCache()) {
+            """{"schemaVersion":1,"generatedAt":"2026-10-15","sources":[],"entries":[
+                {"id":"unavailable","sourceId":"test","title":"Unavailable puzzle","publishedAt":"2026-10-15","puzzleUrl":"https://sudokupad.app/unavailable"}
+            ]}"""
+        }
+        var opened: Puzzle? = null
+        compose.setContent {
+            MaterialTheme { SudokuCatalog(index, games, rememberCoroutineScope()) { opened = it } }
+        }
+        compose.onNodeWithText("Browse").performClick()
+        compose.waitUntil { games.statuses["unavailable"] == DownloadStatus.Failed }
+        compose.onNodeWithText("Unavailable puzzle").assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Retry Unavailable puzzle").assertIsEnabled()
+        assertEquals(null, opened)
+        fail = false
+        compose.onNodeWithContentDescription("Retry Unavailable puzzle").performClick()
+        compose.waitUntil { opened != null }
+        assertEquals("Unavailable puzzle", opened?.title)
+    }
+
     @Test fun longPressReimportsAndFailurePreservesTheReplacement() {
         val storage = MemoryAppStorage()
         val original = SudokuFixtures.classic.copy(title = "Saved puzzle", sourceUrl = "https://sudokupad.app/test")
