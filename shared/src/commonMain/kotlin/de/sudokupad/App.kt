@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -304,28 +305,29 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
         puzzle.arrows.any { arrow -> arrow.points.any { it.row !in 0.0..9.0 || it.column !in 0.0..9.0 } }
     val padCells = if (hasOutside) 1 else 0
     val litCells = remember(puzzle, cells) { puzzle.litCells(cells) }
+    val revealedMarks = remember(puzzle, litCells) {
+        if (puzzle.fogLights == null) emptyList()
+        else (puzzle.underlays + puzzle.overlays).filter { it.isRevealedEdgeMark(litCells) }
+    }
     val measurer = rememberTextMeasurer()
     BoxWithConstraints(modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f)) {
         val digitSize = minOf(24f, maxWidth.value / (9 + padCells * 2) * .6f).sp
         val inset = maxWidth * (padCells.toFloat() / (9 + padCells * 2))
         Box(Modifier.fillMaxSize().background(if (hasOutside) Paper else Color.White)) {
-            Box(Modifier.fillMaxSize().padding(inset).background(Color.White).border(2.dp, Ink))
+            Box(Modifier.fillMaxSize().padding(inset).background(Color.White))
             Canvas(Modifier.fillMaxSize().padding(inset)) {
                 val cellWidth = size.width / 9
                 val cellHeight = size.height / 9
                 val edge = 2.dp.toPx()
                 clipRect(edge, edge, size.width - edge, size.height - edge) {
                     cells.forEachIndexed { index, cell ->
-                        val colours = cell.colours.sorted().mapNotNull(CellColour::fromNumber)
-                        colours.forEachIndexed { stripe, colour ->
-                            drawRect(colour.swatch,
-                                Offset((index % 9 + stripe.toFloat() / colours.size) * cellWidth, index / 9 * cellHeight),
-                                Size(cellWidth / colours.size, cellHeight))
-                        }
+                        drawCellColours(cell.colours,
+                            Offset(index % 9 * cellWidth, index / 9 * cellHeight),
+                            Size(cellWidth, cellHeight))
                     }
                 }
             }
-            PuzzleGraphics(puzzle, padCells, measurer)
+            PuzzleGraphics(puzzle, padCells, measurer, hiddenOverlays = revealedMarks)
             Box(Modifier.fillMaxSize().padding(inset).then(
                 if (onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
                     awaitEachGesture {
@@ -363,8 +365,12 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             val background = when { isSelected -> Butter.copy(alpha = .92f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); peer -> Color(0x33F1F3EC); else -> Color.Transparent }.let { if (cell.colours.isNotEmpty()) it.copy(alpha = minOf(it.alpha, .18f)) else it }
             val textBackdrop = if (CellColour.DarkGrey.number in cell.colours) Color.White.copy(alpha = .85f) else Color.Transparent
             val fogged = puzzle.fogLights != null && position !in litCells
-            Box(Modifier.weight(1f).fillMaxHeight().background(background).semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (cell.colours.isNotEmpty()) ", colours ${cell.colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }, contentAlignment = Alignment.Center) {
-                if (fogged) Box(Modifier.matchParentSize().background(Color(0xFFB4B7B5)))
+            Box(Modifier.weight(1f).fillMaxHeight().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (cell.colours.isNotEmpty()) ", colours ${cell.colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }, contentAlignment = Alignment.Center) {
+                if (fogged) Canvas(Modifier.matchParentSize()) {
+                    drawRect(Color(0xFFB4B7B5))
+                    drawCellColours(cell.colours)
+                }
+                Box(Modifier.matchParentSize().background(background))
                 when {
                     cell.value != null && (!cell.given || !fogged) -> Text(cell.value.toString(), modifier = Modifier.background(textBackdrop), fontSize = digitSize, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
                     cell.value == null -> {
@@ -405,12 +411,27 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     drawLine(color, Offset(0f, y), Offset(size.width, y), width)
                 }
             }
+            // Edge clues are drawn whole above fog and grid lines once either neighbor is lit.
+            if (revealedMarks.isNotEmpty()) PuzzleGraphics(puzzle, padCells, measurer, revealedMarks)
+            Box(Modifier.fillMaxSize().padding(inset).border(2.dp, Ink))
         }
     }
 }
 
+private fun DrawScope.drawCellColours(colours: Set<Int>, topLeft: Offset = Offset.Zero, area: Size = size) {
+    val swatches = colours.sorted().mapNotNull(CellColour::fromNumber)
+    swatches.forEachIndexed { stripe, colour ->
+        drawRect(colour.swatch,
+            topLeft + Offset(stripe * area.width / swatches.size, 0f),
+            Size(area.width / swatches.size, area.height))
+    }
+}
+
 @Composable
-private fun BoxScope.PuzzleGraphics(puzzle: Puzzle, padCells: Int, measurer: androidx.compose.ui.text.TextMeasurer) {
+private fun BoxScope.PuzzleGraphics(
+    puzzle: Puzzle, padCells: Int, measurer: androidx.compose.ui.text.TextMeasurer,
+    revealedMarks: List<PuzzleOverlay>? = null, hiddenOverlays: List<PuzzleOverlay> = emptyList(),
+) {
     Canvas(Modifier.matchParentSize()) {
         val total = (9 + padCells * 2).toFloat()
         val cell = size.width / total
@@ -432,7 +453,11 @@ private fun BoxScope.PuzzleGraphics(puzzle: Puzzle, padCells: Int, measurer: and
                 drawText(measured, topLeft = center - Offset(measured.size.width / 2f, measured.size.height / 2f))
             }
         }
-        puzzle.underlays.forEach(::overlay)
+        if (revealedMarks != null) {
+            revealedMarks.forEach(::overlay)
+            return@Canvas
+        }
+        puzzle.underlays.filterNot { it in hiddenOverlays }.forEach(::overlay)
         puzzle.lines.forEach { line ->
             val path = Path(); line.points.firstOrNull()?.let { path.moveTo(at(it).x, at(it).y) }
             line.points.drop(1).forEach { path.lineTo(at(it).x, at(it).y) }
@@ -449,7 +474,7 @@ private fun BoxScope.PuzzleGraphics(puzzle: Puzzle, padCells: Int, measurer: and
                 drawLine(color, tip, Offset(tip.x - length * cos(angle + .55).toFloat(), tip.y - length * sin(angle + .55).toFloat()), 2f)
             }
         }
-        puzzle.overlays.forEach(::overlay)
+        puzzle.overlays.filterNot { it in hiddenOverlays }.forEach(::overlay)
     }
 }
 

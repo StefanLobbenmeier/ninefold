@@ -56,4 +56,32 @@ class FogTest {
         assertEquals(setOf(initial, target), restored.puzzle.litCells(restored.cells))
         assertEquals(puzzle, restored.puzzle)
     }
+    @Test fun edgeMarksRevealFromEitherSideOnly() {
+        for (text in listOf("V", "X", null)) {
+            for (horizontal in listOf(true, false)) {
+                val mark = PuzzleOverlay(
+                    if (horizontal) GridPoint(4.0, 4.5) else GridPoint(4.5, 4.0),
+                    text = text, rounded = text == null, backgroundColor = "#FFFFFF",
+                )
+                val neighbors = if (horizontal) listOf(CellPosition(3, 4), CellPosition(4, 4))
+                    else listOf(CellPosition(4, 3), CellPosition(4, 4))
+                assertFalse(mark.isRevealedEdgeMark(emptySet()))
+                assertFalse(mark.isRevealedEdgeMark(setOf(CellPosition(0, 0))))
+                neighbors.forEach { assertTrue(mark.isRevealedEdgeMark(setOf(it))) }
+                assertTrue(mark.isRevealedEdgeMark(neighbors.toSet()))
+            }
+        }
+    }
+
+    @Test fun otherArtworkDoesNotRevealAcrossFog() {
+        val lit = (0..8).flatMap { row -> (0..8).map { CellPosition(row, it) } }.toSet()
+        val dot = PuzzleOverlay(GridPoint(4.0, 4.5), rounded = true, backgroundColor = "#FFFFFF")
+        assertFalse(dot.copy(center = GridPoint(4.5, 4.5)).isRevealedEdgeMark(lit))
+        assertFalse(dot.copy(center = GridPoint(4.0, 4.0)).isRevealedEdgeMark(lit))
+        assertFalse(dot.copy(center = GridPoint(0.0, 4.5)).isRevealedEdgeMark(lit))
+        assertFalse(dot.copy(width = .8, height = .8).isRevealedEdgeMark(lit))
+        assertFalse(dot.copy(text = "42").isRevealedEdgeMark(lit))
+        assertFalse(dot.copy(rounded = false).isRevealedEdgeMark(lit))
+    }
+
 }

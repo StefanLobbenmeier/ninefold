@@ -1,5 +1,8 @@
 package de.sudokupad
 
+import kotlin.math.abs
+import kotlin.math.round
+
 internal fun Puzzle.litCells(cells: List<CellState>): Set<CellPosition> {
     val initial = fogLights ?: return buildSet { repeat(9) { row -> repeat(9) { column -> add(CellPosition(row, column)) } } }
     return buildSet {
@@ -25,3 +28,25 @@ internal fun Puzzle.litCells(cells: List<CellState>): Set<CellPosition> {
     }
 }
 
+
+/** Reveal a whole XV/Kropki mark when either of the two cells sharing its edge is lit. */
+internal fun PuzzleOverlay.isRevealedEdgeMark(litCells: Set<CellPosition>): Boolean {
+    if (width <= 0 || height <= 0 || width > 1 || height > 1) return false
+    val isXV = text?.trim()?.uppercase() in setOf("V", "X")
+    val isDot = text.isNullOrBlank() && rounded && width <= .5 && height <= .5 && (backgroundColor != null || borderColor != null)
+    if (!isXV && !isDot) return false
+    fun near(a: Double, b: Double) = abs(a - b) < .001
+    val row = round(center.row).toInt()
+    val column = round(center.column).toInt()
+    val horizontal = row in 1..8 && near(center.row, row.toDouble()) &&
+        near(center.column, kotlin.math.floor(center.column) + .5) && center.column in 0.0..9.0
+    val vertical = column in 1..8 && near(center.column, column.toDouble()) &&
+        near(center.row, kotlin.math.floor(center.row) + .5) && center.row in 0.0..9.0
+    return when {
+        horizontal -> CellPosition(row - 1, center.column.toInt()) in litCells ||
+            CellPosition(row, center.column.toInt()) in litCells
+        vertical -> CellPosition(center.row.toInt(), column - 1) in litCells ||
+            CellPosition(center.row.toInt(), column) in litCells
+        else -> false
+    }
+}
