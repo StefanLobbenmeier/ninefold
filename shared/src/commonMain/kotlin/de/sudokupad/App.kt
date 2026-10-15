@@ -60,6 +60,8 @@ internal enum class InputMode(val label: String, val mark: String) {
     Digit("Digit", "5"), Corner("Corner", "1·2"), Centre("Centre", "12"), Colour("Colour", "")
 }
 
+enum class AppUpdateState { None, Ready, Applying, Failed }
+
 @Composable
 @androidx.compose.ui.tooling.preview.Preview
 fun App(
@@ -68,6 +70,8 @@ fun App(
     indexRepository: SudokuIndexRepository? = null,
     initialShareLink: String? = null,
     shareBaseUrl: String = DEFAULT_SHARE_BASE_URL,
+    appUpdateState: AppUpdateState = AppUpdateState.None,
+    onApplyUpdate: () -> Unit = {},
 ) {
     val localIndexCache = remember(storage, indexCache) { indexCache ?: object : SudokuIndexCache {
         override fun read() = storage.read("ninefold.sudoku-index.v1")
@@ -85,7 +89,7 @@ fun App(
         val repository = remember(localIndexCache, indexRepository) { indexRepository ?: SudokuIndexRepository(localIndexCache) }
         val current = activePuzzle
         Box(Modifier.fillMaxSize()) {
-            if (current == null) SudokuCatalog(repository, games, downloadScope) { activePuzzle = it }
+            if (current == null) SudokuCatalog(repository, games, downloadScope, appUpdateState, onApplyUpdate) { activePuzzle = it }
             else key(current) { SudokuApp(current, games, shareBaseUrl, onImport = { activePuzzle = it }) { activePuzzle = null } }
             shareError?.let { message -> AlertDialog(
                 onDismissRequest = { shareError = null },

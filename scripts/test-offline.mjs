@@ -55,17 +55,22 @@ function storage() {
 function worker(release, caches, network) {
     const handlers = {};
     const requests = [];
+    let activations = 0;
     vm.runInNewContext(release.source, {
         URL, Response, Uint8Array, crypto: webcrypto, caches,
         fetch: async (...args) => { requests.push(args); return network(...args); },
-        // Calling skipWaiting/claim would throw, protecting existing tabs from mixed versions.
-        self: { registration: { scope }, addEventListener: (name, handler) => { handlers[name] = handler; } },
+        // Activation must only be requested by an explicit update message.
+        self: {
+            registration: { scope }, addEventListener: (name, handler) => { handlers[name] = handler; },
+            skipWaiting: async () => { activations++; },
+        },
     });
     return {
         requests,
+        get activations() { return activations; },
         async dispatch(name, request) {
             let result;
-            handlers[name]({ request, waitUntil: promise => { result = promise; }, respondWith: promise => { result = promise; } });
+            handlers[name]({ request, data: name === 'message' ? request : undefined, waitUntil: promise => { result = promise; }, respondWith: promise => { result = promise; } });
             return await result;
         },
     };
@@ -160,4 +165,140 @@ test('explicit puzzle reimports bypass saved responses and leave the offline cac
     const saved = await active.dispatch('fetch', { method: 'GET', mode: 'cors', url });
     assert.equal(await saved.text(), 'old puzzle');
     assert.equal(caches.entries.get('ninefold-offline-data-v1').size, 1);
+});
+
+test('only explicit user acceptance asks a fully installed worker to activate', async () => {
+    const updater = worker(next, storage(), networkFor(next));
+    await updater.dispatch('install');
+    assert.equal(updater.activations, 0);
+    await updater.dispatch('message', { type: 'unrelated' });
+    assert.equal(updater.activations, 0);
+    await updater.dispatch('message', { type: 'activate-update' });
+    assert.equal(updater.activations, 1);
+});
+
+const registrationSource = readFileSync(new URL('../webApp/src/webMain/resources/offline.js', import.meta.url), 'utf8');
+const settle = () => new Promise(resolve => setImmediate(resolve));
+
+async function browserUpdates({ waiting = null, controlled = true, supported = true } = {}) {
+    const window = new EventTarget();
+    const document = new EventTarget();
+    document.visibilityState = 'visible';
+    let reloads = 0;
+    window.location = { reload: () => reloads++ };
+    const registration = new EventTarget();
+    registration.waiting = waiting;
+    registration.installing = null;
+    let checks = 0;
+    let offline = false;
+    registration.update = async () => { checks++; if (offline) throw new Error('Offline'); };
+    const serviceWorker = new EventTarget();
+    serviceWorker.controller = controlled ? {} : null;
+    let registrationArgs;
+    serviceWorker.register = async (...args) => { registrationArgs = args; return registration; };
+    serviceWorker.ready = Promise.resolve(registration);
+    const intervals = [];
+    const timeouts = new Map();
+    vm.runInNewContext(registrationSource, {
+        window, document, navigator: supported ? { serviceWorker } : {}, URL,
+        performance: { getEntriesByType: () => [] },
+        PerformanceObserver: class { observe() {} }, console: { warn() {} },
+        setInterval: (callback, delay) => intervals.push({ callback, delay }),
+        setTimeout: callback => { timeouts.set(callback, callback); return callback; },
+        clearTimeout: id => timeouts.delete(id),
+    });
+    await settle();
+    const states = [];
+    const unsubscribe = window.ninefoldUpdate.subscribe(value => states.push(value));
+    return {
+        window, document, registration, serviceWorker, intervals, timeouts, states, unsubscribe,
+        get checks() { return checks; }, get reloads() { return reloads; },
+        get registrationArgs() { return registrationArgs; },
+        offline: value => { offline = value; },
+    };
+}
+
+test('checks on launch, every five minutes, and visible app resumes; offline checks recover', async () => {
+    const page = await browserUpdates();
+    assert.equal(page.registrationArgs[0], 'sw.js');
+    assert.equal(page.registrationArgs[1].updateViaCache, 'none');
+    assert.equal(page.checks, 1);
+    assert.equal(page.intervals.length, 1);
+    assert.equal(page.intervals[0].delay, 300000);
+    await page.intervals[0].callback();
+    assert.equal(page.checks, 2);
+    page.offline(true);
+    await page.intervals[0].callback();
+    page.offline(false);
+    await page.intervals[0].callback();
+    assert.equal(page.checks, 4);
+    for (const event of ['visibilitychange', 'pageshow', 'focus']) {
+        const target = event === 'visibilitychange' ? page.document : page.window;
+        page.document.visibilityState = 'hidden';
+        target.dispatchEvent(new Event(event));
+        await settle();
+        const before = page.checks;
+        page.document.visibilityState = 'visible';
+        target.dispatchEvent(new Event(event));
+        await settle();
+        assert.equal(page.checks, before + 1);
+    }
+    assert.deepEqual([...new Set(page.states)], ['None']);
+    assert.equal(page.reloads, 0);
+});
+
+test('prompts only after a complete update, accepts explicitly, and reloads once on takeover', async () => {
+    const page = await browserUpdates();
+    const messages = [];
+    const installing = new EventTarget();
+    installing.postMessage = message => messages.push(message.type);
+    page.registration.installing = installing;
+    page.registration.dispatchEvent(new Event('updatefound'));
+    installing.state = 'installing';
+    installing.dispatchEvent(new Event('statechange'));
+    assert.equal(page.states.at(-1), 'None');
+    // A failed/interrupted install never becomes a waiting worker.
+    installing.state = 'redundant';
+    installing.dispatchEvent(new Event('statechange'));
+    assert.equal(page.states.at(-1), 'None');
+    page.registration.waiting = installing;
+    installing.state = 'installed';
+    installing.dispatchEvent(new Event('statechange'));
+    assert.equal(page.states.at(-1), 'Ready');
+    assert.deepEqual(messages, []);
+    page.window.ninefoldUpdate.apply();
+    page.window.ninefoldUpdate.apply();
+    assert.deepEqual(messages, ['activate-update']);
+    assert.equal(page.states.at(-1), 'Applying');
+    assert.equal(page.reloads, 0);
+    page.serviceWorker.dispatchEvent(new Event('controllerchange'));
+    page.serviceWorker.dispatchEvent(new Event('controllerchange'));
+    assert.equal(page.reloads, 1);
+    assert.equal(page.timeouts.size, 0);
+});
+
+test('an update already waiting at launch is available to late subscribers and can retry activation', async () => {
+    const messages = [];
+    const page = await browserUpdates({ waiting: { postMessage: message => messages.push(message.type) } });
+    assert.deepEqual(page.states, ['Ready']);
+    page.window.ninefoldUpdate.apply();
+    for (const callback of page.timeouts.values()) callback();
+    assert.equal(page.states.at(-1), 'Failed');
+    page.window.ninefoldUpdate.apply();
+    assert.equal(page.states.at(-1), 'Applying');
+    assert.deepEqual(messages, ['activate-update', 'activate-update']);
+    page.unsubscribe();
+    for (const callback of page.timeouts.values()) callback();
+    assert.equal(page.states.at(-1), 'Applying');
+});
+
+test('initial installation and unsupported browsers do not prompt or reload', async () => {
+    const page = await browserUpdates({ controlled: false });
+    page.serviceWorker.controller = {};
+    page.serviceWorker.dispatchEvent(new Event('controllerchange'));
+    assert.equal(page.reloads, 0);
+    assert.equal(page.states.at(-1), 'None');
+    const unsupported = await browserUpdates({ supported: false });
+    assert.deepEqual(unsupported.states, ['None']);
+    assert.equal(unsupported.intervals.length, 0);
 });

@@ -1,6 +1,6 @@
 package de.sudokupad
 
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.*
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
@@ -14,11 +14,22 @@ private object ExternalUriHandler : UriHandler {
 fun main() {
     val pageUrl = browserPageUrl()
     ComposeViewport {
+        var updateState by remember { mutableStateOf(AppUpdateState.None) }
+        DisposableEffect(Unit) {
+            val unsubscribe = observeAppUpdate { updateState = AppUpdateState.valueOf(it) }
+            onDispose { unsubscribe() }
+        }
         CompositionLocalProvider(LocalUriHandler provides ExternalUriHandler) {
-            App(BrowserIndexCache, initialShareLink = pageUrl, shareBaseUrl = pageUrl)
+            App(
+                BrowserIndexCache, initialShareLink = pageUrl, shareBaseUrl = pageUrl,
+                appUpdateState = updateState, onApplyUpdate = ::applyAppUpdate,
+            )
         }
     }
 }
 
 internal expect fun browserPageUrl(): String
 internal expect fun openBrowserExternalLink(uri: String)
+
+internal expect fun observeAppUpdate(onChange: (String) -> Unit): () -> Unit
+internal expect fun applyAppUpdate()
