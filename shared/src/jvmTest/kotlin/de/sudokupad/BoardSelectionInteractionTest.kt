@@ -20,7 +20,7 @@ class BoardSelectionInteractionTest {
     @get:Rule val compose = createComposeRule()
 
     private fun openPlayer(compact: Boolean = false) {
-        val puzzle = Puzzle("Selection test", "Test author", ".".repeat(81))
+        val puzzle = SudokuFixtures.empty.copy(title = "Selection test")
         val repository = GameRepository(MemoryAppStorage())
         repository.saveGame(SavedGame(puzzle, puzzle.startingCells(), started = true))
         compose.setContent {
@@ -126,7 +126,7 @@ class BoardSelectionInteractionTest {
     }
 
     @Test fun adjacentSelectedCellsRenderOnlyExposedBoldEdges() {
-        val puzzle = Puzzle("Border test", "Test author", ".".repeat(81))
+        val puzzle = SudokuFixtures.empty
         val selected = setOf(CellPosition(0, 0), CellPosition(0, 1), CellPosition(1, 0), CellPosition(1, 1))
         compose.setContent {
             MaterialTheme {
@@ -187,7 +187,7 @@ class BoardSelectionInteractionTest {
     }
 
     @Test fun colourStripesStayVisibleOnSelectedCellsAndUnderPuzzleLines() {
-        val puzzle = Puzzle("Colour rendering", "Test", ".".repeat(81), lines = listOf(
+        val puzzle = SudokuFixtures.empty.copy(lines = listOf(
             PuzzleLine(listOf(GridPoint(.5, .1), GridPoint(.5, .9)), color = "#000000", thickness = 4.0)
         ))
         val cells = puzzle.startingCells().toMutableList().also { it[0] = CellState(colours = setOf(7, 9)) }

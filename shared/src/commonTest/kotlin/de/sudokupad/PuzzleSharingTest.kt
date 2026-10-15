@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 class PuzzleSharingTest {
     @Test
     fun importsPastedSharedLinksLocallyAndKeepsSudokuPadSupport() = runTest {
-        val puzzle = DemoPuzzle.copy(sourceUrl = "https://sudokupad.app/example")
+        val puzzle = SudokuFixtures.classic.copy(sourceUrl = "https://sudokupad.app/example")
         var downloads = 0
         val fetch: suspend (String) -> Puzzle = { downloads++; puzzle }
         assertEquals(puzzle, importPuzzleLink("  " + puzzleShareLink(puzzle) + "\n", fetch))
@@ -28,7 +28,7 @@ class PuzzleSharingTest {
 
     @Test
     fun sharesClassicImportsWithoutASource() {
-        val puzzle = Puzzle("Screenshot / manual import", "Me", DemoPuzzle.givens)
+        val puzzle = SudokuFixtures.classic.copy(title = "Screenshot / manual import", author = "Me", solution = null)
         val link = puzzleShareLink(puzzle)
         assertTrue(link.startsWith(DEFAULT_SHARE_BASE_URL + "#puzzle=v1."))
         assertEquals(puzzle, puzzleFromShareLink(link))
@@ -36,9 +36,10 @@ class PuzzleSharingTest {
 
     @Test
     fun preservesCatalogAndVariantPuzzleDataIncludingUnicode() {
-        val puzzle = DemoPuzzle.copy(
+        val puzzle = SudokuFixtures.classic.copy(
             title = "霧 & Flüstern 🧩", author = "Zoë", sourceUrl = "https://sudokupad.app/example",
             videoUrl = "https://example.com/video", rules = listOf("差 ≥ 5", "Follow the arrows."),
+            cages = listOf(KillerCage(8, setOf(CellPosition(0, 0), CellPosition(0, 1)))),
             lines = listOf(PuzzleLine(listOf(GridPoint(.5, .5), GridPoint(1.5, .5)), rule = LineRule.GermanWhisper)),
             arrows = listOf(PuzzleArrow(listOf(GridPoint(.5, .5), GridPoint(.5, 1.5)), circle = CellPosition(0, 0), pathCells = listOf(CellPosition(0, 1)))),
             overlays = listOf(PuzzleOverlay(GridPoint(1.0, 1.0), text = "×")),
@@ -62,8 +63,8 @@ class PuzzleSharingTest {
             assertFailsWith<IllegalArgumentException> { puzzleFromShareLink(it) }
         }
         val invalid = listOf(
-            DemoPuzzle.copy(givens = "1"), DemoPuzzle.copy(solution = ".".repeat(81)),
-            DemoPuzzle.copy(cages = listOf(KillerCage(3, setOf(CellPosition(9, 0))))),
+            SudokuFixtures.classic.copy(givens = "1"), SudokuFixtures.classic.copy(solution = ".".repeat(81)),
+            SudokuFixtures.classic.copy(cages = listOf(KillerCage(3, setOf(CellPosition(9, 0))))),
         )
         invalid.forEach { puzzle ->
             val link = "#puzzle=v1." + Base64.UrlSafe.encode(Json.encodeToString(puzzle).encodeToByteArray())

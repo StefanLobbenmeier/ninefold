@@ -7,7 +7,7 @@ class FogTest {
     private val first = CellPosition(1, 1)
     private val second = CellPosition(1, 2)
     private val target = CellPosition(8, 8)
-    private val puzzle = Puzzle("Fog", "Test", ".".repeat(81), solution = "123456789".repeat(9),
+    private val puzzle = SudokuFixtures.empty.copy(solution = "123456789".repeat(9),
         fogLights = setOf(initial), fogLinks = listOf(FogLink(setOf(first, second), setOf(target))))
 
     @Test fun dynamicFogRequiresAllCorrectTriggersAndRefogsAfterUndo() {

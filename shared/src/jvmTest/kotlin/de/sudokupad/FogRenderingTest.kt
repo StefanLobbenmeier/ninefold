@@ -22,7 +22,7 @@ class FogRenderingTest {
     @get:Rule val compose = createComposeRule()
 
     @Test fun paintedFogKeepsStripesAndOuterBorderWhileHidingPuzzleArtwork() {
-        val puzzle = Puzzle("Fog rendering", "Test", ".".repeat(81), fogLights = emptySet(), fogLinks = emptyList(),
+        val puzzle = SudokuFixtures.empty.copy(fogLights = emptySet(), fogLinks = emptyList(),
             lines = listOf(PuzzleLine(listOf(GridPoint(.5, .1), GridPoint(.5, .9)), "#000000")))
         val cells = puzzle.startingCells().toMutableList().also {
             it[0] = CellState(value = 8, given = true, colours = setOf(7, 9))
@@ -55,16 +55,23 @@ class FogRenderingTest {
         assertWholeEdgeMarks(marks)
     }
 
-    @Test fun originalWetBlanketsCluesRenderWholeFromEitherSide() {
-        val puzzle = parseSudokuPadPayload(javaClass.getResource("/puzzles/hkzobuop6w.scl")!!.readText())
-        assertWholeEdgeMarks(puzzle.overlays + puzzle.underlays)
+    @Test fun zeroWidthTextBoxesAndOutlinedDotsRenderWholeFromEitherSide() {
+        val marks = listOf("v", "x", null).flatMapIndexed { index, text ->
+            listOf(GridPoint(2.0 + index * 2, 4.5), GridPoint(2.5 + index * 2, 7.0)).map { center ->
+                if (text == null) PuzzleOverlay(center, .34, .34, backgroundColor = "#FFFFFF",
+                    borderColor = "#000000", rounded = true, thickness = 1.28)
+                else PuzzleOverlay(center, width = 0.0, height = 1.05, borderColor = "#FFFFFF",
+                    textColor = "#000000", text = text, rounded = true)
+            }
+        }
+        assertWholeEdgeMarks(marks)
     }
 
     private fun assertWholeEdgeMarks(marks: List<PuzzleOverlay>) {
         var lit by mutableStateOf((0..8).flatMap { row -> (0..8).map { CellPosition(row, it) } }.toSet())
         compose.setContent {
             MaterialTheme {
-                val puzzle = Puzzle("Edge marks", "Test", ".".repeat(81), fogLights = lit,
+                val puzzle = SudokuFixtures.empty.copy(fogLights = lit,
                     overlays = marks.take(3), underlays = marks.drop(3), fogLinks = emptyList())
                 SudokuBoard(puzzle, puzzle.startingCells(), emptySet(), emptySet(), modifier = Modifier.width(450.dp).testTag("board"), onSelect = {})
             }

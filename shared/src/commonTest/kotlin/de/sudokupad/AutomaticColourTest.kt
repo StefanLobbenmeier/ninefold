@@ -27,7 +27,7 @@ class AutomaticColourTest {
     }
 
     @Test fun solutionChecksWaitForFinalizationButRuleChecksStayLive() {
-        val puzzle = Puzzle("Test", "Test", ".".repeat(81), solution = "1".repeat(81))
+        val puzzle = SudokuFixtures.empty.copy(solution = "1".repeat(81))
         val original = puzzle.startingCells()
         val editing = setOf(CellPosition(0, 0))
         val live = original.toMutableList().also {

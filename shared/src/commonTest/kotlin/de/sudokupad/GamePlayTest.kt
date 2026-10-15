@@ -62,7 +62,7 @@ class GamePlayTest {
     }
 
     @Test fun completionRequiresCorrectFinalDigitRegardlessOfCheckingSettings() {
-        val puzzle = DemoPuzzle.copy(cages = emptyList())
+        val puzzle = SudokuFixtures.classic
         val solved = puzzle.solution!!.map { CellState(value = it.digitToInt()) }
         assertTrue(puzzle.isComplete(solved))
         assertFalse(puzzle.isComplete(solved.toMutableList().also { it[80] = CellState() }))
