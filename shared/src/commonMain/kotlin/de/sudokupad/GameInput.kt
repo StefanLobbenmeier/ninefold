@@ -22,7 +22,14 @@ internal fun applyInput(cells: List<CellState>, selected: Set<CellPosition>, mod
     return cells.toMutableList().also { next -> editable.forEach { index ->
         val old = cells[index]
         next[index] = when {
-            number == null -> old.copy(value = null, cornerNotes = emptySet(), centreNotes = emptySet(), colours = emptySet())
+            number == null -> when {
+                mode == InputMode.Digit && old.value != null -> old.copy(value = null)
+                mode == InputMode.Corner && old.cornerNotes.isNotEmpty() -> old.copy(cornerNotes = emptySet())
+                mode == InputMode.Centre && old.centreNotes.isNotEmpty() -> old.copy(centreNotes = emptySet())
+                old.value != null || old.cornerNotes.isNotEmpty() || old.centreNotes.isNotEmpty() ->
+                    old.copy(value = null, cornerNotes = emptySet(), centreNotes = emptySet())
+                else -> old.copy(colours = emptySet())
+            }
             mode == InputMode.Digit -> old.copy(value = number, cornerNotes = emptySet(), centreNotes = emptySet())
             old.value != null -> old
             mode == InputMode.Corner -> old.copy(cornerNotes = if (addNote) old.cornerNotes + number else old.cornerNotes - number)
