@@ -204,7 +204,7 @@ class BoardSelectionInteractionTest {
         kotlin.test.assertTrue(pixels[pixels.width / 2, pixels.height / 2].red < .3f)
     }
 
-    @Test fun longPressConfiguresColourWithoutPaintingAndAppliesOnlyOnLeavingCell() {
+    @Test fun automaticColoursUpdateWhileEditingAndWhenConfigurationChanges() {
         openPlayer(compact = true)
         clickCell(2, 2)
         compose.onNodeWithText("Colour").performClick()
@@ -218,13 +218,26 @@ class BoardSelectionInteractionTest {
         cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, selected")
         compose.onNodeWithText("Centre").performClick()
         compose.onNodeWithText("2").performSemanticsAction(SemanticsActions.OnClick) { it() }
-        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, selected, centre notes 2")
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, selected, centre notes 2, colours Red")
         clickCell(3, 3)
         cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, centre notes 2, colours Red")
         compose.onNodeWithText("Undo").performClick()
-        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, centre notes 2")
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty")
         compose.onNodeWithText("Redo").performClick()
         cell(2, 2).assertContentDescriptionContains("colours Red", substring = true)
+        clickCell(2, 2)
+        compose.onNodeWithText("Colour").performClick()
+        compose.onNodeWithContentDescription("Blue, colour 9").performClick()
+        clickCell(3, 3)
+        compose.onNodeWithContentDescription("Red, colour 7").performTouchInput { longClick() }
+        // Changing the matching numbers updates an unselected cell with existing content.
+        compose.onNode(hasText("2") and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick) { it() }
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, centre notes 2, colours Blue")
+        compose.onNode(hasText("2") and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick) { it() }
+        cell(2, 2).assertContentDescriptionContains("colours Red, Blue", substring = true)
+        compose.onNode(isToggleable()).performSemanticsAction(SemanticsActions.OnClick) { it() }
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, centre notes 2, colours Blue")
+        compose.onNodeWithText("Done").performSemanticsAction(SemanticsActions.OnClick) { it() }
     }
 
 }

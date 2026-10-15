@@ -31,19 +31,13 @@ internal val DefaultAutomaticColours = mapOf(
     CellColour.Orange.number to AutomaticColourRule(numbers = setOf(1, 3, 5, 7, 9)),
 )
 
-/** Only finalized, uncoloured cells participate; palette order breaks overlapping matches. */
-internal fun applyAutomaticColours(
-    cells: List<CellState>, finalized: Set<CellPosition>, rules: Map<Int, AutomaticColourRule>,
-): List<CellState> = cells.mapIndexed { index, cell ->
-    if (CellPosition(index / 9, index % 9) !in finalized || cell.colours.isNotEmpty()) cell
-    else {
-        val numbers = cell.value?.let { setOf(it) } ?: cell.centreNotes
-        val colour = CellColour.entries.firstOrNull { colour ->
-            val rule = rules[colour.number]
-            rule?.enabled == true && numbers.isNotEmpty() && numbers.all { it in rule.numbers }
-        }
-        if (colour == null) cell else cell.copy(colours = setOf(colour.number))
-    }
+/** Display colours are derived from live content; only manual colours belong to cell state. */
+internal fun CellState.displayColours(rules: Map<Int, AutomaticColourRule>): Set<Int> {
+    val numbers = value?.let { setOf(it) } ?: centreNotes
+    return colours + CellColour.entries.filter { colour ->
+        val rule = rules[colour.number]
+        rule?.enabled == true && numbers.isNotEmpty() && numbers.all { it in rule.numbers }
+    }.map { it.number }
 }
 
 /** Retain the last finalized content while selected cells are being edited. */
