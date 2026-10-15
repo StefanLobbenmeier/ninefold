@@ -67,6 +67,30 @@ class FogRenderingTest {
         assertWholeEdgeMarks(marks)
     }
 
+    @Test fun zeroWidthXVTextBoxesDoNotPaintWhiteLines() {
+        val marks = listOf(false, true).flatMapIndexed { row, rounded ->
+            listOf("V", "X").mapIndexed { column, text ->
+                PuzzleOverlay(GridPoint(2.5 + row, 3.0 + column), width = 0.0, height = 1.05,
+                    backgroundColor = "#FFFFFF", borderColor = "#FFFFFF", text = text, rounded = rounded)
+            }
+        }
+        var overlays by mutableStateOf(marks.map { it.copy(backgroundColor = null, borderColor = null) })
+        compose.setContent {
+            MaterialTheme {
+                val puzzle = SudokuFixtures.empty.copy(overlays = overlays,
+                    fogLights = (0..8).flatMap { row -> (0..8).map { CellPosition(row, it) } }.toSet())
+                SudokuBoard(puzzle, puzzle.startingCells(), emptySet(), emptySet(),
+                    modifier = Modifier.width(450.dp).testTag("board"), onSelect = {})
+            }
+        }
+        val expected = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+        compose.runOnIdle { overlays = marks }
+        val actual = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+        for (y in 0 until expected.height) for (x in 0 until expected.width) {
+            assertEquals(expected[x, y], actual[x, y], "Unexpected text box paint at $x,$y")
+        }
+    }
+
     private fun assertWholeEdgeMarks(marks: List<PuzzleOverlay>) {
         var lit by mutableStateOf((0..8).flatMap { row -> (0..8).map { CellPosition(row, it) } }.toSet())
         compose.setContent {
