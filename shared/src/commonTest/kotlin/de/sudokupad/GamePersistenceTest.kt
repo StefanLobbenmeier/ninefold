@@ -103,6 +103,84 @@ class GamePersistenceTest {
         assertNotNull(unavailable.storageError)
     }
 
+    @Test fun reimportReplacesCachedAndSavedPuzzleAndPreservesProgressAcrossRestart() = runTest {
+        val storage = MemoryAppStorage()
+        val repository = GameRepository(storage)
+        val entry = SudokuIndexEntry("one", "Test", "Test", "2026-10-12", "https://sudokupad.app/test", "https://example.com/video")
+        val original = repository.fetchPuzzle(entry) { Puzzle("Old", "Test", "1" + ".".repeat(80), sourceUrl = entry.puzzleUrl) }
+        val cells = original.startingCells().toMutableList().also {
+            it[2] = CellState(value = 4, colours = setOf(3))
+            it[3] = CellState(centreNotes = setOf(2, 5))
+        }
+        repository.saveGame(SavedGame(original, cells, true, listOf(cells), listOf(cells)))
+        repository.saveElapsed(original, 123)
+        var requests = 0
+        val replacement = repository.reimportPuzzle(entry.puzzleUrl) { url ->
+            assertEquals(entry.puzzleUrl, url)
+            requests++
+            original.copy(title = "New", givens = ".2" + ".".repeat(79), sourceUrl = "https://sudokupad.app/canonical", videoUrl = null)
+        }
+        assertEquals(1, requests)
+        val reopened = GameRepository(storage)
+        assertEquals(replacement, reopened.cachedPuzzle(entry))
+        assertEquals(replacement, repository.cachedPuzzle(entry))
+        assertEquals(entry.videoUrl, replacement.videoUrl)
+        assertEquals(entry.puzzleUrl, replacement.sourceUrl)
+        val saved = reopened.game(original)!!
+        assertEquals(replacement, saved.puzzle)
+        assertEquals(CellState(), saved.cells[0])
+        assertEquals(CellState(value = 2, given = true), saved.cells[1])
+        assertEquals(cells[2], saved.cells[2])
+        assertEquals(cells[3], saved.cells[3])
+        assertEquals(listOf(saved.cells), saved.history)
+        assertEquals(listOf(saved.cells), saved.redo)
+        assertTrue(saved.started)
+        assertEquals(123, reopened.elapsed(replacement))
+    }
+
+    @Test fun failedReimportKeepsTheOldCacheAndGame() = runTest {
+        val storage = MemoryAppStorage()
+        val repository = GameRepository(storage)
+        val entry = SudokuIndexEntry("one", "Test", "Test", "2026-10-12", "https://sudokupad.app/test")
+        val original = repository.fetchPuzzle(entry) { DemoPuzzle.copy(sourceUrl = entry.puzzleUrl) }
+        val game = SavedGame(original, original.startingCells(), true)
+        repository.saveGame(game)
+        assertFailsWith<IllegalArgumentException> {
+            repository.reimportPuzzle(entry.puzzleUrl) { error -> throw IllegalArgumentException("Conversion failed: $error") }
+        }
+        assertEquals(original, repository.cachedPuzzle(entry))
+        assertEquals(game, repository.game(original))
+        val reopened = GameRepository(storage)
+        assertEquals(original, reopened.cachedPuzzle(entry))
+        assertEquals(game, reopened.game(original))
+    }
+
+    @Test fun failedCacheWriteRollsBackReimportedGame() = runTest {
+        val memory = MemoryAppStorage()
+        var failCache = false
+        val storage = object : AppStorage {
+            override fun read(key: String) = memory.read(key)
+            override fun write(key: String, payload: String) {
+                if (failCache && key.startsWith("ninefold.puzzle.")) error("Storage full")
+                memory.write(key, payload)
+            }
+        }
+        val repository = GameRepository(storage)
+        val entry = SudokuIndexEntry("one", "Test", "Test", "2026-10-12", "https://sudokupad.app/test")
+        val original = repository.fetchPuzzle(entry) { DemoPuzzle.copy(sourceUrl = entry.puzzleUrl) }
+        val game = SavedGame(original, original.startingCells(), true)
+        repository.saveGame(game)
+        failCache = true
+        assertFailsWith<IllegalStateException> {
+            repository.reimportPuzzle(entry.puzzleUrl) { original.copy(title = "Replacement") }
+        }
+        assertEquals(original, repository.cachedPuzzle(entry))
+        assertEquals(game, repository.game(original))
+        val reopened = GameRepository(storage)
+        assertEquals(original, reopened.cachedPuzzle(entry))
+        assertEquals(game, reopened.game(original))
+    }
+
     @Test fun restoredClockCountsOnlyTimeAfterResume() {
         var now = 0L
         val clock = GameClock { now }

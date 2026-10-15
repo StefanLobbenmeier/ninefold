@@ -54,6 +54,7 @@ internal fun Puzzle.storageId(): String = sourceUrl ?: Json.encodeToString(copy(
 /** Converted puzzle data, moves, and small timer records have independent storage keys. */
 internal class GameRepository(
     private val storage: AppStorage,
+    private val refetchPuzzleData: suspend (String) -> Puzzle = ::reimportSudokuPadPuzzle,
     private val fetchPuzzleData: suspend (String) -> Puzzle = ::importSudokuPadPuzzle,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -117,6 +118,41 @@ internal class GameRepository(
     fun saveElapsed(puzzle: Puzzle, seconds: Long) { write("timer.${puzzle.storageId()}", seconds) }
     fun cachedPuzzle(entry: SudokuIndexEntry): Puzzle? = puzzles[entry.puzzleUrl]
         ?: read<Puzzle>("puzzle.${entry.puzzleUrl}")?.also { puzzles[entry.puzzleUrl] = it }
+
+    suspend fun reimportPuzzle(
+        sourceUrl: String,
+        videoUrl: String? = null,
+        fetch: suspend (String) -> Puzzle = refetchPuzzleData,
+    ): Puzzle = fetchLocks.getOrPut(sourceUrl) { Mutex() }.withLock {
+        require(sudokuPadPuzzleId(sourceUrl) != null) { "This puzzle has no SudokuPad source to reimport." }
+        val converted = withTimeout(15_000) { fetch(sourceUrl) }
+        // Keep the storage identity and catalog video even if the converter's metadata changes.
+        val oldGame = games[sourceUrl]
+        val oldPuzzle = oldGame?.puzzle ?: puzzles[sourceUrl] ?: read<Puzzle>("puzzle.$sourceUrl")
+        val puzzle = converted.copy(sourceUrl = sourceUrl, videoUrl = videoUrl ?: oldPuzzle?.videoUrl ?: converted.videoUrl)
+        val starting = puzzle.startingCells()
+        fun reconcile(cells: List<CellState>) = cells.mapIndexed { index, cell ->
+            val clue = starting[index]
+            when {
+                clue.given -> clue.copy(colours = cell.colours)
+                cell.given -> CellState(colours = cell.colours)
+                else -> cell
+            }
+        }
+        val updatedGame = oldGame?.copy(puzzle = puzzle, cells = reconcile(oldGame.cells),
+            history = oldGame.history.map(::reconcile), redo = oldGame.redo.map(::reconcile))
+        // Do not publish the replacement until both persistent records have been saved.
+        if (updatedGame != null) check(write("game.$sourceUrl", updatedGame)) {
+            "Could not save the reimported puzzle."
+        }
+        if (!write("puzzle.$sourceUrl", puzzle)) {
+            if (oldGame != null) write("game.$sourceUrl", oldGame)
+            error("Could not save the reimported puzzle for offline play.")
+        }
+        puzzles[sourceUrl] = puzzle
+        if (updatedGame != null) games = games + (sourceUrl to updatedGame)
+        puzzle
+    }
 
     suspend fun fetchPuzzle(entry: SudokuIndexEntry, fetch: suspend (String) -> Puzzle = fetchPuzzleData): Puzzle = fetchLocks.getOrPut(entry.puzzleUrl) { Mutex() }.withLock {
         cachedPuzzle(entry)?.let { return@withLock it }

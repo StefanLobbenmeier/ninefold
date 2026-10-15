@@ -115,7 +115,11 @@ retries the request; first visits without a connection show an error until a dow
 All catalog puzzles are eagerly fetched, converted, and saved with up to four downloads at once,
 including while playing. Each entry shows waiting, fetching/converting, ready offline, or failed status.
 Ready offline means the converted puzzle was successfully stored; opening it makes no puzzle request.
-Refresh or an entry's Retry button retries failures. Preparing a large catalog can take longer than a
+Refresh or an entry's Retry button retries failures. Long-press a saved SudokuPad puzzle in Continue,
+Solved, or a ready offline catalog entry to fetch and convert it again with the current importer.
+A successful reimport replaces the saved conversion while keeping moves, history, and elapsed time;
+changed givens are updated throughout the board and history. A failed reimport keeps the old puzzle
+and displays the error. A dialog confirms successful reimports. Preparing a large catalog can take longer than a
 few seconds, depending on the connection. Production builds prepare a service worker that downloads
 and verifies the complete app (including all Wasm modules and chunks) before installing a release.
 Subsequent launches use that cached release immediately, even on a slow connection. Updates download

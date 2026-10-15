@@ -1,6 +1,7 @@
 package de.sudokupad
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,8 +34,28 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     var opening by remember { mutableStateOf<String?>(null) }
     var openError by remember { mutableStateOf<String?>(null) }
     var showImport by remember { mutableStateOf(false) }
+    var reimporting by remember { mutableStateOf<String?>(null) }
+    var reimportResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     val statuses = games.statuses
     val scope = rememberCoroutineScope()
+
+    fun reimport(sourceUrl: String, title: String, videoUrl: String?) {
+        if (reimporting != null || opening != null) return
+        reimporting = title
+        scope.launch {
+            try {
+                games.reimportPuzzle(sourceUrl, videoUrl)
+                index?.entries?.filter { it.puzzleUrl == sourceUrl }?.forEach {
+                    statuses[it.id] = DownloadStatus.Ready
+                    games.downloadErrors.remove(it.id)
+                }
+                reimportResult = true to "Reimported $title successfully."
+            } catch (error: Throwable) {
+                if (error is CancellationException && error !is kotlinx.coroutines.TimeoutCancellationException) throw error
+                reimportResult = false to "Kept the old import of $title. ${error.message ?: "Could not fetch or convert this puzzle."}"
+            } finally { reimporting = null }
+        }
+    }
 
     LaunchedEffect(repository, refreshRequest) {
         refreshing = true
@@ -62,6 +83,10 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 Button({ showImport = true }) { Text("Import") }
             }
         }
+        reimporting?.let { title ->
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            Text("Reimporting $title…", Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        }
         LazyColumn(
             modifier = Modifier.widthIn(max = 900.dp).fillMaxWidth().weight(1f).align(Alignment.CenterHorizontally),
             contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -70,13 +95,17 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
             val inProgress = games.games.values.filter { it.started && !it.completed }.reversed()
             if (inProgress.isEmpty()) item { Text("Your puzzles in progress will appear here.") }
             items(inProgress, key = { "continue.${it.puzzle.storageId()}" }) { game ->
-                SavedGameCard(game, games.elapsed(game.puzzle), "Continue") { onOpen(game.puzzle) }
+                SavedGameCard(game, games.elapsed(game.puzzle), "Continue", enabled = opening == null && reimporting == null,
+                    onReimport = game.puzzle.sourceUrl?.let { url -> { reimport(url, game.puzzle.title, game.puzzle.videoUrl) } },
+                    onOpen = { onOpen(game.puzzle) })
             }
             item { Text("Solved sudokus", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
             val solved = games.games.values.filter { it.completed }.reversed()
             if (solved.isEmpty()) item { Text("Your completed puzzles will appear here.") }
             items(solved, key = { "solved.${it.puzzle.storageId()}" }) { game ->
-                SavedGameCard(game, games.elapsed(game.puzzle), "View") { onOpen(game.puzzle) }
+                SavedGameCard(game, games.elapsed(game.puzzle), "View", enabled = opening == null && reimporting == null,
+                    onReimport = game.puzzle.sourceUrl?.let { url -> { reimport(url, game.puzzle.title, game.puzzle.videoUrl) } },
+                    onOpen = { onOpen(game.puzzle) })
             }
             item {
                 Text("Browse sudokus", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
@@ -112,10 +141,15 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                     }
                 }
                 Card(
-                    onClick = openPuzzle, enabled = opening == null,
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().combinedClickable(
+                        enabled = opening == null && reimporting == null,
+                        onClick = openPuzzle, onLongClickLabel = "Reimport puzzle",
+                        onLongClick = if (status == DownloadStatus.Ready) {
+                            { reimport(entry.puzzleUrl, entry.title, entry.videoUrl) }
+                        } else null,
+                    ),
                 ) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -130,7 +164,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                         Spacer(Modifier.width(8.dp))
                         PuzzleOpenButton(
                             action = if (status == DownloadStatus.Failed) "Retry" else "Play",
-                            title = entry.title, enabled = opening == null,
+                            title = entry.title, enabled = opening == null && reimporting == null,
                             opening = opening == entry.id, onOpen = openPuzzle,
                         )
                     }
@@ -138,13 +172,21 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
             }
         }
     }
+    reimportResult?.let { (success, message) -> AlertDialog(
+        onDismissRequest = { reimportResult = null },
+        title = { Text(if (success) "Reimport successful" else "Reimport failed") },
+        text = { Text(message) },
+        confirmButton = { TextButton({ reimportResult = null }) { Text("OK") } },
+    ) }
     openError?.let { message -> AlertDialog(onDismissRequest = { openError = null }, confirmButton = { TextButton({ openError = null }) { Text("OK") } }, title = { Text("Puzzle unavailable") }, text = { Text(message) }) }
     if (showImport) ImportDialog({ showImport = false }) { showImport = false; onOpen(it) }
 }
 
 @Composable
-private fun SavedGameCard(game: SavedGame, elapsed: Long, action: String, onOpen: () -> Unit) {
-    Card(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+private fun SavedGameCard(game: SavedGame, elapsed: Long, action: String, enabled: Boolean = true, onReimport: (() -> Unit)? = null, onOpen: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().combinedClickable(
+        enabled = enabled, onClick = onOpen, onLongClickLabel = "Reimport puzzle", onLongClick = onReimport,
+    ), shape = RoundedCornerShape(16.dp)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(game.puzzle.title, fontWeight = FontWeight.Bold)
@@ -152,7 +194,7 @@ private fun SavedGameCard(game: SavedGame, elapsed: Long, action: String, onOpen
                 PuzzleSourceLinks(game.puzzle.sourceUrl, game.puzzle.videoUrl)
             }
             Spacer(Modifier.width(8.dp))
-            PuzzleOpenButton(action, game.puzzle.title, onOpen = onOpen)
+            PuzzleOpenButton(action, game.puzzle.title, enabled = enabled, onOpen = onOpen)
         }
     }
 }
