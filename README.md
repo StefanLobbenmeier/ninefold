@@ -135,7 +135,18 @@ Outbound links, including source videos and original SudokuPad pages, use a shar
 They open in a separate browser tab, or hand off to the system from an iOS home-screen app without
 creating a blank popup. The browser and OS decide whether an installed app handles the link;
 iOS may present external web pages in a browser sheet. Verify the YouTube app handoff and return
-to the puzzle on a device when changing this behavior.
+to the puzzle on a device when changing this behavior. There is no supported web setting to
+force the default external browser on iOS; Safari-specific URL schemes would override that choice.
+On iOS home-screen apps, a shorter viewport after an outbound link triggers up to three viewport
+policy resets to request fresh layout without reloading the puzzle. Recovery checks run on resume,
+resize, and the next touch if iOS omits resume events. Rotation/window-width changes invalidate the
+saved dimensions; text editing and zoom defer recovery.
+
+Validate this workaround on an installed iOS PWA: open an original SudokuPad link, dismiss the
+browser sheet, and check that the board fills the available height and bottom controls respond.
+Repeat the trip, rotate while away, and open/close the import keyboard afterward. Also check a
+normal Safari tab and YouTube app handoff. Automated callback tests cannot reproduce the native
+browser-sheet viewport bug; the policy reset still needs confirmation on affected iOS versions.
 
 Every move (including pencil marks, erase, undo, and redo) saves the board and undo/redo history.
 The timer saves independently whenever its displayed second changes and when leaving the player.

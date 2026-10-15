@@ -35,7 +35,7 @@ jobs:
         run: ./gradlew :webApp:wasmJsBrowserDistribution --console=plain
 
       - name: Test offline startup, release updates, and browser lifecycle
-        run: node --test scripts/test-offline.mjs scripts/test-page-visibility.mjs
+        run: node --test scripts/test-offline.mjs scripts/test-page-visibility.mjs scripts/test-viewport-recovery.mjs
 
       - name: Run JVM tests
         run: xvfb-run --auto-servernum ./gradlew :shared:jvmTest --console=plain

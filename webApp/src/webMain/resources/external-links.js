@@ -4,7 +4,8 @@ window.ninefoldOpenExternalLink = uri => {
     const link = document.createElement('a');
     link.href = url.href;
     link.rel = 'external noopener noreferrer';
-    // iOS home-screen apps hand off cross-origin _self links to the system.
+    // iOS usually presents cross-origin links in a browser sheet.
+    // _self preserves universal-link handoff; it does not force an external browser.
     // _blank can leave an empty in-app sheet after a universal link opens an app:
     // https://bugs.webkit.org/show_bug.cgi?id=236253
     link.target = navigator.standalone === true && url.origin !== window.location.origin
@@ -12,6 +13,7 @@ window.ninefoldOpenExternalLink = uri => {
     link.hidden = true;
     document.body.appendChild(link);
     try {
+        window.ninefoldPrepareExternalViewport?.();
         link.click();
     } finally {
         link.remove();
