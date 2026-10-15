@@ -9,22 +9,22 @@ class SharedCommonTest {
 
     @Test
     fun parsesCommonClassicFormats() {
-        assertEquals(DemoPuzzle.givens, parseClassicGrid(DemoPuzzle.givens.chunked(9).joinToString("\n")))
-        assertNotNull(parseClassicGrid(DemoPuzzle.givens.replace('.', '0')))
+        assertEquals(SudokuFixtures.classic.givens, parseClassicGrid(SudokuFixtures.classic.givens.chunked(9).joinToString("\n")))
+        assertNotNull(parseClassicGrid(SudokuFixtures.classic.givens.replace('.', '0')))
     }
 
     @Test
     fun detectsRowAndSolutionConflicts() {
-        val cells = DemoPuzzle.startingCells().toMutableList()
+        val cells = SudokuFixtures.classic.startingCells().toMutableList()
         cells[2] = CellState(value = 5)
-        val conflicts = conflictsFor(DemoPuzzle, cells)
+        val conflicts = conflictsFor(SudokuFixtures.classic, cells)
         assertTrue(0 in conflicts)
         assertTrue(2 in conflicts)
     }
 
     @Test
     fun detectsBrokenKillerSum() {
-        val puzzle = Puzzle("Cage", "Test", ".".repeat(81), cages = listOf(KillerCage(3, setOf(CellPosition(0, 0), CellPosition(0, 1)))))
+        val puzzle = SudokuFixtures.empty.copy(cages = listOf(KillerCage(3, setOf(CellPosition(0, 0), CellPosition(0, 1)))))
         val cells = puzzle.startingCells().toMutableList()
         cells[0] = CellState(value = 2)
         cells[1] = CellState(value = 2)

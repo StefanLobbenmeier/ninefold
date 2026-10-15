@@ -19,7 +19,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ImageRecognitionTest {
-    private val clues = "530070000600195000098000060800060003400803001700020006060000280000419005000080079".replace('0', '.')
+    private val clues = SudokuFixtures.classic.givens
     private fun screenshot(font: String, cell: Int, dark: Boolean, grid: String = clues): GrayImage {
         val image = BufferedImage(cell * 9 + 120, cell * 9 + 180, BufferedImage.TYPE_INT_RGB)
         val g = image.createGraphics()

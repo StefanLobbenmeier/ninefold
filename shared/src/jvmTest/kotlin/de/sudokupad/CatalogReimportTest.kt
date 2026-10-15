@@ -13,7 +13,7 @@ class CatalogReimportTest {
 
     @Test fun longPressReimportsAndFailurePreservesTheReplacement() {
         val storage = MemoryAppStorage()
-        val original = DemoPuzzle.copy(title = "Saved puzzle", sourceUrl = "https://sudokupad.app/test")
+        val original = SudokuFixtures.classic.copy(title = "Saved puzzle", sourceUrl = "https://sudokupad.app/test")
         var fail = false
         var requests = 0
         val games = GameRepository(storage, refetchPuzzleData = {

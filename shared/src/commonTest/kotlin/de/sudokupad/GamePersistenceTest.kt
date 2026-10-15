@@ -13,7 +13,7 @@ class GamePersistenceTest {
         val repository = GameRepository(MemoryAppStorage()) { url ->
             requests += url
             if (fail && url.endsWith("3")) throw IllegalArgumentException("Conversion failed")
-            DemoPuzzle.copy(sourceUrl = url)
+            SudokuFixtures.classic.copy(sourceUrl = url)
         }
         val entries = (1..6).map { SudokuIndexEntry("$it", "Test", "Test", "2026-10-12", "https://sudokupad.app/$it") }
         repository.prepare(entries, this)
@@ -31,7 +31,7 @@ class GamePersistenceTest {
     @Test fun movesNotesHistorySettingsAndTimerSurviveReopening() {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)
-        val puzzle = DemoPuzzle.copy(fogLights = setOf(CellPosition(0, 0)))
+        val puzzle = SudokuFixtures.classic.copy(fogLights = setOf(CellPosition(0, 0)))
         val cells = puzzle.startingCells().toMutableList().also {
             it[2] = CellState(value = 4)
             it[3] = CellState(cornerNotes = setOf(1, 2), centreNotes = setOf(6, 8))
@@ -55,10 +55,10 @@ class GamePersistenceTest {
             override fun write(key: String, payload: String) { writes += key }
         }
         val repository = GameRepository(storage)
-        repository.saveGame(SavedGame(DemoPuzzle, DemoPuzzle.startingCells(), true))
+        repository.saveGame(SavedGame(SudokuFixtures.classic, SudokuFixtures.classic.startingCells(), true))
         writes.clear()
-        repository.saveElapsed(DemoPuzzle, 1)
-        repository.saveElapsed(DemoPuzzle, 2)
+        repository.saveElapsed(SudokuFixtures.classic, 1)
+        repository.saveElapsed(SudokuFixtures.classic, 2)
         assertEquals(2, writes.size)
         assertTrue(writes.all { it.startsWith("ninefold.timer.") })
     }
@@ -66,17 +66,17 @@ class GamePersistenceTest {
     @Test fun solvedGamesReopenAndBecomeInProgressAfterUndo() {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)
-        val solved = DemoPuzzle.solution!!.map { CellState(value = it.digitToInt()) }
-        repository.saveGame(SavedGame(DemoPuzzle, solved, true))
-        assertTrue(GameRepository(storage).game(DemoPuzzle)!!.completed)
-        repository.saveGame(SavedGame(DemoPuzzle, DemoPuzzle.startingCells(), true))
-        assertFalse(GameRepository(storage).game(DemoPuzzle)!!.completed)
+        val solved = SudokuFixtures.classic.solution!!.map { CellState(value = it.digitToInt()) }
+        repository.saveGame(SavedGame(SudokuFixtures.classic, solved, true))
+        assertTrue(GameRepository(storage).game(SudokuFixtures.classic)!!.completed)
+        repository.saveGame(SavedGame(SudokuFixtures.classic, SudokuFixtures.classic.startingCells(), true))
+        assertFalse(GameRepository(storage).game(SudokuFixtures.classic)!!.completed)
     }
 
     @Test fun convertedPuzzleReopensWithoutNetworkAndRetainsArtwork() = runTest {
         val storage = MemoryAppStorage()
         val entry = SudokuIndexEntry("one", "Test", "Test", "2026-10-12", "https://sudokupad.app/test", "https://example.com/video")
-        val puzzle = DemoPuzzle.copy(
+        val puzzle = SudokuFixtures.classic.copy(
             sourceUrl = entry.puzzleUrl,
             lines = listOf(PuzzleLine(listOf(GridPoint(.5, .5), GridPoint(1.5, .5)), rule = LineRule.Thermometer)),
             arrows = listOf(PuzzleArrow(listOf(GridPoint(.5, .5)), circle = CellPosition(0, 0))),
@@ -98,7 +98,7 @@ class GamePersistenceTest {
             override fun read(key: String): String? = null
             override fun write(key: String, payload: String) { error("Storage full") }
         })
-        assertFailsWith<IllegalStateException> { unavailable.fetchPuzzle(entry) { DemoPuzzle } }
+        assertFailsWith<IllegalStateException> { unavailable.fetchPuzzle(entry) { SudokuFixtures.classic } }
         assertNull(unavailable.cachedPuzzle(entry))
         assertNotNull(unavailable.storageError)
     }
@@ -107,7 +107,7 @@ class GamePersistenceTest {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)
         val entry = SudokuIndexEntry("one", "Test", "Test", "2026-10-12", "https://sudokupad.app/test", "https://example.com/video")
-        val original = repository.fetchPuzzle(entry) { Puzzle("Old", "Test", "1" + ".".repeat(80), sourceUrl = entry.puzzleUrl) }
+        val original = repository.fetchPuzzle(entry) { SudokuFixtures.empty.copy(title = "Old", givens = "1" + ".".repeat(80), sourceUrl = entry.puzzleUrl) }
         val cells = original.startingCells().toMutableList().also {
             it[2] = CellState(value = 4, colours = setOf(3))
             it[3] = CellState(centreNotes = setOf(2, 5))
@@ -142,7 +142,7 @@ class GamePersistenceTest {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)
         val entry = SudokuIndexEntry("one", "Test", "Test", "2026-10-12", "https://sudokupad.app/test")
-        val original = repository.fetchPuzzle(entry) { DemoPuzzle.copy(sourceUrl = entry.puzzleUrl) }
+        val original = repository.fetchPuzzle(entry) { SudokuFixtures.classic.copy(sourceUrl = entry.puzzleUrl) }
         val game = SavedGame(original, original.startingCells(), true)
         repository.saveGame(game)
         assertFailsWith<IllegalArgumentException> {
@@ -167,7 +167,7 @@ class GamePersistenceTest {
         }
         val repository = GameRepository(storage)
         val entry = SudokuIndexEntry("one", "Test", "Test", "2026-10-12", "https://sudokupad.app/test")
-        val original = repository.fetchPuzzle(entry) { DemoPuzzle.copy(sourceUrl = entry.puzzleUrl) }
+        val original = repository.fetchPuzzle(entry) { SudokuFixtures.classic.copy(sourceUrl = entry.puzzleUrl) }
         val game = SavedGame(original, original.startingCells(), true)
         repository.saveGame(game)
         failCache = true
@@ -197,7 +197,7 @@ class GamePersistenceTest {
     @Test fun coloursAndTheirHistorySurviveRestartAndOlderCellsStillDecode() {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)
-        val puzzle = Puzzle("Colours", "Test", ".".repeat(81))
+        val puzzle = SudokuFixtures.empty
         val initial = puzzle.startingCells()
         val coloured = applyInput(initial, setOf(CellPosition(0, 0)), InputMode.Colour, 9)
         repository.saveSettings(repository.settings.copy(inputMode = "Colour"))

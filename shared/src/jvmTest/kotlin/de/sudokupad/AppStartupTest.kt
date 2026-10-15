@@ -35,11 +35,11 @@ class AppStartupTest {
     fun pastedSharedLinkReviewsAndImportsWithoutChangingAssignedRules() {
         FileKit.init(appId = "de.sudokupad")
         val storage = MemoryAppStorage()
-        val puzzle = DemoPuzzle.copy(title = "Pasted puzzle", lines = listOf(
+        val puzzle = SudokuFixtures.classic.copy(title = "Pasted puzzle", lines = listOf(
             PuzzleLine(listOf(GridPoint(.5, .5), GridPoint(1.5, .5)), rule = LineRule.GermanWhisper),
             PuzzleLine(listOf(GridPoint(2.5, 2.5), GridPoint(3.5, 2.5))),
         ))
-        compose.setContent { App(storage = storage, initialShareLink = puzzleShareLink(DemoPuzzle)) }
+        compose.setContent { App(storage = storage, initialShareLink = puzzleShareLink(SudokuFixtures.classic)) }
         compose.onNodeWithText("Okay, start puzzle").performClick()
         compose.onNodeWithText("+  Import").performClick()
         compose.onNodeWithText("Puzzle link").performClick()
@@ -58,13 +58,13 @@ class AppStartupTest {
         compose.onNodeWithText("Okay, start puzzle").performClick()
         compose.waitForIdle()
         assertEquals(puzzle, GameRepository(storage).game(puzzle)?.puzzle)
-        assertEquals(DemoPuzzle, GameRepository(storage).game(DemoPuzzle)?.puzzle)
+        assertEquals(SudokuFixtures.classic, GameRepository(storage).game(SudokuFixtures.classic)?.puzzle)
     }
 
     @Test
     fun sharedPuzzleOpensRulesAndIsSavedWhenStarted() {
         val storage = MemoryAppStorage()
-        val puzzle = DemoPuzzle.copy(title = "Shared puzzle")
+        val puzzle = SudokuFixtures.classic.copy(title = "Shared puzzle")
         compose.setContent { App(storage = storage, initialShareLink = puzzleShareLink(puzzle)) }
         compose.onAllNodesWithText("Shared puzzle").assertCountEquals(2)
         compose.onNodeWithText("Puzzle link").assertIsDisplayed()
@@ -108,7 +108,7 @@ class AppStartupTest {
                 val storage = MemoryAppStorage().also {
                     // Seed offline puzzle data so automatic preparation stays local.
                     it.write("ninefold.puzzle.https://sudokupad.app/startup.v1",
-                        Json.encodeToString(Puzzle("Startup puzzle", "Test author", ".".repeat(81))))
+                        Json.encodeToString(SudokuFixtures.empty.copy(title = "Startup puzzle")))
                 }
                 val repository = SudokuIndexRepository(cache) {
                     client.get("http://127.0.0.1:${server.address.port}/index.json").bodyAsText()
