@@ -22,11 +22,16 @@ fun sudokuPadPuzzleId(input: String): String? {
 
 suspend fun importSudokuPadPuzzle(input: String): Puzzle = importSudokuPadPuzzle(input, sudokuPadClient)
 
-internal suspend fun importSudokuPadPuzzle(input: String, client: HttpClient): Puzzle {
+internal suspend fun reimportSudokuPadPuzzle(input: String): Puzzle =
+    importSudokuPadPuzzle(input, sudokuPadClient, forceRefresh = true)
+
+internal suspend fun importSudokuPadPuzzle(input: String, client: HttpClient, forceRefresh: Boolean = false): Puzzle {
     val id = sudokuPadPuzzleId(input) ?: throw IllegalArgumentException("Enter a sudokupad.app puzzle link.")
     // SudokuPad's own loader uses this CORS-enabled endpoint. The main site's API
     // only allows https://localhost, which blocks our JS and Wasm apps.
-    val response: HttpResponse = client.get("https://sudokupad.svencodes.com/ctclegacy/${id.encodeURLParameter()}")
+    // A unique URL also bypasses older installed service workers and HTTP caches.
+    val refresh = if (forceRefresh) "?reimport=${kotlin.random.Random.nextLong()}" else ""
+    val response: HttpResponse = client.get("https://sudokupad.svencodes.com/ctclegacy/${id.encodeURLParameter()}$refresh")
     if (!response.status.isSuccess()) throw IllegalArgumentException("SudokuPad returned ${response.status.value} for this puzzle.")
     return parseSudokuPadPayload(response.body(), "https://sudokupad.app/$id")
 }

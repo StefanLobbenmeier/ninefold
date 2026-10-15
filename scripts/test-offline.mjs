@@ -148,3 +148,16 @@ test('a missing cached shell does not fall through to an incompatible online ver
     assert.match(await response.text(), /reconnect/);
     assert.equal(offline.requests.length, 0);
 });
+
+
+test('explicit puzzle reimports bypass saved responses and leave the offline cache intact', async () => {
+    const caches = storage();
+    const data = await caches.open('ninefold-offline-data-v1');
+    const url = 'https://sudokupad.svencodes.com/ctclegacy/test';
+    await data.put(url, new Response('old puzzle'));
+    const active = worker(old, caches, () => { throw new Error('Should pass through to browser fetch'); });
+    assert.equal(await active.dispatch('fetch', { method: 'GET', mode: 'cors', url: url + '?reimport=123' }), undefined);
+    const saved = await active.dispatch('fetch', { method: 'GET', mode: 'cors', url });
+    assert.equal(await saved.text(), 'old puzzle');
+    assert.equal(caches.entries.get('ninefold-offline-data-v1').size, 1);
+});

@@ -27,6 +27,23 @@ class SudokuPadImportTest {
         } finally { client.close() }
     }
 
+    @Test fun reimportBypassesCachesAndRetainsTheOriginalSourceUrl() = runTest {
+        val urls = mutableSetOf<String>()
+        val rows = List(9) { "[${List(9) { "{}" }.joinToString()}]" }.joinToString()
+        val client = HttpClient(MockEngine { request ->
+            assertNotNull(request.url.parameters["reimport"])
+            urls += request.url.toString()
+            respond("""scl{"cells":[$rows]}""")
+        })
+        try {
+            repeat(2) {
+                val puzzle = importSudokuPadPuzzle("https://sudokupad.app/test", client, forceRefresh = true)
+                assertEquals("https://sudokupad.app/test", puzzle.sourceUrl)
+            }
+            assertEquals(2, urls.size)
+        } finally { client.close() }
+    }
+
     @Test fun retainsEmbeddedVideoLinks() {
         val rows = List(9) { "[${List(9) { "{}" }.joinToString()}]" }.joinToString()
         val puzzle = parseSudokuPadPayload("""scl{"cells":[$rows],"metadata":{"videos":["aaaaaaaaaaa"]}}""")

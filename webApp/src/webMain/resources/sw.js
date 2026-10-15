@@ -70,6 +70,8 @@ self.addEventListener('fetch', event => {
     }
     const puzzle = (url.origin === 'https://sudokupad.svencodes.com' && url.pathname.startsWith('/ctclegacy/')) ||
         (url.origin === 'https://sudokupad.app' && url.pathname.startsWith('/api/puzzle/'));
+    // Explicit reimports must reach the network and must not accumulate nonce cache entries.
+    if (puzzle && url.searchParams.has('reimport')) return;
     if (!puzzle && !isFontAsset(url)) return;
     event.respondWith((async () => {
         const cache = await caches.open(DATA_CACHE);
