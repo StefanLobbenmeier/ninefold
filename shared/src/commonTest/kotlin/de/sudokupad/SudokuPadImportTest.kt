@@ -60,6 +60,21 @@ class SudokuPadImportTest {
         assertNotNull(puzzle.solution)
     }
 
+    @Test fun importsDynamicFogTriggersAndRectangularRevealsWithoutInitialFog() {
+        val rows = List(9) { "[${List(9) { "{}" }.joinToString()}]" }.joinToString()
+        val puzzle = parseSudokuPadPayload("""scl{"cells":[$rows],"triggereffect":[
+            {"trigger":{"type":"cellvalue","cell":"r2c2r2c3"},"effect":{"type":"foglight","cells":"r7c7-r8c8, r9c9"}}
+        ]}""")
+        assertEquals(emptySet(), puzzle.fogLights)
+        assertEquals(listOf(FogLink(setOf(CellPosition(1, 1), CellPosition(1, 2)),
+            setOf(CellPosition(6, 6), CellPosition(6, 7), CellPosition(7, 6), CellPosition(7, 7), CellPosition(8, 8)))), puzzle.fogLinks)
+        assertEquals(emptySet(), puzzle.litCells(puzzle.startingCells()))
+        assertEquals(null, parseSudokuPadPayload("""{"cells":[$rows]}""").fogLinks)
+        val empty = parseSudokuPadPayload("""{"cells":[$rows],"triggereffect":[]}""")
+        assertEquals(emptyList(), empty.fogLinks)
+        assertEquals(emptySet(), empty.fogLights)
+    }
+
     @Test fun recognizesSupportedLinksAndRejectsOtherHosts() {
         assertEquals("hDNMJqPmTh", sudokuPadPuzzleId("https://sudokupad.app/hDNMJqPmTh"))
         assertEquals("philip-newman/a-puzzle", sudokuPadPuzzleId("https://sudokupad.app/philip-newman/a-puzzle"))
