@@ -6,8 +6,8 @@ internal class BoardSelectionGesture(
     start: CellPosition,
     additive: Boolean,
 ) {
-    private val removing = start in initial
-    private val base = if (removing || additive) initial else emptySet()
+    private val removing = additive && start in initial
+    private val base = if (additive) initial else emptySet()
     private val visited = mutableSetOf(start)
 
     fun visit(cells: Set<CellPosition> = emptySet()): Set<CellPosition> {

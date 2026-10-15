@@ -53,18 +53,18 @@ class BoardSelectionInteractionTest {
         positions.forEach { (row, column) -> cell(row, column).assertIsSelected() }
     }
 
-    @Test fun clicksAndDragsRemoveSelectedCellsWhenMultipleIsOff() {
+    @Test fun clicksAndDragsStartFreshWhenMultipleIsOff() {
         openPlayer()
         clickCell(2, 2)
         clickCell(2, 2)
-        assertSelection()
+        assertSelection(2 to 2)
         drag(3, 1, 3)
         assertSelection(3 to 1, 3 to 2, 3 to 3)
-        // Removal preserves untouched cells and does not add unselected cells crossed later.
+        // Starting inside the group replaces it and includes newly crossed cells.
         drag(3, 2, 4)
-        assertSelection(3 to 1)
-        clickCell(3, 1)
-        assertSelection()
+        assertSelection(3 to 2, 3 to 3, 3 to 4)
+        clickCell(3, 3)
+        assertSelection(3 to 3)
         clickCell(3, 3)
         assertSelection(3 to 3)
         clickCell(4, 4)
@@ -84,39 +84,45 @@ class BoardSelectionInteractionTest {
         assertSelection(2 to 3, 3 to 1)
         compose.onNodeWithText("Select multiple").performTouchInput { click() }
         assertSelection(2 to 3, 3 to 1)
-        clickCell(4, 4)
-        assertSelection(4 to 4)
+        clickCell(3, 1)
+        assertSelection(3 to 1)
     }
 
     @Test fun revisitingCellsDuringRemovalDoesNotSelectThemAgain() {
         openPlayer()
         drag(2, 1, 3)
+        compose.onNodeWithText("Select multiple").performTouchInput { click() }
         val start = cell(2, 1).fetchSemanticsNode().boundsInRoot.center
         val end = cell(2, 4).fetchSemanticsNode().boundsInRoot.center
         compose.onRoot().performTouchInput { down(start); moveTo(end); moveTo(start); up() }
         assertSelection()
     }
 
-    @Test fun semanticClicksAlsoToggleSelection() {
+    @Test fun semanticClicksStartFreshWhenMultipleIsOff() {
         openPlayer()
         cell(2, 2).performClick()
         assertSelection(2 to 2)
         cell(2, 2).performClick()
-        assertSelection()
+        assertSelection(2 to 2)
+        drag(2, 1, 3)
+        cell(2, 2).performClick()
+        assertSelection(2 to 2)
     }
 
-    @Test fun mouseClicksAndDragsRemoveSelectedCells() {
+    @Test fun mouseClicksAndDragsStartFreshWhenMultipleIsOff() {
         openPlayer()
         cell(2, 2).performMouseInput { click() }
         assertSelection(2 to 2)
         cell(2, 2).performMouseInput { click() }
-        assertSelection()
+        assertSelection(2 to 2)
         val start = cell(3, 1).fetchSemanticsNode().boundsInRoot.center
         val end = cell(3, 3).fetchSemanticsNode().boundsInRoot.center
         compose.onRoot().performMouseInput { moveTo(start); press(); moveTo(end); release() }
         assertSelection(3 to 1, 3 to 2, 3 to 3)
         compose.onRoot().performMouseInput { moveTo(end); press(); moveTo(start); release() }
-        assertSelection()
+        assertSelection(3 to 1, 3 to 2, 3 to 3)
+        cell(3, 2).performMouseInput { click() }
+        assertSelection(3 to 2)
     }
 
     @Test fun adjacentSelectedCellsRenderOnlyExposedBoldEdges() {
