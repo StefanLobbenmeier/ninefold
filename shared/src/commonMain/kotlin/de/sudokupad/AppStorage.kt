@@ -104,6 +104,12 @@ internal class GameRepository(
     }
 
     fun saveSettings(value: CheckingSettings) { settings = value; write("settings", settings) }
+    var recentGames by mutableStateOf(read<List<String>>("recent-games") ?: games.keys.reversed())
+        private set
+    fun markPlayed(puzzle: Puzzle) {
+        recentGames = listOf(puzzle.storageId()) + recentGames.filter { it != puzzle.storageId() }
+        write("recent-games", recentGames)
+    }
     fun game(puzzle: Puzzle) = games[puzzle.storageId()]
     fun saveGame(game: SavedGame) {
         val id = game.puzzle.storageId()

@@ -40,6 +40,8 @@ jobs:
           ssh-key: ${{ secrets.SUDOKU_INDEX_DEPLOY_KEY }}
 
       - name: Refresh index resources
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python3 scripts/update-sudoku-index.py --output index-site
 
       - name: Publish index to sudoku-index Pages branch

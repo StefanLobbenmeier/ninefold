@@ -20,7 +20,7 @@ class MemorySudokuIndexCache : SudokuIndexCache {
     override fun write(payload: String) { this.payload = payload }
 }
 
-data class SudokuIndexEntry(val id: String, val title: String, val source: String, val publishedAt: String, val puzzleUrl: String, val videoUrl: String? = null)
+data class SudokuIndexEntry(val id: String, val title: String, val source: String, val publishedAt: String, val puzzleUrl: String, val videoUrl: String? = null, val thumbnailUrl: String? = null, val durationSeconds: Int? = null)
 data class SudokuIndex(val generatedAt: String, val entries: List<SudokuIndexEntry>)
 
 internal fun parseSudokuIndex(payload: String): SudokuIndex {
@@ -34,6 +34,8 @@ internal fun parseSudokuIndex(payload: String): SudokuIndex {
         val entry = item.jsonObject
         val url = entry.getValue("puzzleUrl").jsonPrimitive.content
         require(url.startsWith("https://sudokupad.app/") && sudokuPadPuzzleId(url) != null) { "Invalid puzzle URL in index." }
+        val metadata = entry["metadata"] as? JsonObject
+        val videoId = metadata?.get("youtubeVideoId")?.jsonPrimitive?.contentOrNull?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
         SudokuIndexEntry(
             entry.getValue("id").jsonPrimitive.content,
             entry.getValue("title").jsonPrimitive.content,
@@ -43,6 +45,9 @@ internal fun parseSudokuIndex(payload: String): SudokuIndex {
             entry["links"]?.jsonArray?.firstOrNull { link ->
                 link.jsonObject["mediaType"]?.jsonPrimitive?.content == "video"
             }?.jsonObject?.get("url")?.jsonPrimitive?.content?.takeIf { it.startsWith("https://") },
+            metadata?.get("thumbnailUrl")?.jsonPrimitive?.contentOrNull?.takeIf { it.startsWith("https://") }
+                ?: videoId?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" },
+            metadata?.get("durationSeconds")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 },
         )
     }.distinctBy { it.id }.sortedByDescending { it.publishedAt }
     return SudokuIndex(root.getValue("generatedAt").jsonPrimitive.content, entries)

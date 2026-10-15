@@ -3,6 +3,8 @@
 import argparse
 import datetime as dt
 import json
+import os
+import urllib.parse
 import pathlib
 import re
 import urllib.request
@@ -43,9 +45,34 @@ def youtube_entries(source: dict, payload: bytes) -> list[dict]:
                 "publishedAt": published,
                 "puzzleUrl": f"https://sudokupad.app/{puzzle_id}",
                 "links": [{"role": "walkthrough", "mediaType": "video", "url": f"https://www.youtube.com/watch?v={video_id}"}],
-                "metadata": {"youtubeVideoId": video_id},
+                "metadata": {"youtubeVideoId": video_id, "thumbnailUrl": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"},
             })
     return entries
+
+
+def enrich_video_metadata(entries: list[dict], api_key: str, fetch=None) -> None:
+    """Optional YouTube Data API enrichment. RSS itself does not include running time."""
+    def request_json(url):
+        with urllib.request.urlopen(url, timeout=30) as response:
+            return json.load(response)
+    fetch = fetch or request_json
+    ids = list(dict.fromkeys(entry.get("metadata", {}).get("youtubeVideoId") for entry in entries))
+    ids = [video_id for video_id in ids if video_id]
+    for start in range(0, len(ids), 50):
+        query = urllib.parse.urlencode({"part": "contentDetails", "id": ",".join(ids[start:start + 50]), "key": api_key})
+        payload = fetch("https://www.googleapis.com/youtube/v3/videos?" + query)
+        durations = {}
+        for item in payload.get("items", []):
+            match = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", item.get("contentDetails", {}).get("duration", ""))
+            if match:
+                hours, minutes, seconds = (int(value or 0) for value in match.groups())
+                duration = hours * 3600 + minutes * 60 + seconds
+                if duration > 0:
+                    durations[item["id"]] = duration
+        for entry in entries:
+            metadata = entry.get("metadata", {})
+            if metadata.get("youtubeVideoId") in durations:
+                metadata["durationSeconds"] = durations[metadata["youtubeVideoId"]]
 
 
 # New providers can register another adapter without changing the index contract or app.
@@ -94,6 +121,9 @@ def main() -> None:
         request = urllib.request.Request(source["feedUrl"], headers={"User-Agent": "SudokuPad puzzle index"})
         with urllib.request.urlopen(request, timeout=30) as response:
             updates.extend(adapter(source, response.read()))
+    api_key = os.environ.get("YOUTUBE_API_KEY")
+    if api_key:
+        enrich_video_metadata(updates, api_key)
     # Fetch/parse every source before writing anything; failed refreshes preserve the old index.
     generated_at = utc_timestamp(dt.datetime.now(dt.timezone.utc).isoformat())
     write_resources(merge_index(previous, sources, updates, generated_at), args.output)

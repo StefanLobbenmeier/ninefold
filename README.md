@@ -105,9 +105,9 @@ Before shipping native builds, smoke-test on devices:
 
 ### Puzzle catalog and offline browsing
 
-The app starts with the newest puzzles from
+The Browse tab shows the newest puzzles from
 `https://stefanlobbenmeier.github.io/sudoku-index/index.json`. Select Play to load a puzzle into the
-player, or Puzzles to return to the list. Import remains available from either screen.
+player. The back arrow, a swipe from the left edge, or system/browser Back returns to the previous tab. Import is available from the main menu. The Play tab features the last played unfinished puzzle, with smaller cards for other ongoing and solved puzzles. Unavailable puzzles are muted until ready; failed downloads have a Retry action.
 
 The app saves the last valid index locally and displays it immediately on subsequent
 visits while refreshing. Failed requests or invalid index responses preserve the saved list. Refresh
@@ -162,7 +162,7 @@ or the supported Sudoku rules when a solution is unavailable.
 Drag across cells to select a group, or enable Select multiple to add to the current selection
 by tapping or dragging. With Select multiple enabled, start on a selected cell to remove it and
 any cells you drag across; untouched cells stay selected. With Select multiple off, every tap or drag
-starts a new selection, including when it starts on a selected cell. Adjacent selected cells share a bold outside outline. The keypad places 1–9 in three rows with 0 below as an erase shortcut;
+starts a new selection, including when it starts on a selected cell. Adjacent selected cells share a bold outside outline. The keypad places 1–9 in three rows with multiple selection, undo, and an erase icon below;
 Digit, Corner, Centre, and Colour sit beside the keypad. Choose Corner or
 Centre to enter pencil marks in all empty selected cells. A note is added to every selected cell
 if any are missing it; tapping that number again removes it from all of them. Filled digits and
@@ -203,3 +203,11 @@ and select Load puzzle. Review it, confirm the clues, and select Import puzzle. 
 locally and work offline. This tab also accepts SudokuPad URLs (which require a connection).
 Opening a shared HTTPS link directly currently targets the web app; native app deep linking is not
 configured. Pasting inside the installed app or PWA imports into that app’s own saved games.
+
+### Video cards
+
+Catalog metadata supports optional `thumbnailUrl` (HTTPS) and `durationSeconds` (positive integer).
+The YouTube exporter includes thumbnails automatically. Set the optional `YOUTUBE_API_KEY`
+repository secret (or environment variable when running the exporter locally) to enrich videos with
+running times from the YouTube Data API. Without it, thumbnails still work and no duration is invented.
+Older indexes with `youtubeVideoId` also receive thumbnails. Missing images use a grid placeholder.
