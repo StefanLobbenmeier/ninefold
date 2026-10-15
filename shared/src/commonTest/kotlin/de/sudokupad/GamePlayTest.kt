@@ -3,6 +3,45 @@ package de.sudokupad
 import kotlin.test.*
 
 class GamePlayTest {
+    @Test fun clockExcludesBackgroundTimeAndPreservesPartialSeconds() {
+        var now = 0L
+        val clock = GameClock { now }
+        clock.start()
+        now = 1_500
+        clock.setForeground(false)
+        now = 61_500
+        clock.start() // Recomposition while hidden must not restart the clock.
+        assertEquals(1, clock.elapsedSeconds())
+        clock.setForeground(true)
+        clock.setForeground(true) // Repeated events must not reset the interval.
+        now = 62_000
+        assertEquals(2, clock.elapsedSeconds())
+        clock.setForeground(false)
+        clock.stop() // Completing a puzzle while hidden must prevent resumption.
+        now = 100_000
+        clock.setForeground(true)
+        now = 110_000
+        assertEquals(2, clock.elapsedSeconds())
+    }
+
+    @Test fun clockInitiallyHiddenWaitsUntilVisibleAndStarted() {
+        var now = 0L
+        val clock = GameClock { now }
+        clock.restore(12)
+        clock.setForeground(false)
+        clock.start()
+        now = 60_000
+        assertEquals(12, clock.elapsedSeconds())
+        clock.setForeground(true)
+        now = 61_000
+        assertEquals(13, clock.elapsedSeconds())
+        clock.reset()
+        clock.setForeground(false)
+        clock.setForeground(true)
+        now = 70_000
+        assertEquals(0, clock.elapsedSeconds())
+    }
+
     @Test fun clockWaitsForStartAndFreezesAtCompletion() {
         var now = 0L
         val clock = GameClock { now }

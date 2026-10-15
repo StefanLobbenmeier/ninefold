@@ -8,11 +8,21 @@ internal class GameClock(private val nowMillis: (() -> Long)? = null) {
     private fun now() = nowMillis?.invoke() ?: origin.elapsedNow().inWholeMilliseconds
     private var runningSince: Long? = null
     private var accumulated = 0L
+    private var foreground = true
+    private var started = false
 
     fun reset() { restore(0) }
-    fun restore(seconds: Long) { runningSince = null; accumulated = seconds.coerceAtLeast(0) * 1000 }
-    fun start() { if (runningSince == null) runningSince = now() }
+    fun restore(seconds: Long) { started = false; runningSince = null; accumulated = seconds.coerceAtLeast(0) * 1000 }
+    fun start() { started = true; if (foreground && runningSince == null) runningSince = now() }
     fun stop() {
+        started = false
+        pause()
+    }
+    fun setForeground(visible: Boolean) {
+        foreground = visible
+        if (!visible) pause() else if (started) start()
+    }
+    private fun pause() {
         runningSince?.let { accumulated += now() - it }
         runningSince = null
     }
