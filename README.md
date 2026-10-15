@@ -124,7 +124,9 @@ few seconds, depending on the connection. Production builds prepare a service wo
 and verifies the complete app (including all Wasm modules and chunks) before installing a release.
 Subsequent launches use that cached release immediately, even on a slow connection. Updates download
 into a separate cache; failed or interrupted downloads preserve the working release. A complete update
-takes over after all app tabs close. Fetched puzzles and fallback fonts have a separate cache that
+shows a “New version ready” banner at the top of Home. Select Reload to activate it and reload
+all open app tabs. Checks run on launch, every five minutes, and when returning to the app;
+updates also activate naturally after all app tabs close. Fetched puzzles and fallback fonts have a separate cache that
 survives app updates. The first visit needs a connection until the app download completes.
 Browser storage must be available for persistent
 offline access.

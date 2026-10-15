@@ -25,7 +25,7 @@ internal enum class DownloadStatus(val label: String) {
 }
 
 @Composable
-internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameRepository, downloadScope: CoroutineScope, onOpen: (Puzzle) -> Unit) {
+internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameRepository, downloadScope: CoroutineScope, appUpdateState: AppUpdateState = AppUpdateState.None, onApplyUpdate: () -> Unit = {}, onOpen: (Puzzle) -> Unit) {
     var index by remember(repository) { mutableStateOf(repository.cached()) }
     var refreshing by remember { mutableStateOf(true) }
     var cached by remember { mutableStateOf(index != null) }
@@ -81,6 +81,32 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 Text("NINEFOLD", fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
                 TextButton({ refreshRequest++ }, enabled = !refreshing) { Text("Refresh") }
                 Button({ showImport = true }) { Text("Import") }
+            }
+        }
+        if (appUpdateState != AppUpdateState.None) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Row(
+                        Modifier.widthIn(max = 900.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            when (appUpdateState) {
+                                AppUpdateState.Applying -> "Switching to the new version…"
+                                AppUpdateState.Failed -> "Could not switch versions. Please try again."
+                                else -> "New version ready"
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onApplyUpdate, enabled = appUpdateState != AppUpdateState.Applying) {
+                            Text(if (appUpdateState == AppUpdateState.Failed) "Retry" else "Reload")
+                        }
+                    }
+                }
             }
         }
         reimporting?.let { title ->

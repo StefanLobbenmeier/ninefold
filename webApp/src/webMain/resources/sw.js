@@ -28,7 +28,7 @@ self.addEventListener('install', event => {
             throw error;
         }
         // Let existing tabs finish using their release. The complete new release
-        // activates once those tabs close; do not skipWaiting or claim an old page.
+        // activates once those tabs close or the user accepts the in-app update prompt.
     })());
 });
 
@@ -42,6 +42,10 @@ self.addEventListener('activate', event => {
 
 // Fonts fetched by the first, uncontrolled page can also be saved for offline use.
 self.addEventListener('message', event => {
+    if (event.data?.type === 'activate-update') {
+        event.waitUntil(self.skipWaiting());
+        return;
+    }
     if (event.data?.type !== 'cache-fonts' || !Array.isArray(event.data.urls)) return;
     event.waitUntil((async () => {
         const cache = await caches.open(DATA_CACHE);
