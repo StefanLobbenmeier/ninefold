@@ -444,12 +444,15 @@ private fun BoxScope.PuzzleGraphics(
             val center = at(item.center)
             val area = Size((item.width * cell).toFloat(), (item.height * cell).toFloat())
             val topLeft = center - Offset(area.width / 2, area.height / 2)
-            item.backgroundColor?.toComposeColor()?.let { color ->
-                if (item.rounded) drawOval(color, topLeft, area) else drawRect(color, topLeft, area)
-            }
-            item.borderColor?.toComposeColor()?.let { color ->
-                if (item.rounded) drawOval(color, topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
-                else drawRect(color, topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
+            // Zero-width XV boxes size the text; stroking them paints a line behind the glyph.
+            if (area.width > 0f && area.height > 0f) {
+                item.backgroundColor?.toComposeColor()?.let { color ->
+                    if (item.rounded) drawOval(color, topLeft, area) else drawRect(color, topLeft, area)
+                }
+                item.borderColor?.toComposeColor()?.let { color ->
+                    if (item.rounded) drawOval(color, topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
+                    else drawRect(color, topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
+                }
             }
             item.text?.takeIf(String::isNotEmpty)?.let { text ->
                 val style = androidx.compose.ui.text.TextStyle(color = item.textColor?.toComposeColor() ?: Ink, fontSize = (max(8f, area.height * .48f) / density).sp, textAlign = TextAlign.Center)
