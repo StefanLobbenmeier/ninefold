@@ -303,9 +303,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                         SideCard("PLAY") { Controls(effectiveMode, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
-                            puzzle.rules.forEachIndexed { index, rule -> Row(Modifier.padding(vertical = 6.dp)) {
-                                Text("${index + 1}", color = Moss, fontWeight = FontWeight.Bold, modifier = Modifier.width(26.dp)); Text(rule, style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
-                            } }
+                            RulesText(puzzle.rules)
                             HorizontalDivider(Modifier.padding(vertical = 10.dp), color = Color(0xFFE5E5DE))
                             TextButton({ clearSelection(); showChecking = true }, Modifier.fillMaxWidth()) { Text("Checking settings") }
                         }
@@ -847,7 +845,7 @@ private fun RulesDialog(puzzle: Puzzle, shareBaseUrl: String, starting: Boolean,
         title = { Column { Text(puzzle.title, maxLines = 2, overflow = TextOverflow.Ellipsis); Text("by ${puzzle.author}", style = MaterialTheme.typography.bodyMedium, color = Moss) } },
         text = { Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
             Text("RULES", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
-            puzzle.rules.forEach { Text("•  $it", Modifier.padding(vertical = 5.dp), lineHeight = 20.sp) }
+            RulesText(puzzle.rules)
             if (puzzle.videoUrl != null || puzzle.sourceUrl != null) HorizontalDivider(Modifier.padding(vertical = 8.dp))
             puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Watch source video") } }
             puzzle.sourceUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad") } }
