@@ -37,7 +37,11 @@ internal fun formatElapsed(seconds: Long): String {
 }
 
 internal fun Puzzle.isComplete(cells: List<CellState>): Boolean {
-    if (cells.size != 81 || cells.any { it.value !in 1..9 }) return false
-    return if (solution != null) cells.map { it.value }.joinToString("") == solution
-    else checkSudokuRules(this, cells).cells.isEmpty()
+    return completionCheck(cells)?.cells?.isEmpty() == true
+}
+
+/** A completion attempt is checked independently of the player's feedback preferences. */
+internal fun Puzzle.completionCheck(cells: List<CellState>): PuzzleCheckResult? {
+    if (cells.size != 81 || cells.any { it.value !in 1..9 }) return null
+    return checkSudokuRules(this, cells, includeSpecialRules = true) + checkAgainstSolution(this, cells)
 }

@@ -169,9 +169,10 @@ Catalog parsing, refresh, cache preservation, and unavailable storage are covere
 
 The player keeps the board and a T9-style number keypad within the available screen height,
 including native safe areas. Each new puzzle opens its rules first, with links to the source
-video and original SudokuPad when available. Tap Okay to start the timer; a correct completed
-grid freezes it, and undoing the final digit resumes it. Completion uses the supplied solution,
-or the supported Sudoku rules when a solution is unavailable.
+video and original SudokuPad when available. Tap Okay to start the timer. Filling the last cell
+runs the solution and supported-rule checks regardless of checking preferences. A valid grid
+freezes the timer and opens a completion screen with the solve time and any custom SudokuPad
+success message; undoing the final digit resumes the timer.
 
 Drag across cells to select a group, or enable Select multiple to add to the current selection
 by tapping or dragging. With Select multiple enabled, start on a selected cell to remove it and
@@ -199,7 +200,7 @@ to the configured numbers. Corner marks do not trigger colouring. All matching c
 alongside manual colours. Editing cells or changing or disabling a rule updates the whole grid
 immediately. Automatic colours are never stored on cells or added to undo history; manual colours
 and their undo/redo history stay independent.
-Solution feedback and completion wait until you leave the cell; Sudoku rule feedback remains live.
+Ordinary solution feedback waits until you leave the cell; final-grid and Sudoku rule checks run immediately.
 Keypad presses and input-mode changes keep the current selection.
 
 ### Sharing puzzles

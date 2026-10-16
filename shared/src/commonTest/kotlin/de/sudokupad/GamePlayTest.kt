@@ -71,6 +71,16 @@ class GamePlayTest {
         assertFalse(puzzle.copy(solution = null).isComplete(List(81) { CellState(value = 1) }))
     }
 
+    @Test fun completionChecksSupportedRulesEvenWhenTheSolutionMatches() {
+        val solved = SudokuFixtures.classic.solution!!.map { CellState(value = it.digitToInt()) }
+        val puzzle = SudokuFixtures.classic.copy(
+            cages = listOf(KillerCage(3, setOf(CellPosition(0, 0), CellPosition(0, 1)))),
+        )
+        assertFalse(puzzle.isComplete(solved))
+        assertTrue(puzzle.completionCheck(solved)!!.cells.containsAll(setOf(0, 1)))
+        assertEquals(null, puzzle.completionCheck(solved.toMutableList().also { it[80] = CellState() }))
+    }
+
     @Test fun multiCellNotesStayConsistentAndPreserveDigits() {
         val selected = (0..3).map { CellPosition(0, it) }.toSet()
         for (mode in listOf(InputMode.Corner, InputMode.Centre)) {

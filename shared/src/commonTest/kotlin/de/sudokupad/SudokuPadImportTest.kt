@@ -60,6 +60,17 @@ class SudokuPadImportTest {
         assertEquals("https://www.youtube.com/watch?v=aaaaaaaaaaa", puzzle.videoUrl)
     }
 
+    @Test fun retainsExplicitAndLegacySuccessMessages() {
+        val explicit = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"metadata":{"successMessage":"A custom finish!"}"""))
+        assertEquals("A custom finish!", explicit.successMessage)
+
+        val legacy = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties =
+            """"cage":[{"cells":["R1C1"],"value":"msgcorrect: Legacy finish"}]"""))
+        assertEquals("Legacy finish", legacy.successMessage)
+        assertEquals(legacy, puzzleFromShareLink(puzzleShareLink(legacy)))
+    }
+
     @Test fun reportsUnavailablePuzzlesWithoutParsingTheErrorBody() = runTest {
         val client = HttpClient(MockEngine { respond("Not found", HttpStatusCode.NotFound) })
         try {
