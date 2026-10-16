@@ -6,6 +6,51 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PuzzleCheckingTest {
+    @Test fun antiKnightChecksAllEightMovesAndRespectsSpecialRuleSetting() {
+        val puzzle = SudokuFixtures.empty.copy(antiKnight = true)
+        val peers = listOf(21, 23, 29, 33, 47, 51, 57, 59)
+        peers.forEach { peer ->
+            val cells = puzzle.startingCells().toMutableList().also {
+                it[40] = CellState(value = 5)
+                it[peer] = CellState(value = 5)
+            }
+            assertEquals(setOf(40, peer), checkSudokuRules(puzzle, cells).cells)
+            assertTrue(checkSudokuRules(puzzle, cells, includeSpecialRules = false).cells.isEmpty())
+            assertTrue(checkSudokuRules(SudokuFixtures.empty, cells).cells.isEmpty())
+            cells[peer] = CellState(value = 6)
+            assertTrue(checkSudokuRules(puzzle, cells).cells.isEmpty())
+        }
+    }
+
+    @Test fun antiKnightChecksBothKindsOfPencilMarksAgainstEnteredDigits() {
+        val puzzle = SudokuFixtures.empty.copy(antiKnight = true)
+        val cells = puzzle.startingCells().toMutableList().also {
+            it[40] = CellState(value = 5, given = true)
+            it[21] = CellState(cornerNotes = setOf(5, 6))
+            it[59] = CellState(centreNotes = setOf(5, 7))
+        }
+        assertEquals(mapOf(21 to setOf(5), 59 to setOf(5)), checkSudokuRules(puzzle, cells).pencilMarks)
+        assertTrue(checkSudokuRules(puzzle, cells, includeSpecialRules = false).pencilMarks.isEmpty())
+        cells[40] = CellState(centreNotes = setOf(5))
+        assertTrue(checkSudokuRules(puzzle, cells).pencilMarks.isEmpty())
+    }
+
+    @Test fun antiKnightClipsMovesAtBoardEdgesWithoutWrappingRows() {
+        val puzzle = SudokuFixtures.empty.copy(antiKnight = true)
+        for ((origin, peer) in listOf(0 to 11, 8 to 15, 72 to 65, 80 to 69)) {
+            val cells = puzzle.startingCells().toMutableList().also {
+                it[origin] = CellState(value = 5)
+                it[peer] = CellState(value = 5)
+            }
+            assertEquals(setOf(origin, peer), checkSudokuRules(puzzle, cells).cells)
+        }
+        val cells = puzzle.startingCells().toMutableList().also {
+            it[8] = CellState(value = 5)
+            it[27] = CellState(value = 5)
+        }
+        assertTrue(checkSudokuRules(puzzle, cells).cells.isEmpty())
+    }
+
 
     @Test
     fun centreNotesPassSolutionCheckWhenTheyContainTheAnswer() {

@@ -65,6 +65,7 @@ data class Puzzle(
     val fogLights: Set<CellPosition>? = null,
     /** Null uses regular 3×3 fog; a present list uses only the specified reveals. */
     val fogLinks: List<FogLink>? = null, val sourceUrl: String? = null, val videoUrl: String? = null,
+    val antiKnight: Boolean = false,
 ) {
     fun startingCells(): List<CellState> = givens.map { char ->
         val value = char.digitToIntOrNull()?.takeIf { it in 1..9 }
@@ -95,6 +96,22 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
                 val peer = (boxRow + row) * 9 + boxColumn + column
                 if (peer != index) cells[peer].value?.let(::add)
             } }
+            if (includeSpecialRules && puzzle.antiKnight) {
+                for (rowOffset in -2..2) for (columnOffset in -2..2) {
+                    if (kotlin.math.abs(rowOffset) * kotlin.math.abs(columnOffset) != 2) continue
+                    val row = position.row + rowOffset
+                    val column = position.column + columnOffset
+                    if (row !in 0..8 || column !in 0..8) continue
+                    val peer = row * 9 + column
+                    cells[peer].value?.let { value ->
+                        add(value)
+                        if (cell.value == value) {
+                            conflicts += index
+                            conflicts += peer
+                        }
+                    }
+                }
+            }
         }
         val invalid = (cell.cornerNotes + cell.centreNotes).intersect(fixedPeerDigits)
         if (invalid.isNotEmpty()) pencilMarks.getOrPut(index, ::mutableSetOf).addAll(invalid)
