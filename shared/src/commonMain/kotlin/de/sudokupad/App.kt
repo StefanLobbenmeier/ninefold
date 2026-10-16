@@ -43,7 +43,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -117,31 +116,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var started by remember(puzzle) { mutableStateOf(saved?.started ?: false) }
     val multiSelect = repository.settings.multiSelect
     val clock = remember(puzzle) { GameClock().also { it.restore(repository.elapsed(puzzle)) } }
-    var elapsed by remember(puzzle) { mutableStateOf(repository.elapsed(puzzle)) }
-    var foreground by remember(puzzle) { mutableStateOf(true) }
-    DisposableEffect(puzzle) {
-        val unsubscribe = observePageVisibility { visible ->
-            // Stop synchronously: rendering/coroutines may be suspended as soon as the page hides.
-            clock.setForeground(visible)
-            foreground = visible
-            elapsed = clock.elapsedSeconds()
-            repository.saveElapsed(puzzle, elapsed)
-        }
-        onDispose { unsubscribe() }
-    }
     val completed = remember(puzzle, finalized) { puzzle.isComplete(finalized) }
-    LaunchedEffect(started, completed, puzzle, foreground) {
-        if (started) {
-            if (completed) clock.stop() else clock.start()
-            elapsed = clock.elapsedSeconds()
-            repository.saveElapsed(puzzle, elapsed)
-            while (!completed && foreground) {
-                delay(200)
-                val next = clock.elapsedSeconds()
-                if (next != elapsed) { elapsed = next; repository.saveElapsed(puzzle, elapsed) }
-            }
-        }
-    }
+    val elapsed = rememberGameElapsed(puzzle, repository, clock, started, completed)
     var showChecking by remember { mutableStateOf(false) }
     val settings = repository.settings
     val checkRules = settings.rules
