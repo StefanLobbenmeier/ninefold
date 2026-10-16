@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
@@ -34,16 +35,56 @@ class FogRenderingTest {
         }
         val pixels = compose.onNodeWithTag("board").captureToImage().toPixelMap()
         val cell = pixels.width / 9
-        assertEquals(CellColour.fromNumber(7)!!.swatch, pixels[cell / 4, cell / 2])
-        assertEquals(CellColour.fromNumber(9)!!.swatch, pixels[cell * 3 / 4, cell / 2])
+        val fog = Color(0xFFB4B7B5)
+        val red = CellColour.Red.swatch.copy(alpha = .7f).compositeOver(fog)
+        val blue = CellColour.Blue.swatch.copy(alpha = .7f).compositeOver(fog)
+        assertColourClose(red, pixels[cell / 4, cell / 2])
+        assertColourClose(blue, pixels[cell * 3 / 4, cell / 2])
         // The given stays hidden even though the player's paint is visible.
-        assertEquals(CellColour.fromNumber(9)!!.swatch, pixels[cell * 3 / 5, cell / 2])
+        assertColourClose(blue, pixels[cell * 3 / 5, cell / 2])
         assertEquals(Color(0xFFB4B7B5), pixels[cell * 3 / 2, cell / 2])
         val ink = Color(0xFF202522)
         assertEquals(ink, pixels[pixels.width / 2, 1])
         assertEquals(ink, pixels[1, pixels.height / 2])
         assertEquals(ink, pixels[pixels.width - 2, pixels.height / 2])
         assertEquals(ink, pixels[pixels.width / 2, pixels.height - 2])
+    }
+
+    @Test fun everyCellColourIsDarkerInFogAndBrightensWhenRevealed() {
+        var lit by mutableStateOf((0..8).map { CellPosition(1, it) }.toSet())
+        val cells = SudokuFixtures.empty.startingCells().mapIndexed { index, cell ->
+            if (index < 18) cell.copy(colours = setOf(index % 9 + 1)) else cell
+        }
+        compose.setContent {
+            MaterialTheme {
+                val puzzle = SudokuFixtures.empty.copy(fogLights = lit, fogLinks = emptyList())
+                SudokuBoard(puzzle, cells, emptySet(), emptySet(),
+                    modifier = Modifier.width(450.dp).testTag("board"), onSelect = {})
+            }
+        }
+        val pixels = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+        val cell = pixels.width / 9
+        CellColour.entries.forEachIndexed { column, colour ->
+            val x = column * cell + cell / 2
+            val fogged = pixels[x, cell / 4]
+            val revealed = pixels[x, cell + cell / 4]
+            assertTrue(revealed.red - fogged.red > .05f &&
+                revealed.green - fogged.green > .05f &&
+                revealed.blue - fogged.blue > .05f, "${colour.label} must show fog beneath it")
+        }
+        compose.runOnIdle { lit = lit + (0..8).map { CellPosition(0, it) } }
+        val revealed = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+        CellColour.entries.forEachIndexed { column, _ ->
+            val x = column * cell + cell / 2
+            assertEquals(pixels[x, cell + cell / 4], revealed[x, cell / 4])
+        }
+    }
+
+    private fun assertColourClose(expected: Color, actual: Color) {
+        assertEquals(expected.red, actual.red, .01f)
+        assertEquals(expected.green, actual.green, .01f)
+        assertEquals(expected.blue, actual.blue, .01f)
+        assertEquals(expected.alpha, actual.alpha, .01f)
     }
 
     @Test fun wholeXVAndDotsMatchFullyLitRenderingFromEitherSide() {
