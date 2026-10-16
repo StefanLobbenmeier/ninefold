@@ -17,6 +17,7 @@ function release(version = 'old') {
         'index.html': `HTML ${version}`, 'styles.css': 'styles', 'offline.js': 'registration',
         'webApp.js': `loader ${version}`, 'chunks/runtime.mjs': `runtime ${version}`,
         'chunks/app.wasm': `wasm ${version}`, 'fonts/fallback.ttf': 'font',
+        'composeResources/sudokupad.shared.generated.resources/font/lora.ttf': 'synthetic editorial font',
     };
     try {
         for (const [path, contents] of Object.entries(files)) {
