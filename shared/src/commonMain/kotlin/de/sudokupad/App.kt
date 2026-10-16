@@ -421,7 +421,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
 private fun DrawScope.drawCellColours(colours: Set<Int>, topLeft: Offset = Offset.Zero, area: Size = size) {
     val swatches = colours.sorted().mapNotNull(CellColour::fromNumber)
     swatches.forEachIndexed { stripe, colour ->
-        drawRect(colour.swatch,
+        drawRect(colour.swatch.copy(alpha = .7f),
             topLeft + Offset(stripe * area.width / swatches.size, 0f),
             Size(area.width / swatches.size, area.height))
     }
