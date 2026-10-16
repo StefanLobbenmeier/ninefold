@@ -5,5 +5,12 @@
     "type": "youtube",
     "url": "https://www.youtube.com/channel/UCC-UOdK8-mIjxBQm_ot1T-Q",
     "feedUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UCC-UOdK8-mIjxBQm_ot1T-Q"
+  },
+  {
+    "id": "lucians-place",
+    "name": "Lucian's Place · Daily GAS",
+    "type": "youtube",
+    "url": "https://www.youtube.com/channel/UCbQtdQ21VY3M6xjnwA05uOg",
+    "feedUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UCbQtdQ21VY3M6xjnwA05uOg"
   }
 ]
