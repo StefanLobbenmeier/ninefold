@@ -142,6 +142,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     val solution = metadata.string("solution") ?: root.array("solution")?.mapNotNull(JsonElement::asInt)?.joinToString("")
     val rulesText = metadata.string("rules") ?: metadata.string("ruleset") ?: "Normal sudoku rules apply."
     val rules = rulesText.lines().map(String::trim).filter(String::isNotEmpty).ifEmpty { listOf("Normal sudoku rules apply.") }
+    val successMessage = importedSuccessMessage(root, metadata)
 
     val rawCages = root.array(if (fpuzzles) "killercage" else "cages") ?: root.array("cages") ?: JsonArray(emptyList())
     val fog = mutableSetOf<CellPosition>()
@@ -199,7 +200,23 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
                     else -> null
                 }
             },
+        successMessage = successMessage,
     )
+}
+
+private fun importedSuccessMessage(root: JsonObject, metadata: JsonObject): String? {
+    val explicit = listOf(
+        metadata.string("successMessage"), root.string("successMessage"),
+        metadata.string("msgcorrect"), root.string("msgcorrect"),
+    ).firstOrNull { !it.isNullOrBlank() }
+    if (explicit != null) return explicit.trim()
+
+    val marker = Regex("^msgcorrect:\\s*(.+)$", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    return listOf("cages", "killercage", "cage").asSequence()
+        .flatMap { root.array(it).orEmpty().asSequence() }
+        .mapNotNull { element -> element.jsonObject.string("value") }
+        .mapNotNull { value -> marker.matchEntire(value.trim())?.groupValues?.get(1)?.trim() }
+        .firstOrNull { it.isNotEmpty() }
 }
 
 private fun parseOutsideClues(rules: String, overlays: List<PuzzleOverlay>, arrows: List<PuzzleArrow>): List<OutsideClue> =
