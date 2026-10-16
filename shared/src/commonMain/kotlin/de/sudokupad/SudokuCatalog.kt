@@ -139,11 +139,6 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
             contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (!browsing) {
-                item {
-                    Text("YOUR DAILY MOMENT OF CLARITY", color = Moss, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                    Text(if (inProgress.isEmpty()) "Make room for a little wonder." else "Welcome back.", fontFamily = editorialFont(), fontSize = 36.sp, lineHeight = 42.sp, modifier = Modifier.padding(top = 8.dp))
-                    Text("One grid. Endless possibilities.", color = Moss, modifier = Modifier.padding(top = 8.dp, bottom = 12.dp))
-                }
                 val latest = inProgress.firstOrNull()
                 if (latest != null) item {
                     FeaturedGameCard(latest, games.elapsed(latest.puzzle), enabled = opening == null && reimporting == null,
@@ -320,13 +315,27 @@ private fun FeaturedGameCard(game: SavedGame, elapsed: Long, enabled: Boolean, o
     Card(Modifier.fillMaxWidth().combinedClickable(enabled = enabled, onClick = onOpen, onLongClickLabel = "Reimport puzzle", onLongClick = onReimport),
         shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Moss, contentColor = Color.White)) {
         Column(Modifier.padding(24.dp)) {
-            Text("RIGHT WHERE YOU LEFT OFF", fontSize = 10.sp, letterSpacing = 1.8.sp, color = Sage)
-            Row(Modifier.padding(vertical = 20.dp), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(game.puzzle.title, fontFamily = editorialFont(), fontSize = 28.sp, lineHeight = 32.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    Text("by ${game.puzzle.author}", color = Sage, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 20.dp)) {
+                val details: @Composable () -> Unit = {
+                    Column {
+                        Text(game.puzzle.title, fontFamily = editorialFont(), fontSize = 28.sp, lineHeight = 32.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        Text("by ${game.puzzle.author}", color = Sage, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+                    }
                 }
-                PuzzlePreview(game.puzzle, game.cells, Modifier.size(88.dp), game.automaticColours)
+                if (maxWidth >= 560.dp) {
+                    val previewSize = (maxWidth * .5f).coerceAtMost(400.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.Top) {
+                        Box(Modifier.weight(1f).height(previewSize), contentAlignment = Alignment.CenterStart) { details() }
+                        PuzzlePreview(game.puzzle, game.cells, Modifier.size(previewSize), game.automaticColours)
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        details()
+                        PuzzlePreview(game.puzzle, game.cells,
+                            Modifier.align(Alignment.CenterHorizontally).widthIn(max = 320.dp).fillMaxWidth().aspectRatio(1f),
+                            game.automaticColours)
+                    }
+                }
             }
             LinearProgressIndicator(progress = { filled.toFloat() / total }, modifier = Modifier.fillMaxWidth().height(4.dp), color = Color(0xFFDAD7AA), trackColor = Color.White.copy(alpha = .16f))
             Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {

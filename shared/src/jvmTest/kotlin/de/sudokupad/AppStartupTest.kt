@@ -46,8 +46,8 @@ class AppStartupTest {
         compose.setContent { App(storage = storage, indexRepository = emptyIndex(), initialShareLink = puzzleShareLink(puzzle)) }
         compose.onNodeWithText("Okay, start puzzle").performClick()
         compose.onRoot().performTouchInput { swipe(Offset(2f, 100f), Offset(180f, 100f)) }
-        compose.onNodeWithText("Welcome back.").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Continue Swipe puzzle").performClick()
+        compose.onNodeWithContentDescription("Continue Swipe puzzle")
+            .performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithContentDescription("Back to puzzles").assertIsDisplayed()
         assertEquals(puzzle, GameRepository(storage).game(puzzle)?.puzzle)
     }
