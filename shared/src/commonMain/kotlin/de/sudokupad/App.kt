@@ -382,7 +382,7 @@ private fun CompletionDialog(puzzle: Puzzle, elapsed: Long, onViewPuzzle: () -> 
 }
 
 @Composable
-internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), onSelect: (CellPosition) -> Unit) {
+internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), interactive: Boolean = true, onSelect: (CellPosition) -> Unit) {
     val currentSelection by rememberUpdatedState(selected)
     val currentDragSelection by rememberUpdatedState(onDragSelection)
     val currentToolSelect by rememberUpdatedState(onToolSelect)
@@ -420,7 +420,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             }
             PuzzleGraphics(puzzle, inset, boxGap, measurer, hiddenOverlays = revealedMarks)
             Box(Modifier.fillMaxSize().padding(inset).then(
-                if (onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
+                if (!interactive || onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
                     var lastTapPosition: CellPosition? = null
                     var lastTapTime = Long.MIN_VALUE
                     awaitEachGesture {
@@ -480,7 +480,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             val background = when { isSelected -> Color.LightGray.copy(alpha = .3f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); else -> Color.Transparent }.let { if (colours.isNotEmpty()) it.copy(alpha = minOf(it.alpha, .18f)) else it }
             val textBackdrop = if (CellColour.DarkGrey.number in colours) Color.White.copy(alpha = .85f) else Color.Transparent
             val fogged = puzzle.fogLights != null && position !in litCells
-            Box(Modifier.fillMaxSize().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (colours.isNotEmpty()) ", colours ${colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (colours.isNotEmpty()) ", colours ${colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.then(if (interactive) Modifier.clickable { onSelect(position) } else Modifier), contentAlignment = Alignment.Center) {
                 if (fogged) Canvas(Modifier.matchParentSize()) {
                     drawRect(Color(0xFFB4B7B5))
                     drawCellColours(colours)

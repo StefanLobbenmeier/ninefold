@@ -1,6 +1,5 @@
 package de.sudokupad
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -14,8 +13,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.constrainWidth
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalUriHandler
@@ -217,6 +221,12 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 ) {
                     entry.thumbnailUrl?.let { VideoThumbnail(it, entry.durationSeconds) }
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (entry.thumbnailUrl == null && status == DownloadStatus.Ready) games.cachedPuzzle(entry)?.let { puzzle ->
+                            val saved = games.game(puzzle)
+                            PuzzlePreview(puzzle, saved?.cells ?: remember(puzzle) { puzzle.startingCells() },
+                                Modifier.size(80.dp), saved?.automaticColours ?: emptyMap())
+                            Spacer(Modifier.width(12.dp))
+                        }
                         Column(Modifier.weight(1f)) {
                             Text(entry.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text("${entry.source} · ${entry.publishedAt.take(10)}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp))
@@ -255,6 +265,8 @@ private fun SavedGameCard(game: SavedGame, elapsed: Long, action: String, enable
         enabled = enabled, onClick = onOpen, onLongClickLabel = "Reimport puzzle", onLongClick = onReimport,
     ), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            PuzzlePreview(game.puzzle, game.cells, Modifier.size(72.dp), game.automaticColours)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(game.puzzle.title, fontWeight = FontWeight.Bold)
                 Text("by ${game.puzzle.author} · ${formatElapsed(elapsed)}", style = MaterialTheme.typography.bodySmall)
@@ -314,7 +326,7 @@ private fun FeaturedGameCard(game: SavedGame, elapsed: Long, enabled: Boolean, o
                     Text(game.puzzle.title, fontFamily = editorialFont(), fontSize = 28.sp, lineHeight = 32.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     Text("by ${game.puzzle.author}", color = Sage, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
                 }
-                MiniatureGrid(game, Modifier.size(88.dp).clip(RoundedCornerShape(8.dp)).background(Color.White))
+                PuzzlePreview(game.puzzle, game.cells, Modifier.size(88.dp), game.automaticColours)
             }
             LinearProgressIndicator(progress = { filled.toFloat() / total }, modifier = Modifier.fillMaxWidth().height(4.dp), color = Color(0xFFDAD7AA), trackColor = Color.White.copy(alpha = .16f))
             Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -327,17 +339,33 @@ private fun FeaturedGameCard(game: SavedGame, elapsed: Long, enabled: Boolean, o
     }
 }
 
+/** Render at playing size so digits, notes, and constraint strokes scale together. */
 @Composable
-private fun MiniatureGrid(game: SavedGame, modifier: Modifier) {
-    Canvas(modifier) {
-        val cell = size.width / 9
-        game.cells.forEachIndexed { index, state ->
-            if (state.value != null) drawCircle(Moss.copy(alpha = if (state.given) .8f else .35f), cell * .18f, Offset((index % 9 + .5f) * cell, (index / 9 + .5f) * cell))
-        }
-        for (i in 1..8) {
-            val weight = if (i % 3 == 0) 1.2.dp.toPx() else .4.dp.toPx()
-            drawLine(Moss.copy(alpha = .3f), Offset(i * cell, 0f), Offset(i * cell, size.height), weight)
-            drawLine(Moss.copy(alpha = .3f), Offset(0f, i * cell), Offset(size.width, i * cell), weight)
+internal fun PuzzlePreview(
+    puzzle: Puzzle,
+    cells: List<CellState>,
+    modifier: Modifier = Modifier,
+    automaticColours: Map<Int, AutomaticColourRule> = emptyMap(),
+) {
+    Layout(
+        content = {
+            SudokuBoard(puzzle, cells, emptySet(), emptySet(), interactive = false,
+                automaticColours = automaticColours, onSelect = {})
+        },
+        modifier = modifier.clip(RoundedCornerShape(4.dp)).clearAndSetSemantics {
+            contentDescription = "Preview of ${puzzle.title}"
+        },
+    ) { measurables, constraints ->
+        val side = constraints.constrainWidth(88.dp.roundToPx())
+            .coerceAtMost(constraints.constrainHeight(88.dp.roundToPx()))
+        val boardSize = 360.dp.roundToPx()
+        val board = measurables.single().measure(Constraints.fixed(boardSize, boardSize))
+        layout(side, side) {
+            board.placeWithLayer(0, 0) {
+                scaleX = side.toFloat() / boardSize
+                scaleY = scaleX
+                transformOrigin = TransformOrigin(0f, 0f)
+            }
         }
     }
 }
