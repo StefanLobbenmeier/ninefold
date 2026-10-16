@@ -133,8 +133,11 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var started by remember(puzzle) { mutableStateOf(saved?.started ?: false) }
     val multiSelect = repository.settings.multiSelect
     val clock = remember(puzzle) { GameClock().also { it.restore(repository.elapsed(puzzle)) } }
-    val completed = remember(puzzle, finalized) { puzzle.isComplete(finalized) }
+    val completionResult = remember(puzzle, cells) { puzzle.completionCheck(cells) }
+    val completed = completionResult?.cells?.isEmpty() == true
     val elapsed = rememberGameElapsed(puzzle, repository, clock, started, completed)
+    var completionAcknowledged by remember(puzzle) { mutableStateOf(completed) }
+    var showSuccess by remember(puzzle) { mutableStateOf(false) }
     var showChecking by remember { mutableStateOf(false) }
     val settings = repository.settings
     val checkRules = settings.rules
@@ -152,7 +155,12 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val solutionResult = remember(puzzle, finalized, selected, checkSolution, checkSolutionAutomatically, manualSolutionCheck) {
         if (checkSolution && (checkSolutionAutomatically || manualSolutionCheck)) checkAgainstSolution(puzzle, finalized).excluding(selected) else PuzzleCheckResult()
     }
-    val checkResult = rulesResult + solutionResult
+    val checkResult = rulesResult + solutionResult + (completionResult ?: PuzzleCheckResult())
+
+    LaunchedEffect(completed) {
+        if (completed && !completionAcknowledged) showSuccess = true
+        completionAcknowledged = completed
+    }
 
     fun save() {
         repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack, automaticColours))
@@ -224,14 +232,14 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val back by rememberUpdatedState(onBrowse)
     PlayerBackHandler(onBrowse)
     LaunchedEffect(puzzle) { repository.markPlayed(puzzle) }
-    LaunchedEffect(puzzle, showRules, showChecking, colourSettings) {
-        if (showRules || showChecking || colourSettings != null) temporaryMode = null
-        if (!showRules && !showChecking && colourSettings == null) focusRequester.requestFocus()
+    LaunchedEffect(puzzle, showRules, showChecking, showSuccess, colourSettings) {
+        if (showRules || showChecking || showSuccess || colourSettings != null) temporaryMode = null
+        if (!showRules && !showChecking && !showSuccess && colourSettings == null) focusRequester.requestFocus()
     }
     BoxWithConstraints(Modifier.fillMaxSize().focusRequester(focusRequester).onFocusChanged {
         if (!it.hasFocus) temporaryMode = null
     }.onPreviewKeyEvent { event ->
-        if (event.type != KeyEventType.KeyDown || showRules || showChecking || colourSettings != null) return@onPreviewKeyEvent false
+        if (event.type != KeyEventType.KeyDown || showRules || showChecking || showSuccess || colourSettings != null) return@onPreviewKeyEvent false
         temporaryMode = when {
             (event.isCtrlPressed || event.isMetaPressed) && event.isShiftPressed -> InputMode.Colour
             event.isCtrlPressed || event.isMetaPressed -> InputMode.Centre
@@ -313,6 +321,10 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         checkSolution, { repository.saveSettings(settings.copy(solution = it)); manualSolutionCheck = false },
         checkSolutionAutomatically, { repository.saveSettings(settings.copy(automaticSolution = it)); manualSolutionCheck = false },
     ) { showChecking = false }
+    if (showSuccess) CompletionDialog(puzzle, elapsed, { showSuccess = false }) {
+        showSuccess = false
+        onBrowse()
+    }
 }
 
 
@@ -342,6 +354,21 @@ private fun PuzzleHeading(puzzle: Puzzle, compact: Boolean = false, elapsed: Lon
         }
         Text(formatElapsed(elapsed), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
+}
+
+@Composable
+private fun CompletionDialog(puzzle: Puzzle, elapsed: Long, onViewPuzzle: () -> Unit, onBrowse: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onViewPuzzle,
+        title = { Text("Puzzle complete!") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(puzzle.successMessage ?: "Congratulations — you solved the puzzle!", lineHeight = 20.sp)
+            Text("Completed in ${formatElapsed(elapsed)}", color = Moss, fontWeight = FontWeight.Bold)
+        } },
+        confirmButton = { Button(onBrowse) { Text("Back to puzzles") } },
+        dismissButton = { TextButton(onViewPuzzle) { Text("View puzzle") } },
+        shape = RoundedCornerShape(22.dp),
+    )
 }
 
 @Composable
