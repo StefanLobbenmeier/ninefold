@@ -12,6 +12,40 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun importsLegacyCageMetadataWithoutCreatingCages() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"ca":[{"v":"title: Synthetic dots"},{"v":"author: Test setter"},{"v":"rules: Normal sudoku rules apply.\nGray dots: consecutive or double."},{"v":"solution: ${SudokuFixtures.classic.solution}"}]"""))
+        assertEquals("Synthetic dots", puzzle.title)
+        assertEquals("Test setter", puzzle.author)
+        assertEquals(listOf("Normal sudoku rules apply.", "Gray dots: consecutive or double."), puzzle.rules)
+        assertEquals(SudokuFixtures.classic.solution, puzzle.solution)
+        assertTrue(puzzle.cages.isEmpty())
+    }
+
+    @Test fun explicitMetadataOverridesLegacyCageMetadata() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"metadata":{"title":"Explicit title","rules":"Explicit rules"},"cages":[{"value":"title: Legacy title"},{"value":"rules: Legacy rules"},{"value":"author: Legacy setter"}]"""))
+        assertEquals("Explicit title", puzzle.title)
+        assertEquals(listOf("Explicit rules"), puzzle.rules)
+        assertEquals("Legacy setter", puzzle.author)
+    }
+
+    @Test fun numericRoundedGrayDotsUseTheRevealedEdgeMarkLayer() {
+        for (rounded in listOf("1", "true")) {
+            val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+                """"o":[{"ct":[0.5,1],"w":0.286,"h":0.286,"c2":"#CFCFCF","c1":"#000000","r":$rounded}]"""))
+            val dot = puzzle.overlays.single()
+            assertTrue(dot.rounded)
+            assertEquals("#CFCFCF", dot.backgroundColor)
+            assertTrue(dot.isKropkiDot())
+            assertTrue(dot.isRevealedEdgeMark(setOf(CellPosition(0, 0))))
+        }
+        val square = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"o":[{"ct":[0.5,1],"c2":"#CFCFCF","r":0}]""")).overlays.single()
+        assertEquals(false, square.rounded)
+        assertEquals(false, square.isKropkiDot())
+    }
+
     @Test fun importsExplicitAntiKnightFlags() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
             """"metadata":{"antiknight":true}"""))

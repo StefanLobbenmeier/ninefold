@@ -130,7 +130,15 @@ private fun singleQuotedStringsToJson(input: String): String {
 }
 
 private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: String?): Puzzle {
-    val metadata = root.obj("metadata") ?: root
+    // Older exports store metadata as non-rendering cage values, e.g. "title: ...".
+    // Explicit metadata takes precedence when both representations are present.
+    val legacyMetadata = root.array("cages").orEmpty().mapNotNull { element ->
+        val value = element.jsonObject.string("value") ?: return@mapNotNull null
+        val key = value.substringBefore(':').trim().lowercase()
+        if (':' !in value || key !in setOf("title", "author", "rules", "solution")) return@mapNotNull null
+        key to JsonPrimitive(value.substringAfter(':').trim())
+    }.toMap()
+    val metadata = JsonObject(legacyMetadata + (root.obj("metadata") ?: root))
     val sourceCells = (root.array(if (fpuzzles) "grid" else "cells") ?: root.array("cells"))
         ?: throw IllegalArgumentException("The puzzle has no grid.")
     require(sourceCells.size == 9 && sourceCells.all { it.jsonArray.size == 9 }) {
@@ -349,7 +357,7 @@ private fun parseOverlay(element: JsonElement): PuzzleOverlay? {
         center, value.double("width") ?: .3, value.double("height") ?: .3,
         value.string("backgroundColor"), value.string("borderColor") ?: value.string("stroke"),
         value.string("color") ?: value.string("textColor"), value["text"]?.asString(),
-        value.boolean("rounded") ?: false, value.double("thickness") ?: 1.0,
+        value.boolean("rounded") ?: (value.int("rounded") == 1), value.double("thickness") ?: 1.0,
     )
 }
 
