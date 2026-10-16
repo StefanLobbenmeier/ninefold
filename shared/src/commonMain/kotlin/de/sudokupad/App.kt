@@ -506,7 +506,8 @@ private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
 private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Color.Transparent) {
     val sortedNotes = notes.sorted()
     val corners = listOf(Alignment.TopStart, Alignment.TopEnd, Alignment.BottomStart, Alignment.BottomEnd)
-    Box(Modifier.fillMaxSize().padding(3.dp)) {
+    // Stay inside the cage outlines while leaving room for the centre marks.
+    Box(Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 4.dp)) {
         corners.forEachIndexed { corner, alignment ->
             // Fill the corners first, then pack additional marks beside them.
             val cornerNotes = sortedNotes.filterIndexed { index, _ -> index % corners.size == corner }
@@ -515,7 +516,7 @@ private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Co
                     cornerNotes.forEach { number ->
                         withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
                     }
-                }, modifier = Modifier.align(alignment).background(backdrop), fontSize = 8.sp, lineHeight = 8.sp, maxLines = 1)
+                }, modifier = Modifier.align(alignment).background(backdrop), fontSize = 10.sp, lineHeight = 10.sp, maxLines = 1)
             }
         }
     }
@@ -524,7 +525,7 @@ private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Co
 @Composable
 private fun CentreNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Color.Transparent) {
     BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        val noteSize = minOf(10f, maxWidth.value / notes.size.coerceAtLeast(1)).sp
+        val noteSize = minOf(11f, maxWidth.value / notes.size.coerceAtLeast(1)).sp
         Text(buildAnnotatedString {
             notes.sorted().forEach { number ->
                 withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
