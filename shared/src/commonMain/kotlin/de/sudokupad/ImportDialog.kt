@@ -245,7 +245,7 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton({ grid = null; importedPuzzle = null; image = null; gray = null; bounds = null; message = null; confirmed = false }, enabled = !busy) { Text("Choose another puzzle") }
-                        Button({ grid?.let { onImport(importedPuzzle?.copy(givens = it) ?: Puzzle("Imported classic", "Imported puzzle", it)) } }, enabled = confirmed && !busy && !checking) { Text(if (warning) "Import with warning" else "Import puzzle") }
+                        Button({ grid?.let { onImport(importedPuzzle?.copy(givens = it) ?: Puzzle("Imported classic", "Imported puzzle", it, solution = validation?.solution)) } }, enabled = confirmed && !busy && !checking) { Text(if (warning) "Import with warning" else "Import puzzle") }
                     }
                 }
             }

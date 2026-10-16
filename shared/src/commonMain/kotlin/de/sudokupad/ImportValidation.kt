@@ -6,7 +6,7 @@ import kotlinx.coroutines.yield
 
 enum class ImportStatus { Conflicts, Unsolvable, Unique, Multiple }
 
-data class ImportValidation(val status: ImportStatus, val conflicts: Set<Int> = emptySet())
+data class ImportValidation(val status: ImportStatus, val conflicts: Set<Int> = emptySet(), val solution: String? = null)
 
 /** Counts up to two solutions, without filling or changing the imported clues. */
 suspend fun validateClassicImport(grid: String): ImportValidation {
@@ -26,6 +26,7 @@ suspend fun validateClassicImport(grid: String): ImportValidation {
         boxes[box(i)] = boxes[box(i)] or bit
     } }
     var solutions = 0
+    var firstSolution: String? = null
     var visits = 0
     suspend fun search() {
         if (++visits % 256 == 0) { currentCoroutineContext().ensureActive(); yield() }
@@ -39,7 +40,11 @@ suspend fun validateClassicImport(grid: String): ImportValidation {
             if (count < smallest) { chosen = i; candidates = mask; smallest = count }
             if (count == 1) break
         }
-        if (chosen == -1) { solutions++; return }
+        if (chosen == -1) {
+            solutions++
+            if (solutions == 1) firstSolution = values.joinToString("")
+            return
+        }
         val r = chosen / 9; val c = chosen % 9; val b = box(chosen)
         for (n in 1..9) {
             val bit = 1 shl n
@@ -57,5 +62,5 @@ suspend fun validateClassicImport(grid: String): ImportValidation {
         0 -> ImportStatus.Unsolvable
         1 -> ImportStatus.Unique
         else -> ImportStatus.Multiple
-    })
+    }, solution = firstSolution.takeIf { solutions == 1 })
 }
