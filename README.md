@@ -88,7 +88,9 @@ cell marks, and generic overlays such as Kropki/XV marks and outside-grid clues.
 SudokuPad trigger/effect links: all trigger cells must be correct to reveal the linked cells, instead
 of clearing a 3×3 neighborhood. Previously imported puzzles need to be imported again to recover
 links discarded by older versions. Explicit fpuz
-thermometers and palindromes retain their semantics. Styled custom lines default to display-only; the
+thermometers and palindromes retain their semantics. Thermometers render a bulb at the first cell;
+optional special-rule checks enforce increasing digits, room for blank cells, and valid pencil marks.
+Styled custom lines default to display-only; the
 review's line-rule dialog lets the solver assign German/Dutch whisper, renban, palindrome, thermometer,
 or region-sum meaning without guessing based only on a color. Killer sums, sum arrows, assigned simple
 line rules, and recognizable skyscraper/diagonal-sum outside clues participate in optional rule checks.

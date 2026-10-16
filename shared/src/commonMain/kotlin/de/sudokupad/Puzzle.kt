@@ -157,7 +157,37 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
         when (line.rule) {
             LineRule.GermanWhisper -> markPairs { a, b -> kotlin.math.abs(a - b) < 5 }
             LineRule.DutchWhisper -> markPairs { a, b -> kotlin.math.abs(a - b) < 4 }
-            LineRule.Thermometer -> markPairs { a, b -> a >= b }
+            LineRule.Thermometer -> {
+                // Each blank cell still needs a distinct digit between its neighbours.
+                fun withinBounds(offset: Int, value: Int): Boolean =
+                    value >= offset + 1 && value <= 9 - (indices.lastIndex - offset)
+                fun compatible(offset: Int, value: Int, otherOffset: Int, otherValue: Int): Boolean =
+                    if (offset < otherOffset) otherValue - value >= otherOffset - offset
+                    else value - otherValue >= offset - otherOffset
+
+                indices.forEachIndexed { offset, index ->
+                    val cell = cells.getOrNull(index) ?: return@forEachIndexed
+                    cell.value?.let { value ->
+                        if (!withinBounds(offset, value)) conflicts += index
+                        indices.drop(offset + 1).forEachIndexed { gap, otherIndex ->
+                            val otherValue = cells.getOrNull(otherIndex)?.value
+                            if (otherValue != null && !compatible(offset, value, offset + gap + 1, otherValue)) {
+                                conflicts += index
+                                conflicts += otherIndex
+                            }
+                        }
+                    }
+                    if (cell.value == null) {
+                        val invalid = (cell.cornerNotes + cell.centreNotes).filterTo(mutableSetOf()) { candidate ->
+                            !withinBounds(offset, candidate) || indices.withIndex().any { (otherOffset, otherIndex) ->
+                                val otherValue = cells.getOrNull(otherIndex)?.value
+                                otherOffset != offset && otherValue != null && !compatible(offset, candidate, otherOffset, otherValue)
+                            }
+                        }
+                        if (invalid.isNotEmpty()) pencilMarks.getOrPut(index, ::mutableSetOf).addAll(invalid)
+                    }
+                }
+            }
             LineRule.Palindrome -> values.indices.forEach { offset ->
                 val opposite = values.lastIndex - offset
                 if (offset < opposite && values[offset].second != values[opposite].second) {

@@ -22,6 +22,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -564,7 +565,12 @@ private fun BoxScope.PuzzleGraphics(
         puzzle.lines.forEach { line ->
             val path = Path(); line.points.firstOrNull()?.let { path.moveTo(at(it).x, at(it).y) }
             line.points.drop(1).forEach { path.lineTo(at(it).x, at(it).y) }
-            drawPath(path, line.color.toComposeColor() ?: Color.Gray, style = Stroke((line.thickness / 50.0 * cell).toFloat().coerceAtLeast(2f)))
+            val color = line.color.toComposeColor() ?: Color.Gray
+            val width = (line.thickness / 50.0 * cell).toFloat().coerceAtLeast(2f)
+            drawPath(path, color, style = Stroke(width, cap = if (line.rule == LineRule.Thermometer) StrokeCap.Round else StrokeCap.Butt))
+            if (line.rule == LineRule.Thermometer) line.points.firstOrNull()?.let { bulb ->
+                drawCircle(color, radius = cell * .35f, center = at(bulb))
+            }
         }
         puzzle.arrows.forEach { arrow ->
             val color = arrow.color.toComposeColor() ?: Color.Gray
