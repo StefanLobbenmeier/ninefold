@@ -25,9 +25,9 @@ class SudokuPadImportTest {
         assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
     }
 
-    @Test fun fetchesFromCorsEndpointAndEncodesNamespacedIds() = runTest {
+    @Test fun fetchesFromCorsEndpointAndPreservesNamespacedPathSeparators() = runTest {
         val engine = MockEngine { request ->
-            assertEquals("https://sudokupad.svencodes.com/ctclegacy/test-setter%2Ftest-puzzle", request.url.toString())
+            assertEquals("https://sudokupad.svencodes.com/ctclegacy/test-setter/test-puzzle", request.url.toString())
             respond(SudokuFixtures.sudokuPadPayload(properties = """"metadata":{"title":"Fetched puzzle"}"""))
         }
         val client = HttpClient(engine)

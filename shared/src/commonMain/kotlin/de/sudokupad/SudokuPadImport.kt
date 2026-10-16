@@ -31,7 +31,8 @@ internal suspend fun importSudokuPadPuzzle(input: String, client: HttpClient, fo
     // only allows https://localhost, which blocks our JS and Wasm apps.
     // A unique URL also bypasses older installed service workers and HTTP caches.
     val refresh = if (forceRefresh) "?reimport=${kotlin.random.Random.nextLong()}" else ""
-    val response: HttpResponse = client.get("https://sudokupad.svencodes.com/ctclegacy/${id.encodeURLParameter()}$refresh")
+    val path = id.split('/').joinToString("/") { it.encodeURLParameter() }
+    val response: HttpResponse = client.get("https://sudokupad.svencodes.com/ctclegacy/$path$refresh")
     if (!response.status.isSuccess()) throw IllegalArgumentException("SudokuPad returned ${response.status.value} for this puzzle.")
     return parseSudokuPadPayload(response.body(), "https://sudokupad.app/$id")
 }
