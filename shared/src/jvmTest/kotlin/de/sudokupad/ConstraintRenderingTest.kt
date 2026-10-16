@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
@@ -16,9 +18,60 @@ import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.math.roundToInt
 
 class ConstraintRenderingTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun thinCageDashesHaveOneUniformColourIncludingTheirInnerCorner() {
+        val puzzle = SudokuFixtures.empty.copy(cages = listOf(KillerCage(null,
+            setOf(CellPosition(0, 1), CellPosition(1, 0), CellPosition(1, 1)))))
+        val purple = Color(0xFF826B87)
+        compose.setContent {
+            Canvas(Modifier.size(181.dp).testTag("outline")) {
+                drawRect(Color.White)
+                val width = 1.dp.toPx().roundToInt().coerceAtLeast(1).toFloat()
+                val path = cageOutline(puzzle.cages.single().cells, size.width / 3, size.height / 3, 4.dp.toPx(), width)
+                val paint = cageOutlinePaint(width,
+                    4.dp.toPx().roundToInt().toFloat(), 3.dp.toPx().roundToInt().toFloat(), purple)
+                drawIntoCanvas { it.drawPath(path, paint) }
+            }
+        }
+        val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
+        var colouredPixels = 0
+        for (x in 0 until pixels.width) for (y in 0 until pixels.height) {
+            val pixel = pixels[x, y]
+            if (pixel != Color.White) {
+                colouredPixels++
+                assertEquals(purple, pixel, "Cage pixel ($x, $y) must not have a gray fringe or darker overlap")
+            }
+        }
+        assertTrue(colouredPixels > 0)
+    }
+
+    @Test fun cageDashesReachTheFarEdgeOfACornerAndOverlapsKeepTheirColour() {
+        compose.setContent {
+            Canvas(Modifier.size(80.dp).testTag("outline")) {
+                drawRect(Color.White)
+                val path = Path().apply {
+                    moveTo(20.dp.toPx(), 40.dp.toPx())
+                    lineTo(40.dp.toPx(), 40.dp.toPx())
+                    lineTo(40.dp.toPx(), 20.dp.toPx())
+                    moveTo(30.dp.toPx(), 30.dp.toPx())
+                    lineTo(30.dp.toPx(), 50.dp.toPx())
+                }
+                val paint = cageOutlinePaint(4.dp.toPx(), 20.dp.toPx(), 10.dp.toPx(), Color.Black.copy(alpha = .5f))
+                drawIntoCanvas { it.drawPath(path, paint) }
+            }
+        }
+        val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
+        val scale = pixels.width / 80f
+        fun sample(x: Int, y: Int) = pixels[(x * scale).toInt(), (y * scale).toInt()]
+        val stroke = sample(25, 40)
+        assertEquals(stroke, sample(41, 41), "Corner dash must extend half a stroke beyond its centerline")
+        assertEquals(stroke, sample(30, 40), "Overlapping translucent strokes must retain the shaft colour")
+    }
 
     @Test fun linesAndArrowShaftsHaveRoundTipsAndJoinsWithoutWiderJoints() {
         fun points(row: Double) = listOf(GridPoint(row, 1.5), GridPoint(row, 2.5), GridPoint(row + 1, 2.5))

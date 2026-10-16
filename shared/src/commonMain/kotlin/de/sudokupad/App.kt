@@ -1,5 +1,7 @@
 package de.sudokupad
 
+import kotlin.math.roundToInt
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,8 +26,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.focus.FocusRequester
@@ -611,9 +613,13 @@ private fun String.toComposeColor(): Color? = runCatching {
 @Composable
 private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
     Box(Modifier.matchParentSize().drawWithCache {
-        val outlines = cages.map { cageOutline(it.cells, size.width / 9f, size.height / 9f, 4.dp.toPx()) }
-        val stroke = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())))
-        onDrawBehind { outlines.forEach { drawPath(it, Color(0xFF826B87), style = stroke) } }
+        val width = 1.dp.toPx().roundToInt().coerceAtLeast(1).toFloat()
+        val outlines = Path().apply {
+            cages.forEach { addPath(cageOutline(it.cells, size.width / 9f, size.height / 9f, 4.dp.toPx(), width)) }
+        }
+        val paint = cageOutlinePaint(width, 4.dp.toPx().roundToInt().toFloat(), 3.dp.toPx().roundToInt().toFloat())
+        // One paint operation keeps intersecting outlines at the same opacity.
+        onDrawBehind { drawIntoCanvas { it.drawPath(outlines, paint) } }
     })
 }
 
