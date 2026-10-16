@@ -35,9 +35,16 @@ internal fun PuzzleOverlay.isRevealedEdgeMark(litCells: Set<CellPosition>): Bool
     // Their box dimensions describe text sizing rather than the painted glyph bounds.
     val isXV = text?.trim()?.uppercase() in setOf("V", "X") &&
         width in 0.0..1.1 && height > 0 && height <= 1.1
-    val isDot = text.isNullOrBlank() && rounded && width > 0 && height > 0 &&
-        width <= .5 && height <= .5 && (backgroundColor != null || borderColor != null)
-    if (!isXV && !isDot) return false
+    if (!isXV && !isKropkiDot()) return false
+    return edgeMarkCells().any { it in litCells }
+}
+
+internal fun PuzzleOverlay.isKropkiDot(): Boolean =
+    text.isNullOrBlank() && rounded && width > 0 && height > 0 &&
+        width <= .5 && height <= .5 && (backgroundColor != null || borderColor != null) &&
+        edgeMarkCells().isNotEmpty()
+
+private fun PuzzleOverlay.edgeMarkCells(): List<CellPosition> {
     fun near(a: Double, b: Double) = abs(a - b) < .001
     val row = round(center.row).toInt()
     val column = round(center.column).toInt()
@@ -46,10 +53,8 @@ internal fun PuzzleOverlay.isRevealedEdgeMark(litCells: Set<CellPosition>): Bool
     val vertical = column in 1..8 && near(center.column, column.toDouble()) &&
         near(center.row, kotlin.math.floor(center.row) + .5) && center.row in 0.0..9.0
     return when {
-        horizontal -> CellPosition(row - 1, center.column.toInt()) in litCells ||
-            CellPosition(row, center.column.toInt()) in litCells
-        vertical -> CellPosition(center.row.toInt(), column - 1) in litCells ||
-            CellPosition(center.row.toInt(), column) in litCells
-        else -> false
+        horizontal -> listOf(CellPosition(row - 1, center.column.toInt()), CellPosition(row, center.column.toInt()))
+        vertical -> listOf(CellPosition(center.row.toInt(), column - 1), CellPosition(center.row.toInt(), column))
+        else -> emptyList()
     }
 }

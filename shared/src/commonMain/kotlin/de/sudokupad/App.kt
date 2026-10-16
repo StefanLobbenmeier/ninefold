@@ -301,8 +301,9 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
     val padCells = if (hasOutside) 1 else 0
     val litCells = remember(puzzle, cells) { puzzle.litCells(cells) }
     val revealedMarks = remember(puzzle, litCells) {
-        if (puzzle.fogLights == null) emptyList()
-        else (puzzle.underlays + puzzle.overlays).filter { it.isRevealedEdgeMark(litCells) }
+        (puzzle.underlays + puzzle.overlays).filter {
+            (puzzle.fogLights != null || it.isKropkiDot()) && it.isRevealedEdgeMark(litCells)
+        }
     }
     val measurer = rememberTextMeasurer()
     BoxWithConstraints(modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f)) {
@@ -433,7 +434,8 @@ private fun BoxScope.PuzzleGraphics(
         fun at(point: GridPoint) = Offset(((point.column + padCells) * cell).toFloat(), ((point.row + padCells) * cell).toFloat())
         fun overlay(item: PuzzleOverlay) {
             val center = at(item.center)
-            val area = Size((item.width * cell).toFloat(), (item.height * cell).toFloat())
+            val scale = if (item.isKropkiDot()) .75f else 1f
+            val area = Size((item.width * cell * scale).toFloat(), (item.height * cell * scale).toFloat())
             val topLeft = center - Offset(area.width / 2, area.height / 2)
             // Zero-width XV boxes size the text; stroking them paints a line behind the glyph.
             if (area.width > 0f && area.height > 0f) {
