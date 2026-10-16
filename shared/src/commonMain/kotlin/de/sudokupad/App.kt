@@ -1,5 +1,7 @@
 package de.sudokupad
 
+import kotlin.math.roundToInt
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,13 +20,16 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.focus.FocusRequester
@@ -527,6 +532,17 @@ private fun DrawScope.drawCellColours(colours: Set<Int>, topLeft: Offset = Offse
     }
 }
 
+private fun DrawScope.drawConstraintLine(points: List<Offset>, color: Color, width: Float) {
+    val path = Path()
+    // Separate round-capped segments give every waypoint a circle of diameter width.
+    // Stroke them together so translucent lines do not darken where segments meet.
+    points.zipWithNext().forEach { (start, end) ->
+        path.moveTo(start.x, start.y)
+        path.lineTo(end.x, end.y)
+    }
+    drawPath(path, color, style = Stroke(width, cap = StrokeCap.Round))
+}
+
 @Composable
 private fun BoxScope.PuzzleGraphics(
     puzzle: Puzzle, padCells: Int, measurer: androidx.compose.ui.text.TextMeasurer,
@@ -563,18 +579,16 @@ private fun BoxScope.PuzzleGraphics(
         }
         puzzle.underlays.filterNot { it in hiddenOverlays }.forEach(::overlay)
         puzzle.lines.forEach { line ->
-            val path = Path(); line.points.firstOrNull()?.let { path.moveTo(at(it).x, at(it).y) }
-            line.points.drop(1).forEach { path.lineTo(at(it).x, at(it).y) }
             val color = line.color.toComposeColor() ?: Color.Gray
             val width = (line.thickness / 50.0 * cell).toFloat().coerceAtLeast(2f)
-            drawPath(path, color, style = Stroke(width, cap = if (line.rule == LineRule.Thermometer) StrokeCap.Round else StrokeCap.Butt))
+            drawConstraintLine(line.points.map(::at), color, width)
             if (line.rule == LineRule.Thermometer) line.points.firstOrNull()?.let { bulb ->
                 drawCircle(color, radius = cell * .35f, center = at(bulb))
             }
         }
         puzzle.arrows.forEach { arrow ->
             val color = arrow.color.toComposeColor() ?: Color.Gray
-            arrow.points.zipWithNext().forEach { (a, b) -> drawLine(color, at(a), at(b), (arrow.thickness / 50.0 * cell).toFloat().coerceAtLeast(1.5f)) }
+            drawConstraintLine(arrow.points.map(::at), color, (arrow.thickness / 50.0 * cell).toFloat().coerceAtLeast(1.5f))
             val tip = arrow.points.lastOrNull()?.let(::at); val previous = arrow.points.dropLast(1).lastOrNull()?.let(::at)
             if (tip != null && previous != null) {
                 val angle = atan2((tip.y - previous.y).toDouble(), (tip.x - previous.x).toDouble())
@@ -600,17 +614,23 @@ private fun String.toComposeColor(): Color? = runCatching {
 
 @Composable
 private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
-    Canvas(Modifier.matchParentSize()) {
-        val cw = size.width / 9f; val ch = size.height / 9f; val cageColor = Color(0xFF826B87); val inset = 4.dp.toPx()
-        cages.forEach { cage -> cage.cells.forEach { cell ->
-            val left = cell.column * cw + inset; val top = cell.row * ch + inset; val right = (cell.column + 1) * cw - inset; val bottom = (cell.row + 1) * ch - inset
-            val effect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))
-            if (CellPosition(cell.row - 1, cell.column) !in cage.cells) drawLine(cageColor, Offset(left, top), Offset(right, top), 1.dp.toPx(), pathEffect = effect)
-            if (CellPosition(cell.row + 1, cell.column) !in cage.cells) drawLine(cageColor, Offset(left, bottom), Offset(right, bottom), 1.dp.toPx(), pathEffect = effect)
-            if (CellPosition(cell.row, cell.column - 1) !in cage.cells) drawLine(cageColor, Offset(left, top), Offset(left, bottom), 1.dp.toPx(), pathEffect = effect)
-            if (CellPosition(cell.row, cell.column + 1) !in cage.cells) drawLine(cageColor, Offset(right, top), Offset(right, bottom), 1.dp.toPx(), pathEffect = effect)
-        } }
-    }
+    Box(Modifier.matchParentSize().drawWithCache {
+        val width = 1.dp.toPx().roundToInt().coerceAtLeast(1).toFloat()
+        val cw = size.width / 9f
+        val ch = size.height / 9f
+        val outlines = Path().apply {
+            cages.forEach { cage ->
+                addPath(cageOutline(cage.cells, cw, ch, cageInset(cw), insetY = cageInset(ch), strokeWidth = width))
+            }
+        }
+        val gaps = cageGapMask(cw, ch, strokeWidth = width)
+        val paint = cageOutlinePaint(width)
+        onDrawBehind {
+            clipPath(gaps, ClipOp.Difference) {
+                drawIntoCanvas { it.drawPath(outlines, paint) }
+            }
+        }
+    })
 }
 
 @Composable
