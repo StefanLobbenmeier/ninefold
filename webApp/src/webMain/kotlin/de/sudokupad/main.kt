@@ -20,10 +20,12 @@ fun main() {
             onDispose { unsubscribe() }
         }
         CompositionLocalProvider(LocalUriHandler provides ExternalUriHandler) {
-            App(
-                BrowserIndexCache, initialShareLink = pageUrl, shareBaseUrl = pageUrl,
-                appUpdateState = updateState, onApplyUpdate = ::applyAppUpdate,
-            )
+            WithStartupFonts {
+                App(
+                    BrowserIndexCache, initialShareLink = pageUrl, shareBaseUrl = pageUrl,
+                    appUpdateState = updateState, onApplyUpdate = ::applyAppUpdate,
+                )
+            }
         }
     }
 }
