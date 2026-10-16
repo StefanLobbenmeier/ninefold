@@ -167,6 +167,9 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
                 if (grid != null) {
                     Text(if (importedPuzzle == null) "Compare every clue with the original, even if the checks pass. Select any cell to add, replace, or erase a digit."
                         else "Review the imported puzzle. Graphical marks are preserved; only rules with a known meaning are checked automatically.")
+                    if (importedPuzzle?.antiKnight == true) {
+                        Text("Knight’s move rule imported: cells a chess knight’s move apart cannot contain the same digit.")
+                    }
                     importedPuzzle?.takeIf { it.lines.isNotEmpty() }?.let { puzzle ->
                         val unspecified = puzzle.lines.count { it.rule == LineRule.Unspecified }
                         OutlinedButton({ showLineRules = true }) {

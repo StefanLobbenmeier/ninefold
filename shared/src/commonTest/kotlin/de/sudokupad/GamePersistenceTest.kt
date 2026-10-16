@@ -78,6 +78,7 @@ class GamePersistenceTest {
         val entry = SudokuIndexEntry("one", "Test", "Test", "2026-10-12", "https://sudokupad.app/test", "https://example.com/video")
         val puzzle = SudokuFixtures.classic.copy(
             sourceUrl = entry.puzzleUrl,
+            antiKnight = true,
             lines = listOf(PuzzleLine(listOf(GridPoint(.5, .5), GridPoint(1.5, .5)), rule = LineRule.Thermometer)),
             arrows = listOf(PuzzleArrow(listOf(GridPoint(.5, .5)), circle = CellPosition(0, 0))),
             overlays = listOf(PuzzleOverlay(GridPoint(.5, .5), text = "X")),

@@ -179,6 +179,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         solution = solution?.filter(Char::isDigit)?.takeIf { it.length == 81 },
         cages = cages,
         rules = rules,
+        antiKnight = metadata.boolean("antiknight") ?: root.boolean("antiknight") ?: false,
         lines = lines,
         arrows = arrows,
         overlays = overlays,

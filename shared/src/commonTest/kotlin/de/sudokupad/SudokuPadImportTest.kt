@@ -12,6 +12,19 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun importsExplicitAntiKnightFlags() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"metadata":{"antiknight":true}"""))
+        assertTrue(puzzle.antiKnight)
+        assertTrue(parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"antiknight":true""")).antiKnight)
+        assertEquals(false, parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload()).antiKnight)
+        assertEquals(false, parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"metadata":{"antiknight":false}""")).antiKnight)
+        assertEquals(false, parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"metadata":{"rules":"A knight appears in the artwork."}""")).antiKnight)
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+    }
+
     @Test fun fetchesFromCorsEndpointAndEncodesNamespacedIds() = runTest {
         val engine = MockEngine { request ->
             assertEquals("https://sudokupad.svencodes.com/ctclegacy/test-setter%2Ftest-puzzle", request.url.toString())
