@@ -27,6 +27,39 @@ import kotlin.math.roundToInt
 class ConstraintRenderingTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun cagesKeepTheSameSizeAndDashPatternAcrossBoxDividers() {
+        val puzzle = SudokuFixtures.empty.copy(cages = (0..8).map {
+            KillerCage(null, setOf(CellPosition(it, it)))
+        })
+        compose.setContent {
+            Canvas(Modifier.size(584.dp).testTag("outline")) {
+                drawRect(Color.White)
+                val gap = 4.dp.toPx()
+                val cell = BoardAxis(size.width, gap).cellSize
+                val width = 1.dp.toPx()
+                val outlines = Path().apply {
+                    puzzle.cages.forEach {
+                        addPath(cageOutline(it.cells, cell, cell, cageInset(cell), strokeWidth = width, boxGap = gap))
+                    }
+                }
+                clipPath(cageGapMask(cell, cell, strokeWidth = width, boxGap = gap), ClipOp.Difference) {
+                    drawIntoCanvas { it.drawPath(outlines, cageOutlinePaint(width)) }
+                }
+            }
+        }
+        val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
+        val axis = BoardAxis(pixels.width.toFloat(), pixels.width * 4f / 584)
+        val cell = axis.cellSize.roundToInt()
+        assertTrue((0 until cell).any { x -> (0 until cell).any { y -> pixels[x, y] != Color.White } })
+        for (index in 1..8) {
+            val offset = axis.start(index).roundToInt()
+            for (x in 0 until cell) for (y in 0 until cell) {
+                assertEquals(pixels[x, y], pixels[offset + x, offset + y],
+                    "Cage in cell $index must match the first cell, including beside box dividers")
+            }
+        }
+    }
+
     @Test fun cagePatternRepeatsAndMirrorsAcrossEveryCellBorder() {
         compose.setContent {
             Canvas(Modifier.size(192.dp).testTag("outline")) {

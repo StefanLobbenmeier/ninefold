@@ -15,7 +15,7 @@ import kotlin.math.roundToInt
 internal const val CAGE_REPEATS_PER_CELL = 8
 internal fun cageInset(cellSize: Float): Float = cellSize / (2 * CAGE_REPEATS_PER_CELL)
 
-private class CageAxis(val cellSize: Float, strokeWidth: Float) {
+private class CageAxis(val cellSize: Float, strokeWidth: Float, private val boxGap: Float = 0f) {
     private val period = cellSize / CAGE_REPEATS_PER_CELL
     private val width = strokeWidth.roundToInt().coerceAtLeast(1)
     private val phase = (width % 2) / 2f
@@ -25,8 +25,9 @@ private class CageAxis(val cellSize: Float, strokeWidth: Float) {
     fun center(index: Int): Float {
         val cell = index / CAGE_REPEATS_PER_CELL
         val slot = index % CAGE_REPEATS_PER_CELL
-        val left = (cell * cellSize).roundToInt()
-        val right = ((cell + 1) * cellSize).roundToInt()
+        val offset = (cell / 3) * boxGap
+        val left = (cell * cellSize + offset).roundToInt()
+        val right = ((cell + 1) * cellSize + offset).roundToInt()
         // Round one half of a cell and reflect it. Rounding both halves
         // independently would bias odd-width strokes by one pixel at ties.
         val firstHalfSlot = minOf(slot, CAGE_REPEATS_PER_CELL - 1 - slot)
@@ -34,17 +35,21 @@ private class CageAxis(val cellSize: Float, strokeWidth: Float) {
         val aligned = (ideal - phase).roundToInt() + phase
         return if (slot < CAGE_REPEATS_PER_CELL / 2) aligned else left + right - aligned
     }
-    fun align(value: Float): Float = center((value / period - .5f).roundToInt())
+    fun align(value: Float): Float {
+        val cell = (value / (3 * cellSize + boxGap)).toInt() * 3
+        val local = value - cell * cellSize - (cell / 3) * boxGap
+        return center(cell * CAGE_REPEATS_PER_CELL + (local / period - .5f).roundToInt())
+    }
     fun start(index: Int): Float = center(index) - dash / 2
     fun end(index: Int): Float = center(index) + dash / 2
 }
 
 /** Integer-edged erasing strips, applied only while drawing cage strokes. */
 internal fun cageGapMask(
-    cellWidth: Float, cellHeight: Float, columns: Int = 9, rows: Int = 9, strokeWidth: Float = 1f,
+    cellWidth: Float, cellHeight: Float, columns: Int = 9, rows: Int = 9, strokeWidth: Float = 1f, boxGap: Float = 0f,
 ): Path = Path().apply {
-    val x = CageAxis(cellWidth, strokeWidth)
-    val y = CageAxis(cellHeight, strokeWidth)
+    val x = CageAxis(cellWidth, strokeWidth, boxGap)
+    val y = CageAxis(cellHeight, strokeWidth, boxGap)
     for (index in 0..columns * CAGE_REPEATS_PER_CELL) {
         val left = if (index == 0) -cellWidth else x.end(index - 1)
         val right = if (index == columns * CAGE_REPEATS_PER_CELL) (columns + 1) * cellWidth else x.start(index)
@@ -69,11 +74,11 @@ internal fun cageOutlinePaint(width: Float, colour: Color = Color(0xFF826B87)) =
 /** Join inset cell interiors into a solid outline without shared internal borders. */
 internal fun cageOutline(
     cells: Set<CellPosition>, cellWidth: Float, cellHeight: Float, inset: Float,
-    insetY: Float = inset, strokeWidth: Float = 0f,
+    insetY: Float = inset, strokeWidth: Float = 0f, boxGap: Float = 0f,
 ): Path {
     var outline = Path()
-    val x = if (strokeWidth > 0f) CageAxis(cellWidth, strokeWidth) else null
-    val y = if (strokeWidth > 0f) CageAxis(cellHeight, strokeWidth) else null
+    val x = if (strokeWidth > 0f) CageAxis(cellWidth, strokeWidth, boxGap) else null
+    val y = if (strokeWidth > 0f) CageAxis(cellHeight, strokeWidth, boxGap) else null
     fun add(left: Float, top: Float, right: Float, bottom: Float) {
         val rectangle = Path().apply {
             addRect(Rect(x?.align(left) ?: left, y?.align(top) ?: top,
@@ -82,18 +87,20 @@ internal fun cageOutline(
         outline = Path.combine(PathOperation.Union, outline, rectangle)
     }
     cells.forEach { cell ->
-        val left = cell.column * cellWidth + inset
-        val top = cell.row * cellHeight + insetY
-        val right = (cell.column + 1) * cellWidth - inset
-        val bottom = (cell.row + 1) * cellHeight - insetY
+        val left = cell.column * cellWidth + (cell.column / 3) * boxGap + inset
+        val top = cell.row * cellHeight + (cell.row / 3) * boxGap + insetY
+        val right = left + cellWidth - 2 * inset
+        val bottom = top + cellHeight - 2 * insetY
+        val bridgeX = 2 * inset + if (cell.column % 3 == 2) boxGap else 0f
+        val bridgeY = 2 * insetY + if (cell.row % 3 == 2) boxGap else 0f
         add(left, top, right, bottom)
         // Bridges cross shared cell borders, including both inset margins.
-        if (CellPosition(cell.row, cell.column + 1) in cells) add(right, top, right + 2 * inset, bottom)
-        if (CellPosition(cell.row + 1, cell.column) in cells) add(left, bottom, right, bottom + 2 * insetY)
+        if (CellPosition(cell.row, cell.column + 1) in cells) add(right, top, right + bridgeX, bottom)
+        if (CellPosition(cell.row + 1, cell.column) in cells) add(left, bottom, right, bottom + bridgeY)
         if (CellPosition(cell.row, cell.column + 1) in cells &&
             CellPosition(cell.row + 1, cell.column) in cells &&
             CellPosition(cell.row + 1, cell.column + 1) in cells) {
-            add(right, bottom, right + 2 * inset, bottom + 2 * insetY)
+            add(right, bottom, right + bridgeX, bottom + bridgeY)
         }
     }
     return outline

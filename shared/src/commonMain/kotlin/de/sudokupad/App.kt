@@ -21,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -54,6 +56,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
@@ -395,29 +399,35 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
     val measurer = rememberTextMeasurer()
     BoxWithConstraints(modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f)) {
         val digitSize = minOf(24f, maxWidth.value / (9 + padCells * 2) * .6f).sp
-        val inset = maxWidth * (padCells.toFloat() / (9 + padCells * 2))
+        val density = LocalDensity.current
+        val inset = with(density) {
+            (maxWidth * (padCells.toFloat() / (9 + padCells * 2)) + 2.dp).roundToPx().toDp()
+        }
+        // Reserve the extra divider width; match the pixel rounding used by layout spacers.
+        val boxGap = with(density) { (1.5.dp - .55.dp).roundToPx().toDp() }
         Box(Modifier.fillMaxSize().background(if (hasOutside) Paper else Color.White)) {
             Box(Modifier.fillMaxSize().padding(inset).background(Color.White))
             Canvas(Modifier.fillMaxSize().padding(inset)) {
-                val cellWidth = size.width / 9
-                val cellHeight = size.height / 9
-                val edge = 2.dp.toPx()
-                clipRect(edge, edge, size.width - edge, size.height - edge) {
+                val x = BoardAxis(size.width, boxGap.toPx())
+                val y = BoardAxis(size.height, boxGap.toPx())
+                clipRect {
                     cells.forEachIndexed { index, cell ->
                         drawCellColours(cell.displayColours(automaticColours),
-                            Offset(index % 9 * cellWidth, index / 9 * cellHeight),
-                            Size(cellWidth, cellHeight))
+                            Offset(x.start(index % 9), y.start(index / 9)),
+                            Size(x.cellSize, y.cellSize))
                     }
                 }
             }
-            PuzzleGraphics(puzzle, padCells, measurer, hiddenOverlays = revealedMarks)
+            PuzzleGraphics(puzzle, inset, boxGap, measurer, hiddenOverlays = revealedMarks)
             Box(Modifier.fillMaxSize().padding(inset).then(
                 if (onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
                     var lastTapPosition: CellPosition? = null
                     var lastTapTime = Long.MIN_VALUE
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        val start = boardCellAt(down.position.x / size.width, down.position.y / size.height)
+                        val x = BoardAxis(size.width.toFloat(), boxGap.toPx())
+                        val y = BoardAxis(size.height.toFloat(), boxGap.toPx())
+                        val start = boardCellAt(x.normalized(down.position.x), y.normalized(down.position.y))
                         if (start != null) {
                             val modifiers = currentEvent.keyboardModifiers
                             val additive = currentAdditive || modifiers.isCtrlPressed || modifiers.isMetaPressed
@@ -433,8 +443,8 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                                 val crossed = boardCellsAlongSegment(
-                                    previous.x / size.width, previous.y / size.height,
-                                    change.position.x / size.width, change.position.y / size.height,
+                                    x.normalized(previous.x), y.normalized(previous.y),
+                                    x.normalized(change.position.x), y.normalized(change.position.y),
                                     additive = additive,
                                 )
                                 val next = gesture.visit(crossed)
@@ -463,14 +473,14 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     }
                 }
             )) {
-                Column(Modifier.fillMaxSize()) { repeat(9) { row -> Row(Modifier.weight(1f)) { repeat(9) { column ->
+                BoardCells(boxGap) { repeat(9) { row -> repeat(9) { column ->
             val position = CellPosition(row, column); val cell = cells[position.index]; val isSelected = position in selected
             val colours = cell.displayColours(automaticColours)
             val same = cell.value != null && selected.any { cells[it.index].value == cell.value }
             val background = when { isSelected -> Color.LightGray.copy(alpha = .3f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); else -> Color.Transparent }.let { if (colours.isNotEmpty()) it.copy(alpha = minOf(it.alpha, .18f)) else it }
             val textBackdrop = if (CellColour.DarkGrey.number in colours) Color.White.copy(alpha = .85f) else Color.Transparent
             val fogged = puzzle.fogLights != null && position !in litCells
-            Box(Modifier.weight(1f).fillMaxHeight().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (colours.isNotEmpty()) ", colours ${colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (colours.isNotEmpty()) ", colours ${colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.clickable { onSelect(position) }, contentAlignment = Alignment.Center) {
                 if (fogged) Canvas(Modifier.matchParentSize()) {
                     drawRect(Color(0xFFB4B7B5))
                     drawCellColours(colours)
@@ -497,8 +507,8 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                 }
                 if (!fogged) puzzle.cages.firstOrNull { position in it.cells }?.let { cage -> if (cage.total != null && position == cage.cells.minBy { it.index }) Text(cage.total.toString(), Modifier.align(Alignment.TopStart).padding(start = 3.dp, top = 1.dp), fontSize = 8.sp, color = Color(0xFF765A7C), fontWeight = FontWeight.Bold) }
             }
-                } } } }
-                CageOverlay(puzzle.cages.mapNotNull { cage ->
+                } } }
+                CageOverlay(boxGap, puzzle.cages.mapNotNull { cage ->
                     val visible = cage.cells.intersect(litCells)
                     cage.copy(cells = visible).takeIf { visible.isNotEmpty() }
                 })
@@ -508,17 +518,43 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                 val thin = .55.dp.toPx()
                 val thick = 1.5.dp.toPx()
                 val color = Ink.copy(alpha = .65f)
+                val horizontal = BoardAxis(size.width, boxGap.toPx())
+                val vertical = BoardAxis(size.height, boxGap.toPx())
                 for (line in 1..8) {
                     val width = if (line % 3 == 0) thick else thin
-                    val x = size.width * line / 9f
-                    val y = size.height * line / 9f
+                    val x = horizontal.divider(line)
+                    val y = vertical.divider(line)
                     drawLine(color, Offset(x, 0f), Offset(x, size.height), width)
                     drawLine(color, Offset(0f, y), Offset(size.width, y), width)
                 }
             }
             // Edge clues are drawn whole above fog and grid lines once either neighbor is lit.
-            if (revealedMarks.isNotEmpty()) PuzzleGraphics(puzzle, padCells, measurer, revealedMarks)
-            Box(Modifier.fillMaxSize().padding(inset).border(2.dp, Ink))
+            if (revealedMarks.isNotEmpty()) PuzzleGraphics(puzzle, inset, boxGap, measurer, revealedMarks)
+            Canvas(Modifier.fillMaxSize().padding(inset)) {
+                val width = 2.dp.toPx()
+                // The complete stroke sits outside the cell area.
+                drawRect(Ink, Offset(-width / 2, -width / 2),
+                    Size(size.width + width, size.height + width), style = Stroke(width))
+            }
+        }
+    }
+}
+
+/** Use the same rounded cell edges for layout, grid lines, and cage dashes. */
+@Composable
+private fun BoardCells(boxGap: Dp, content: @Composable () -> Unit) {
+    Layout(content, Modifier.fillMaxSize()) { children, constraints ->
+        val x = BoardAxis(constraints.maxWidth.toFloat(), boxGap.toPx())
+        val y = BoardAxis(constraints.maxHeight.toFloat(), boxGap.toPx())
+        val placements = children.mapIndexed { index, child ->
+            val left = x.start(index % 9).roundToInt()
+            val top = y.start(index / 9).roundToInt()
+            val width = (x.start(index % 9) + x.cellSize).roundToInt() - left
+            val height = (y.start(index / 9) + y.cellSize).roundToInt() - top
+            Triple(child.measure(Constraints.fixed(width, height)), left, top)
+        }
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            placements.forEach { (cell, left, top) -> cell.place(left, top) }
         }
     }
 }
@@ -545,13 +581,15 @@ private fun DrawScope.drawConstraintLine(points: List<Offset>, color: Color, wid
 
 @Composable
 private fun BoxScope.PuzzleGraphics(
-    puzzle: Puzzle, padCells: Int, measurer: androidx.compose.ui.text.TextMeasurer,
+    puzzle: Puzzle, inset: Dp, boxGap: Dp, measurer: androidx.compose.ui.text.TextMeasurer,
     revealedMarks: List<PuzzleOverlay>? = null, hiddenOverlays: List<PuzzleOverlay> = emptyList(),
 ) {
     Canvas(Modifier.matchParentSize()) {
-        val total = (9 + padCells * 2).toFloat()
-        val cell = size.width / total
-        fun at(point: GridPoint) = Offset(((point.column + padCells) * cell).toFloat(), ((point.row + padCells) * cell).toFloat())
+        val padding = inset.toPx()
+        val x = BoardAxis(size.width - 2 * padding, boxGap.toPx())
+        val y = BoardAxis(size.height - 2 * padding, boxGap.toPx())
+        val cell = x.cellSize
+        fun at(point: GridPoint) = Offset(padding + x.at(point.column), padding + y.at(point.row))
         fun overlay(item: PuzzleOverlay) {
             val center = at(item.center)
             val scale = if (item.isKropkiDot()) .75f else 1f
@@ -613,17 +651,18 @@ private fun String.toComposeColor(): Color? = runCatching {
 }.getOrNull()
 
 @Composable
-private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
+private fun BoxScope.CageOverlay(boxGap: Dp, cages: List<KillerCage>) {
     Box(Modifier.matchParentSize().drawWithCache {
         val width = 1.dp.toPx().roundToInt().coerceAtLeast(1).toFloat()
-        val cw = size.width / 9f
-        val ch = size.height / 9f
+        val gap = boxGap.toPx()
+        val cw = BoardAxis(size.width, gap).cellSize
+        val ch = BoardAxis(size.height, gap).cellSize
         val outlines = Path().apply {
             cages.forEach { cage ->
-                addPath(cageOutline(cage.cells, cw, ch, cageInset(cw), insetY = cageInset(ch), strokeWidth = width))
+                addPath(cageOutline(cage.cells, cw, ch, cageInset(cw), insetY = cageInset(ch), strokeWidth = width, boxGap = gap))
             }
         }
-        val gaps = cageGapMask(cw, ch, strokeWidth = width)
+        val gaps = cageGapMask(cw, ch, strokeWidth = width, boxGap = gap)
         val paint = cageOutlinePaint(width)
         onDrawBehind {
             clipPath(gaps, ClipOp.Difference) {
