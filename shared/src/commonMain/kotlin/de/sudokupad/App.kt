@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -25,7 +26,21 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -112,6 +127,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var colourSettings by remember { mutableStateOf<CellColour?>(null) }
     var selected by remember { mutableStateOf(setOf(CellPosition(0, 2))) }
     val mode = InputMode.entries.firstOrNull { it.name == repository.settings.inputMode } ?: InputMode.Digit
+    var temporaryMode by remember { mutableStateOf<InputMode?>(null) }
+    val effectiveMode = temporaryMode ?: mode
     var showRules by remember { mutableStateOf(saved?.started != true) }
     var started by remember(puzzle) { mutableStateOf(saved?.started ?: false) }
     val multiSelect = repository.settings.multiSelect
@@ -162,8 +179,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         if (next == cells) return
         history = history + listOf(cells); redoStack = emptyList(); cells = next; finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save()
     }
-    fun enter(number: Int?) = update { next ->
-        val entered = applyInput(next, selected, mode, number)
+    fun enter(number: Int?, inputMode: InputMode = mode) = update { next ->
+        val entered = applyInput(next, selected, inputMode, number)
         next.clear(); next.addAll(entered)
     }
     fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
@@ -181,13 +198,73 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         if (colourSettings != null) return
         changeSelection(BoardSelectionGesture(selected, position, multiSelect).visit())
     }
+    fun smartSelect(position: CellPosition, additive: Boolean) {
+        if (colourSettings != null) return
+        val matches = toolSensitiveSelection(cells, position, effectiveMode)
+        if (matches.isNotEmpty()) changeSelection(if (additive) selected + matches else matches)
+    }
+    fun setMode(next: InputMode) = repository.saveSettings(repository.settings.copy(inputMode = next.name))
+    fun handleShortcut(shortcut: GameShortcut) {
+        when (shortcut) {
+            is GameShortcut.Enter -> enter(shortcut.number, shortcut.mode ?: effectiveMode)
+            is GameShortcut.MoveSelection -> selected.lastOrNull()?.let { anchor ->
+                val next = CellPosition(
+                    (anchor.row + shortcut.rowDelta + 9) % 9,
+                    (anchor.column + shortcut.columnDelta + 9) % 9,
+                )
+                changeSelection(if (shortcut.extend) selected + next else setOf(next))
+            }
+            is GameShortcut.SelectMode -> setMode(shortcut.mode)
+            is GameShortcut.CycleMode -> {
+                val modes = InputMode.entries
+                setMode(modes[(mode.ordinal + shortcut.delta + modes.size) % modes.size])
+            }
+            GameShortcut.SelectAll -> changeSelection((0 until 81).mapTo(linkedSetOf()) { CellPosition(it / 9, it % 9) })
+            GameShortcut.ClearSelection -> changeSelection(emptySet())
+            GameShortcut.InvertSelection -> changeSelection((0 until 81).mapTo(linkedSetOf()) { CellPosition(it / 9, it % 9) } - selected)
+            GameShortcut.Undo -> undo()
+            GameShortcut.Redo -> redo()
+        }
+    }
     val clearSelection by rememberUpdatedState { changeSelection(emptySet()) }
 
-
+    val focusRequester = remember { FocusRequester() }
     val back by rememberUpdatedState(onBrowse)
     PlayerBackHandler(onBrowse)
     LaunchedEffect(puzzle) { repository.markPlayed(puzzle) }
-    BoxWithConstraints(Modifier.fillMaxSize().edgeSwipeBack { back() }.background(Paper).safeDrawingPadding().pointerInput(Unit) {
+    LaunchedEffect(puzzle, showRules, showChecking, showSuccess, colourSettings) {
+        if (showRules || showChecking || showSuccess || colourSettings != null) temporaryMode = null
+        if (!showRules && !showChecking && !showSuccess && colourSettings == null) focusRequester.requestFocus()
+    }
+    BoxWithConstraints(Modifier.fillMaxSize().focusRequester(focusRequester).onFocusChanged {
+        if (!it.hasFocus) temporaryMode = null
+    }.onPreviewKeyEvent { event ->
+        if (event.type != KeyEventType.KeyDown || showRules || showChecking || showSuccess || colourSettings != null) return@onPreviewKeyEvent false
+        temporaryMode = when {
+            (event.isCtrlPressed || event.isMetaPressed) && event.isShiftPressed -> InputMode.Colour
+            event.isCtrlPressed || event.isMetaPressed -> InputMode.Centre
+            event.isShiftPressed -> InputMode.Corner
+            else -> null
+        }
+        val shortcut = gameShortcut(
+            event.key,
+            primaryModifier = event.isCtrlPressed || event.isMetaPressed,
+            shift = event.isShiftPressed,
+            alt = event.isAltPressed,
+        ) ?: return@onPreviewKeyEvent false
+        handleShortcut(shortcut)
+        true
+    }.onKeyEvent { event ->
+        if (event.type == KeyEventType.KeyUp) {
+            temporaryMode = when {
+                (event.isCtrlPressed || event.isMetaPressed) && event.isShiftPressed -> InputMode.Colour
+                event.isCtrlPressed || event.isMetaPressed -> InputMode.Centre
+                event.isShiftPressed -> InputMode.Corner
+                else -> null
+            }
+        }
+        false
+    }.focusable().edgeSwipeBack { back() }.background(Paper).safeDrawingPadding().pointerInput(Unit) {
         awaitEachGesture {
             // Board gestures and controls consume their presses before the final pass.
             // An unhandled press is on the background (including outside clues).
@@ -203,17 +280,17 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                     PuzzleHeading(puzzle, compact = true, elapsed = elapsed)
                     BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                         val boardSize = minOf(maxWidth, maxHeight)
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     }
-                    Controls(mode, { repository.saveSettings(repository.settings.copy(inputMode = it.name)) }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
+                    Controls(effectiveMode, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
                 }
             } else {
                 Row(Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PuzzleHeading(puzzle, elapsed = elapsed); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }) { select(it) }
+                        PuzzleHeading(puzzle, elapsed = elapsed); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect) { select(it) }
                     }
                     Column(Modifier.widthIn(min = 270.dp, max = 350.dp)) {
-                        SideCard("PLAY") { Controls(mode, { repository.saveSettings(repository.settings.copy(inputMode = it.name)) }, ::enter, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }) }
+                        SideCard("PLAY") { Controls(effectiveMode, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
                             puzzle.rules.forEachIndexed { index, rule -> Row(Modifier.padding(vertical = 6.dp)) {
@@ -295,9 +372,10 @@ private fun CompletionDialog(puzzle: Puzzle, elapsed: Long, onViewPuzzle: () -> 
 }
 
 @Composable
-internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), onSelect: (CellPosition) -> Unit) {
+internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), onSelect: (CellPosition) -> Unit) {
     val currentSelection by rememberUpdatedState(selected)
     val currentDragSelection by rememberUpdatedState(onDragSelection)
+    val currentToolSelect by rememberUpdatedState(onToolSelect)
     val currentAdditive by rememberUpdatedState(additiveSelection)
     val hasOutside = (puzzle.overlays + puzzle.underlays).any { it.center.row !in 0.0..9.0 || it.center.column !in 0.0..9.0 } ||
         puzzle.arrows.any { arrow -> arrow.points.any { it.row !in 0.0..9.0 || it.column !in 0.0..9.0 } }
@@ -329,14 +407,20 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             PuzzleGraphics(puzzle, padCells, measurer, hiddenOverlays = revealedMarks)
             Box(Modifier.fillMaxSize().padding(inset).then(
                 if (onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
+                    var lastTapPosition: CellPosition? = null
+                    var lastTapTime = Long.MIN_VALUE
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                         val start = boardCellAt(down.position.x / size.width, down.position.y / size.height)
                         if (start != null) {
-                            val additive = currentAdditive
+                            val modifiers = currentEvent.keyboardModifiers
+                            val additive = currentAdditive || modifiers.isCtrlPressed || modifiers.isMetaPressed
+                            val isDoubleTap = start == lastTapPosition && down.uptimeMillis - lastTapTime <= 400L
                             val gesture = BoardSelectionGesture(currentSelection, start, additive)
                             var gestureSelection = gesture.visit()
                             var previous = down.position
+                            var moved = false
+                            var lastEventTime = down.uptimeMillis
                             down.consume()
                             currentDragSelection?.invoke(gestureSelection)
                             do {
@@ -349,12 +433,26 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                                 )
                                 val next = gesture.visit(crossed)
                                 if (next != gestureSelection) {
+                                    moved = true
                                     gestureSelection = next
                                     currentDragSelection?.invoke(next)
                                 }
                                 previous = change.position
+                                lastEventTime = change.uptimeMillis
                                 change.consume()
                             } while (change.pressed)
+                            val isLongPress = !moved && lastEventTime - down.uptimeMillis >= 500L
+                            if (isDoubleTap || isLongPress) {
+                                currentToolSelect?.invoke(start, additive)
+                                lastTapPosition = null
+                                lastTapTime = Long.MIN_VALUE
+                            } else if (!moved) {
+                                lastTapPosition = start
+                                lastTapTime = lastEventTime
+                            } else {
+                                lastTapPosition = null
+                                lastTapTime = Long.MIN_VALUE
+                            }
                         }
                     }
                 }

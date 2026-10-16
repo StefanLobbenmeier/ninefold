@@ -3,6 +3,33 @@ package de.sudokupad
 import kotlin.test.*
 
 class BoardSelectionTest {
+    @Test fun toolSensitiveSelectionUsesTheActiveModesMatchingRules() {
+        val cells = List(81) { CellState() }.toMutableList().also {
+            it[0] = CellState(value = 4)
+            it[1] = CellState(value = 4)
+            it[9] = CellState(centreNotes = setOf(1, 2))
+            it[10] = CellState(centreNotes = setOf(1, 2, 9))
+            it[18] = CellState(cornerNotes = setOf(3))
+            it[19] = CellState(cornerNotes = setOf(3, 8))
+            it[27] = CellState(colours = setOf(7))
+            it[28] = CellState(colours = setOf(7, 9))
+        }
+
+        assertEquals(setOf(CellPosition(0, 0), CellPosition(0, 1)), toolSensitiveSelection(cells, CellPosition(0, 0), InputMode.Digit))
+        assertEquals(setOf(CellPosition(1, 0), CellPosition(1, 1)), toolSensitiveSelection(cells, CellPosition(1, 0), InputMode.Centre))
+        assertEquals(setOf(CellPosition(2, 0), CellPosition(2, 1)), toolSensitiveSelection(cells, CellPosition(2, 0), InputMode.Corner))
+        assertEquals(setOf(CellPosition(3, 0), CellPosition(3, 1)), toolSensitiveSelection(cells, CellPosition(3, 0), InputMode.Colour))
+    }
+
+    @Test fun toolSensitiveSelectionFallsBackWhenThePreferredPropertyIsEmpty() {
+        val cells = List(81) { CellState() }.toMutableList().also {
+            it[0] = CellState(cornerNotes = setOf(6))
+            it[10] = CellState(cornerNotes = setOf(5, 6))
+        }
+        assertEquals(setOf(CellPosition(0, 0), CellPosition(1, 1)), toolSensitiveSelection(cells, CellPosition(0, 0), InputMode.Centre))
+        assertEquals(emptySet(), toolSensitiveSelection(cells, CellPosition(8, 8), InputMode.Digit))
+    }
+
     @Test fun removalKeepsUntouchedCellsAndNeverAddsOrRetogglesVisitedCells() {
         val first = CellPosition(0, 0)
         val second = CellPosition(0, 1)

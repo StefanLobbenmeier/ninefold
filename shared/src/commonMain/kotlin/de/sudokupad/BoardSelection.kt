@@ -28,6 +28,45 @@ internal fun selectionBorders(position: CellPosition, selected: Set<CellPosition
     }
 }
 
+/** Sven's tool-sensitive matching order, excluding cosmetic clues that are not cell state. */
+internal fun toolSensitiveSelection(
+    cells: List<CellState>,
+    position: CellPosition,
+    mode: InputMode,
+): Set<CellPosition> {
+    val source = cells[position.index]
+    val selectors: List<(CellState) -> Boolean> = when (mode) {
+        InputMode.Digit -> listOf(
+            { it.value != null && it.value == source.value },
+            { it.colours.intersect(source.colours).isNotEmpty() },
+            { source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
+            { it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
+        )
+        InputMode.Centre -> listOf(
+            { it.value != null && it.value == source.value },
+            { source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
+            { it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
+            { it.colours.intersect(source.colours).isNotEmpty() },
+        )
+        InputMode.Corner -> listOf(
+            { it.value != null && it.value == source.value },
+            { it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
+            { source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
+            { it.colours.intersect(source.colours).isNotEmpty() },
+        )
+        InputMode.Colour -> listOf(
+            { it.colours.intersect(source.colours).isNotEmpty() },
+            { it.value != null && it.value == source.value },
+            { source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
+            { it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
+        )
+    }
+    val selector = selectors.firstOrNull { it(source) } ?: return emptySet()
+    return cells.indices.filterTo(linkedSetOf()) { selector(cells[it]) }.mapTo(linkedSetOf()) {
+        CellPosition(it / 9, it % 9)
+    }
+}
+
 /** Board coordinates are normalized to 0..1; outside clues never select a cell. */
 internal fun boardCellAt(x: Float, y: Float): CellPosition? {
     if (!x.isFinite() || !y.isFinite() || x < 0f || y < 0f || x >= 1f || y >= 1f) return null

@@ -69,6 +69,10 @@ class SudokuPadImportTest {
             """"cage":[{"cells":["R1C1"],"value":"msgcorrect: Legacy finish"}]"""))
         assertEquals("Legacy finish", legacy.successMessage)
         assertEquals(legacy, puzzleFromShareLink(puzzleShareLink(legacy)))
+
+        val multiline = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties =
+            """"cage":[{"cells":["R1C1"],"value":"msgcorrect: First line\nSecond line"}]"""))
+        assertEquals("First line\nSecond line", multiline.successMessage)
     }
 
     @Test fun reportsUnavailablePuzzlesWithoutParsingTheErrorBody() = runTest {

@@ -211,7 +211,7 @@ private fun importedSuccessMessage(root: JsonObject, metadata: JsonObject): Stri
     ).firstOrNull { !it.isNullOrBlank() }
     if (explicit != null) return explicit.trim()
 
-    val marker = Regex("^msgcorrect:\\s*(.+)$", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    val marker = Regex("^msgcorrect:\\s*([\\s\\S]+)$", RegexOption.IGNORE_CASE)
     return listOf("cages", "killercage", "cage").asSequence()
         .flatMap { root.array(it).orEmpty().asSequence() }
         .mapNotNull { element -> element.jsonObject.string("value") }
