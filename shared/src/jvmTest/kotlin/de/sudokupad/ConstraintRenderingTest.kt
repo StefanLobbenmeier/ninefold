@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
@@ -21,6 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.math.roundToInt
 
 class ConstraintRenderingTest {
     @get:Rule val compose = createComposeRule()
@@ -29,19 +31,31 @@ class ConstraintRenderingTest {
         compose.setContent {
             Canvas(Modifier.size(192.dp).testTag("outline")) {
                 drawRect(Color.White)
-                clipPath(cageGapMask(size.width / 3, size.height / 3, 3, 3), ClipOp.Difference) {
-                    drawRect(Color.Magenta)
+                // Exercise odd and even widths in separate halves of the image.
+                for (width in listOf(1f, 2f)) {
+                    val cell = size.width / 3
+                    translate(0f, if (width == 1f) 0f else size.height / 2) {
+                        clipPath(cageGapMask(cell, size.height / 6, 3, 3, strokeWidth = width), ClipOp.Difference) {
+                            drawRect(Color.Magenta, size = androidx.compose.ui.geometry.Size(size.width, size.height / 2))
+                        }
+                    }
                 }
             }
         }
         val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
-        val cell = pixels.width / 3
-        for (x in 0 until cell) for (y in 0 until cell) {
-            for (row in 0..2) for (column in 0..2) {
-                assertEquals(pixels[x, y], pixels[x + column * cell, y + row * cell], "Every cell must use the same pattern")
+        val cellWidth = pixels.width / 3
+        val cellHeight = pixels.height / 6
+        for (offsetY in listOf(0, pixels.height / 2)) {
+            for (x in 0 until cellWidth) for (y in 0 until cellHeight) {
+                for (row in 0..2) for (column in 0..2) {
+                    assertEquals(pixels[x, y + offsetY], pixels[x + column * cellWidth, y + row * cellHeight + offsetY],
+                        "Every cell must use the same pattern")
+                }
+                assertEquals(pixels[x, y + offsetY], pixels[2 * cellWidth - 1 - x, y + offsetY],
+                    "The pattern must mirror across vertical cell borders")
+                assertEquals(pixels[x, y + offsetY], pixels[x, 2 * cellHeight - 1 - y + offsetY],
+                    "The pattern must mirror across horizontal cell borders")
             }
-            assertEquals(pixels[x, y], pixels[2 * cell - 1 - x, y], "The pattern must mirror across vertical cell borders")
-            assertEquals(pixels[x, y], pixels[x, 2 * cell - 1 - y], "The pattern must mirror across horizontal cell borders")
         }
     }
 
@@ -58,9 +72,9 @@ class ConstraintRenderingTest {
                     androidx.compose.ui.geometry.Offset(cell, size.height), 2.dp.toPx())
                 drawLine(Color.Black, androidx.compose.ui.geometry.Offset(0f, cell),
                     androidx.compose.ui.geometry.Offset(size.width, cell), 2.dp.toPx())
-                val outline = cageOutline(puzzle.cages.single().cells, cell, cell, cageInset(cell))
-                clipPath(cageGapMask(cell, cell, 3, 3), ClipOp.Difference) {
-                    drawIntoCanvas { it.drawPath(outline, cageOutlinePaint(2.dp.toPx(), purple, antiAlias = true)) }
+                val outline = cageOutline(puzzle.cages.single().cells, cell, cell, cageInset(cell), strokeWidth = 2.dp.toPx())
+                clipPath(cageGapMask(cell, cell, 3, 3, strokeWidth = 2.dp.toPx()), ClipOp.Difference) {
+                    drawIntoCanvas { it.drawPath(outline, cageOutlinePaint(2.dp.toPx(), purple)) }
                 }
             }
         }
@@ -81,6 +95,53 @@ class ConstraintRenderingTest {
         }
         assertEquals(Color.Cyan, sample(62, 54), "Artwork outside the grid stroke must remain visible")
         assertEquals(purple, sample(68, 68), "The concave elbow must remain joined")
+    }
+
+    @Test fun fractionalCellSizesAndOddAndEvenStrokesHaveSolidColourAndUncutShafts() {
+        val puzzle = SudokuFixtures.empty.copy(cages = listOf(KillerCage(null,
+            setOf(CellPosition(0, 1), CellPosition(1, 0), CellPosition(1, 1)))))
+        val cases = listOf(31f to 1f, 50f to 1f, 60.333f to 1f, 83f to 1f, 60f to 2f, 83f to 3f)
+        val purple = Color(0xFF826B87)
+        compose.setContent {
+            Canvas(Modifier.size(540.dp, 360.dp).testTag("outline")) {
+                drawRect(Color.White)
+                cases.forEachIndexed { index, (cellDp, width) ->
+                    val cell = cellDp.dp.toPx()
+                    translate((index % 3 * 180).dp.toPx().roundToInt().toFloat(),
+                        (index / 3 * 180).dp.toPx().roundToInt().toFloat()) {
+                        val outline = cageOutline(puzzle.cages.single().cells, cell, cell,
+                            cageInset(cell), strokeWidth = width)
+                        clipPath(cageGapMask(cell, cell, 3, 3, strokeWidth = width), ClipOp.Difference) {
+                            drawIntoCanvas { it.drawPath(outline, cageOutlinePaint(width, purple)) }
+                        }
+                    }
+                }
+            }
+        }
+        val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
+        var coloured = 0
+        for (x in 0 until pixels.width) for (y in 0 until pixels.height) {
+            val colour = pixels[x, y]
+            if (colour != Color.White) {
+                coloured++
+                assertEquals(purple, colour, "No partial coverage or darker corner at ($x, $y)")
+            }
+        }
+        assertTrue(coloured > 0)
+        val scale = pixels.width / 540f
+        cases.forEachIndexed { index, (cell, width) ->
+            val left = (index % 3 * 180 * scale).roundToInt()
+            val top = (index / 3 * 180 * scale).roundToInt()
+            var shafts = 0
+            for (x in (1.25f * cell * scale).roundToInt()..(1.75f * cell * scale).roundToInt()) {
+                val thickness = (0 until (cell * scale / 4).toInt()).count { y -> pixels[left + x, top + y] == purple }
+                if (thickness > 0) {
+                    shafts++
+                    assertEquals(width.toInt(), thickness, "Parallel mask strips must not shave the straight shaft")
+                }
+            }
+            assertTrue(shafts > 0)
+        }
     }
 
     @Test fun cageDashesReachTheFarEdgeOfACornerAndOverlapsKeepTheirColour() {

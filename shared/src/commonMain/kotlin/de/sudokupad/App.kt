@@ -620,13 +620,11 @@ private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
         val ch = size.height / 9f
         val outlines = Path().apply {
             cages.forEach { cage ->
-                // Keep the exact cell-relative coordinates: independently snapping
-                // corners would shift their phase relative to the regular mask.
-                addPath(cageOutline(cage.cells, cw, ch, cageInset(cw), insetY = cageInset(ch)))
+                addPath(cageOutline(cage.cells, cw, ch, cageInset(cw), insetY = cageInset(ch), strokeWidth = width))
             }
         }
-        val gaps = cageGapMask(cw, ch)
-        val paint = cageOutlinePaint(width, antiAlias = true)
+        val gaps = cageGapMask(cw, ch, strokeWidth = width)
+        val paint = cageOutlinePaint(width)
         onDrawBehind {
             clipPath(gaps, ClipOp.Difference) {
                 drawIntoCanvas { it.drawPath(outlines, paint) }
