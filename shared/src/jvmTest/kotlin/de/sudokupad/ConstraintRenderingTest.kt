@@ -32,10 +32,9 @@ class ConstraintRenderingTest {
             Canvas(Modifier.size(181.dp).testTag("outline")) {
                 drawRect(Color.White)
                 val width = 1.dp.toPx().roundToInt().coerceAtLeast(1).toFloat()
-                val path = cageOutline(puzzle.cages.single().cells, size.width / 3, size.height / 3, 4.dp.toPx(), width)
-                val paint = cageOutlinePaint(width,
-                    4.dp.toPx().roundToInt().toFloat(), 3.dp.toPx().roundToInt().toFloat(), purple)
-                drawIntoCanvas { it.drawPath(path, paint) }
+                val path = cageDashes(puzzle.cages.single().cells, size.width / 3, size.height / 3,
+                    4.dp.toPx(), width, 4.dp.toPx(), 3.dp.toPx())
+                drawIntoCanvas { it.drawPath(path, cageOutlinePaint(width, purple)) }
             }
         }
         val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
@@ -50,6 +49,59 @@ class ConstraintRenderingTest {
         assertTrue(colouredPixels > 0)
     }
 
+    @Test fun straightRunsHaveWholeEqualDashesAndEqualGapsIncludingBothCornerEnds() {
+        // Convex/convex, convex/concave and concave/concave runs differ by 2 insets.
+        for (cell in listOf(31f, 50f, 60.333f, 83f)) for (span in 1..5) {
+            for (insetAdjustment in listOf(-8f, 0f, 8f)) {
+                val length = cell * span + insetAdjustment
+                val intervals = cageDashIntervals(length, arm = 3.5f, dash = 4f, preferredGap = 3f)
+                assertTrue(intervals.isNotEmpty())
+                val gaps = mutableListOf(intervals.first().first - 3.5f)
+                intervals.forEachIndexed { index, (start, end) ->
+                    assertEquals(4f, end - start, .0001f, "Every dash must have its full length")
+                    if (index > 0) gaps += start - intervals[index - 1].second
+                }
+                gaps += length - 3.5f - intervals.last().second
+                gaps.forEach { assertEquals(gaps.first(), it, .0001f, "Gaps must be even up to both Ls") }
+                assertTrue(gaps.first() > 0f)
+            }
+        }
+    }
+
+    @Test fun innerAndOuterCornersAndStraightDashesRenderSymmetrically() {
+        val puzzle = SudokuFixtures.empty.copy(cages = listOf(KillerCage(null,
+            setOf(CellPosition(0, 1), CellPosition(1, 0), CellPosition(1, 1)))))
+        compose.setContent {
+            Canvas(Modifier.size(180.dp).testTag("outline")) {
+                drawRect(Color.White)
+                drawIntoCanvas { it.drawPath(cageDashes(puzzle.cages.single().cells,
+                    60.dp.toPx(), 60.dp.toPx(), 4.dp.toPx(), 1f, 4.dp.toPx(), 3.dp.toPx()),
+                    cageOutlinePaint(1f)) }
+            }
+        }
+        val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
+        val scale = pixels.width / 180f
+        val elbows = listOf(listOf(64, 4, 1, 1), listOf(116, 4, -1, 1),
+            listOf(116, 116, -1, -1), listOf(4, 116, 1, -1),
+            listOf(4, 64, 1, 1), listOf(64, 64, -1, -1))
+        for ((x, y, horizontal, vertical) in elbows) {
+            val cornerX = (x * scale).toInt()
+            val cornerY = (y * scale).toInt()
+            val armPixels = (4 * scale).roundToInt()
+            for ((dx, dy) in listOf(horizontal to 0, 0 to vertical)) {
+                for (distance in 0..armPixels) {
+                    val expected = if (distance < armPixels) Color(0xFF826B87) else Color.White
+                    assertEquals(expected, pixels[cornerX + dx * distance, cornerY + dy * distance],
+                        "Corner ($x, $y) must have equal full arms in every orientation")
+                }
+            }
+        }
+        // This L and its concave corner are symmetric about the main diagonal.
+        for (x in 0 until pixels.width) for (y in 0 until pixels.height) {
+            assertEquals(pixels[x, y], pixels[y, x], "Reflection at ($x, $y) must preserve arms and gaps")
+        }
+    }
+
     @Test fun cageDashesReachTheFarEdgeOfACornerAndOverlapsKeepTheirColour() {
         compose.setContent {
             Canvas(Modifier.size(80.dp).testTag("outline")) {
@@ -61,7 +113,7 @@ class ConstraintRenderingTest {
                     moveTo(30.dp.toPx(), 30.dp.toPx())
                     lineTo(30.dp.toPx(), 50.dp.toPx())
                 }
-                val paint = cageOutlinePaint(4.dp.toPx(), 20.dp.toPx(), 10.dp.toPx(), Color.Black.copy(alpha = .5f))
+                val paint = cageOutlinePaint(4.dp.toPx(), Color.Black.copy(alpha = .5f))
                 drawIntoCanvas { it.drawPath(path, paint) }
             }
         }

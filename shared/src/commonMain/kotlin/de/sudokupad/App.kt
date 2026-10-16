@@ -614,11 +614,15 @@ private fun String.toComposeColor(): Color? = runCatching {
 private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
     Box(Modifier.matchParentSize().drawWithCache {
         val width = 1.dp.toPx().roundToInt().coerceAtLeast(1).toFloat()
+        val dash = 4.dp.toPx().roundToInt().toFloat()
+        val gap = 3.dp.toPx().roundToInt().toFloat()
+        val inset = 4.dp.toPx()
+        val cw = size.width / 9f
+        val ch = size.height / 9f
         val outlines = Path().apply {
-            cages.forEach { addPath(cageOutline(it.cells, size.width / 9f, size.height / 9f, 4.dp.toPx(), width)) }
+            cages.forEach { cage -> addPath(cageDashes(cage.cells, cw, ch, inset, width, dash, gap)) }
         }
-        val paint = cageOutlinePaint(width, 4.dp.toPx().roundToInt().toFloat(), 3.dp.toPx().roundToInt().toFloat())
-        // One paint operation keeps intersecting outlines at the same opacity.
+        val paint = cageOutlinePaint(width)
         onDrawBehind { drawIntoCanvas { it.drawPath(outlines, paint) } }
     })
 }
