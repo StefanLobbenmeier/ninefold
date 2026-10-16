@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
@@ -123,6 +124,100 @@ class BoardSelectionInteractionTest {
         assertSelection(3 to 1, 3 to 2, 3 to 3)
         cell(3, 2).performMouseInput { click() }
         assertSelection(3 to 2)
+    }
+
+    @Test fun controlModifiedMouseClicksAddAndRemoveWithoutChangingTheSavedMode() {
+        openPlayer()
+        val target = cell(2, 2).fetchSemanticsNode().boundsInRoot.center
+        compose.onRoot().performMultiModalInput {
+            key { keyDown(Key.CtrlLeft) }
+            mouse { click(target) }
+            key { keyUp(Key.CtrlLeft) }
+        }
+        assertSelection(1 to 3, 2 to 2)
+        compose.onRoot().performMultiModalInput {
+            key { keyDown(Key.CtrlLeft) }
+            mouse { click(target) }
+            key { keyUp(Key.CtrlLeft) }
+        }
+        assertSelection(1 to 3)
+        compose.onNodeWithContentDescription("Select multiple").assertIsOff()
+    }
+
+    @Test fun keyboardMovesExtendsAndTransformsSelection() {
+        openPlayer()
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        assertSelection(1 to 4)
+        compose.onRoot().performKeyInput {
+            keyDown(Key.ShiftLeft)
+            pressKey(Key.DirectionDown)
+            keyUp(Key.ShiftLeft)
+        }
+        assertSelection(1 to 4, 2 to 4)
+        compose.onRoot().performKeyInput {
+            keyDown(Key.CtrlLeft)
+            pressKey(Key.A)
+            keyUp(Key.CtrlLeft)
+        }
+        assertSelection(*(1..9).flatMap { row -> (1..9).map { column -> row to column } }.toTypedArray())
+        compose.onRoot().performKeyInput {
+            keyDown(Key.CtrlLeft)
+            keyDown(Key.ShiftLeft)
+            pressKey(Key.A)
+            keyUp(Key.ShiftLeft)
+            keyUp(Key.CtrlLeft)
+        }
+        assertSelection()
+    }
+
+    @Test fun keyboardEntersDigitsSwitchesModesAndSupportsUndoRedo() {
+        openPlayer()
+        compose.onRoot().performKeyInput { pressKey(Key.Five) }
+        cell(1, 3).assertContentDescriptionContains("column 3, 5", substring = true)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionRight); pressKey(Key.X); pressKey(Key.Three) }
+        cell(1, 4).assertContentDescriptionContains("corner notes 3", substring = true)
+        compose.onRoot().performKeyInput {
+            keyDown(Key.CtrlLeft)
+            pressKey(Key.Four)
+            keyUp(Key.CtrlLeft)
+        }
+        cell(1, 4).assertContentDescriptionContains("centre notes 4", substring = true)
+        compose.onRoot().performKeyInput {
+            keyDown(Key.CtrlLeft)
+            pressKey(Key.Z)
+            pressKey(Key.Y)
+            keyUp(Key.CtrlLeft)
+        }
+        cell(1, 4).assertContentDescriptionContains("centre notes 4", substring = true)
+        compose.onNodeWithText("Corner").assertIsSelected()
+    }
+
+    @Test fun heldModifiersPreviewTheTemporaryInputMode() {
+        openPlayer()
+        compose.onRoot().performKeyInput { keyDown(Key.ShiftLeft) }
+        compose.onNodeWithText("Corner").assertIsSelected()
+        compose.onRoot().performKeyInput { keyDown(Key.CtrlLeft) }
+        compose.onNodeWithText("Colour").assertIsSelected()
+        compose.onRoot().performKeyInput { keyUp(Key.ShiftLeft) }
+        compose.onNodeWithText("Centre").assertIsSelected()
+        compose.onRoot().performKeyInput { keyUp(Key.CtrlLeft) }
+        compose.onNodeWithText("Digit").assertIsSelected()
+    }
+
+    @Test fun doubleTapAndLongPressSelectMatchingContentForTheActiveTool() {
+        val puzzle = SudokuFixtures.empty.copy(
+            title = "Selection test",
+            givens = "4" + ".".repeat(19) + "4" + ".".repeat(60),
+        )
+        val repository = GameRepository(MemoryAppStorage())
+        repository.saveGame(SavedGame(puzzle, puzzle.startingCells(), started = true))
+        compose.setContent { MaterialTheme { SudokuApp(puzzle, repository, "https://example.com/", {}) } }
+
+        cell(1, 1).performTouchInput { doubleClick() }
+        assertSelection(1 to 1, 3 to 3)
+        clickCell(5, 5)
+        cell(3, 3).performTouchInput { longClick() }
+        assertSelection(1 to 1, 3 to 3)
     }
 
     @Test fun adjacentSelectedCellsRenderOnlyExposedBoldEdges() {
