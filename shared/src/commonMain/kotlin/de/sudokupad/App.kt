@@ -24,10 +24,12 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.focus.FocusRequester
@@ -614,16 +616,22 @@ private fun String.toComposeColor(): Color? = runCatching {
 private fun BoxScope.CageOverlay(cages: List<KillerCage>) {
     Box(Modifier.matchParentSize().drawWithCache {
         val width = 1.dp.toPx().roundToInt().coerceAtLeast(1).toFloat()
-        val dash = 4.dp.toPx().roundToInt().toFloat()
-        val gap = 3.dp.toPx().roundToInt().toFloat()
-        val inset = 4.dp.toPx()
         val cw = size.width / 9f
         val ch = size.height / 9f
         val outlines = Path().apply {
-            cages.forEach { cage -> addPath(cageDashes(cage.cells, cw, ch, inset, width, dash, gap)) }
+            cages.forEach { cage ->
+                // Keep the exact cell-relative coordinates: independently snapping
+                // corners would shift their phase relative to the regular mask.
+                addPath(cageOutline(cage.cells, cw, ch, cageInset(cw), insetY = cageInset(ch)))
+            }
         }
-        val paint = cageOutlinePaint(width)
-        onDrawBehind { drawIntoCanvas { it.drawPath(outlines, paint) } }
+        val gaps = cageGapMask(cw, ch)
+        val paint = cageOutlinePaint(width, antiAlias = true)
+        onDrawBehind {
+            clipPath(gaps, ClipOp.Difference) {
+                drawIntoCanvas { it.drawPath(outlines, paint) }
+            }
+        }
     })
 }
 

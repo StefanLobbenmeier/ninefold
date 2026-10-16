@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
@@ -19,87 +21,66 @@ import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlin.math.roundToInt
 
 class ConstraintRenderingTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun thinCageDashesHaveOneUniformColourIncludingTheirInnerCorner() {
+    @Test fun cagePatternRepeatsAndMirrorsAcrossEveryCellBorder() {
+        compose.setContent {
+            Canvas(Modifier.size(192.dp).testTag("outline")) {
+                drawRect(Color.White)
+                clipPath(cageGapMask(size.width / 3, size.height / 3, 3, 3), ClipOp.Difference) {
+                    drawRect(Color.Magenta)
+                }
+            }
+        }
+        val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
+        val cell = pixels.width / 3
+        for (x in 0 until cell) for (y in 0 until cell) {
+            for (row in 0..2) for (column in 0..2) {
+                assertEquals(pixels[x, y], pixels[x + column * cell, y + row * cell], "Every cell must use the same pattern")
+            }
+            assertEquals(pixels[x, y], pixels[2 * cell - 1 - x, y], "The pattern must mirror across vertical cell borders")
+            assertEquals(pixels[x, y], pixels[x, 2 * cell - 1 - y], "The pattern must mirror across horizontal cell borders")
+        }
+    }
+
+    @Test fun cageMaskPreservesGridAndGivesInnerAndOuterCornersTheSamePattern() {
         val puzzle = SudokuFixtures.empty.copy(cages = listOf(KillerCage(null,
             setOf(CellPosition(0, 1), CellPosition(1, 0), CellPosition(1, 1)))))
         val purple = Color(0xFF826B87)
         compose.setContent {
-            Canvas(Modifier.size(181.dp).testTag("outline")) {
-                drawRect(Color.White)
-                val width = 1.dp.toPx().roundToInt().coerceAtLeast(1).toFloat()
-                val path = cageDashes(puzzle.cages.single().cells, size.width / 3, size.height / 3,
-                    4.dp.toPx(), width, 4.dp.toPx(), 3.dp.toPx())
-                drawIntoCanvas { it.drawPath(path, cageOutlinePaint(width, purple)) }
-            }
-        }
-        val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
-        var colouredPixels = 0
-        for (x in 0 until pixels.width) for (y in 0 until pixels.height) {
-            val pixel = pixels[x, y]
-            if (pixel != Color.White) {
-                colouredPixels++
-                assertEquals(purple, pixel, "Cage pixel ($x, $y) must not have a gray fringe or darker overlap")
-            }
-        }
-        assertTrue(colouredPixels > 0)
-    }
-
-    @Test fun straightRunsHaveWholeEqualDashesAndEqualGapsIncludingBothCornerEnds() {
-        // Convex/convex, convex/concave and concave/concave runs differ by 2 insets.
-        for (cell in listOf(31f, 50f, 60.333f, 83f)) for (span in 1..5) {
-            for (insetAdjustment in listOf(-8f, 0f, 8f)) {
-                val length = cell * span + insetAdjustment
-                val intervals = cageDashIntervals(length, arm = 3.5f, dash = 4f, preferredGap = 3f)
-                assertTrue(intervals.isNotEmpty())
-                val gaps = mutableListOf(intervals.first().first - 3.5f)
-                intervals.forEachIndexed { index, (start, end) ->
-                    assertEquals(4f, end - start, .0001f, "Every dash must have its full length")
-                    if (index > 0) gaps += start - intervals[index - 1].second
-                }
-                gaps += length - 3.5f - intervals.last().second
-                gaps.forEach { assertEquals(gaps.first(), it, .0001f, "Gaps must be even up to both Ls") }
-                assertTrue(gaps.first() > 0f)
-            }
-        }
-    }
-
-    @Test fun innerAndOuterCornersAndStraightDashesRenderSymmetrically() {
-        val puzzle = SudokuFixtures.empty.copy(cages = listOf(KillerCage(null,
-            setOf(CellPosition(0, 1), CellPosition(1, 0), CellPosition(1, 1)))))
-        compose.setContent {
-            Canvas(Modifier.size(180.dp).testTag("outline")) {
-                drawRect(Color.White)
-                drawIntoCanvas { it.drawPath(cageDashes(puzzle.cages.single().cells,
-                    60.dp.toPx(), 60.dp.toPx(), 4.dp.toPx(), 1f, 4.dp.toPx(), 3.dp.toPx()),
-                    cageOutlinePaint(1f)) }
-            }
-        }
-        val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
-        val scale = pixels.width / 180f
-        val elbows = listOf(listOf(64, 4, 1, 1), listOf(116, 4, -1, 1),
-            listOf(116, 116, -1, -1), listOf(4, 116, 1, -1),
-            listOf(4, 64, 1, 1), listOf(64, 64, -1, -1))
-        for ((x, y, horizontal, vertical) in elbows) {
-            val cornerX = (x * scale).toInt()
-            val cornerY = (y * scale).toInt()
-            val armPixels = (4 * scale).roundToInt()
-            for ((dx, dy) in listOf(horizontal to 0, 0 to vertical)) {
-                for (distance in 0..armPixels) {
-                    val expected = if (distance < armPixels) Color(0xFF826B87) else Color.White
-                    assertEquals(expected, pixels[cornerX + dx * distance, cornerY + dy * distance],
-                        "Corner ($x, $y) must have equal full arms in every orientation")
+            Canvas(Modifier.size(192.dp).testTag("outline")) {
+                // Artwork and grid underneath the cage must survive every gap.
+                drawRect(Color.Cyan)
+                val cell = size.width / 3
+                drawLine(Color.Black, androidx.compose.ui.geometry.Offset(cell, 0f),
+                    androidx.compose.ui.geometry.Offset(cell, size.height), 2.dp.toPx())
+                drawLine(Color.Black, androidx.compose.ui.geometry.Offset(0f, cell),
+                    androidx.compose.ui.geometry.Offset(size.width, cell), 2.dp.toPx())
+                val outline = cageOutline(puzzle.cages.single().cells, cell, cell, cageInset(cell))
+                clipPath(cageGapMask(cell, cell, 3, 3), ClipOp.Difference) {
+                    drawIntoCanvas { it.drawPath(outline, cageOutlinePaint(2.dp.toPx(), purple, antiAlias = true)) }
                 }
             }
         }
-        // This L and its concave corner are symmetric about the main diagonal.
+        val pixels = compose.onNodeWithTag("outline").captureToImage().toPixelMap()
+        val scale = pixels.width / 192f
+        fun sample(x: Int, y: Int) = pixels[(x * scale).toInt(), (y * scale).toInt()]
         for (x in 0 until pixels.width) for (y in 0 until pixels.height) {
-            assertEquals(pixels[x, y], pixels[y, x], "Reflection at ($x, $y) must preserve arms and gaps")
+            assertEquals(pixels[x, y], pixels[y, x], "Both arms of every inner and outer L must match")
         }
+        // The two long runs cross a cell boundary: their dashes must mirror there.
+        for (distance in 0 until 55) {
+            assertEquals(sample(63 - distance, 124), sample(64 + distance, 124))
+            assertEquals(sample(124, 63 - distance), sample(124, 64 + distance))
+        }
+        for (coordinate in 0..191) {
+            assertEquals(Color.Black, sample(64, coordinate), "The cage gap must preserve the underlying vertical grid line")
+            assertEquals(Color.Black, sample(coordinate, 64), "The cage gap must preserve the underlying horizontal grid line")
+        }
+        assertEquals(Color.Cyan, sample(62, 54), "Artwork outside the grid stroke must remain visible")
+        assertEquals(purple, sample(68, 68), "The concave elbow must remain joined")
     }
 
     @Test fun cageDashesReachTheFarEdgeOfACornerAndOverlapsKeepTheirColour() {

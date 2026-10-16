@@ -1,124 +1,67 @@
 package de.sudokupad
 
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PaintingStyle
-import kotlin.math.roundToInt
 
-private fun alignCageCoordinate(value: Float, strokeWidth: Float): Float = if (strokeWidth > 0f) {
-    val phase = (strokeWidth.toInt() % 2) / 2f
-    (value - phase).roundToInt() + phase
-} else value
+// Eight repeats per cell. Cell borders sit in the middle of a gap; the
+// inset (half a repeat) puts every convex and concave turn in a dash's middle.
+internal const val CAGE_REPEATS_PER_CELL = 8
+internal fun cageInset(cellSize: Float): Float = cellSize / (2 * CAGE_REPEATS_PER_CELL)
 
-private data class CageCorner(val position: Offset, val horizontal: Int, val vertical: Int)
-
-private fun cageCornerPositions(
-    cells: Set<CellPosition>, cellWidth: Float, cellHeight: Float, inset: Float, strokeWidth: Float,
-): List<CageCorner> = buildList {
-    cells.forEach { cell ->
-        for (rowDirection in listOf(-1, 1)) for (columnDirection in listOf(-1, 1)) {
-            val horizontal = CellPosition(cell.row, cell.column + columnDirection) in cells
-            val vertical = CellPosition(cell.row + rowDirection, cell.column) in cells
-            val diagonal = CellPosition(cell.row + rowDirection, cell.column + columnDirection) in cells
-            val convex = !horizontal && !vertical
-            val concave = horizontal && vertical && !diagonal
-            if (!convex && !concave) continue
-            val x = alignCageCoordinate((cell.column + if (columnDirection > 0) 1 else 0) * cellWidth - columnDirection * inset, strokeWidth)
-            val y = alignCageCoordinate((cell.row + if (rowDirection > 0) 1 else 0) * cellHeight - rowDirection * inset, strokeWidth)
-            val direction = if (convex) -1 else 1
-            add(CageCorner(Offset(x, y), direction * columnDirection, direction * rowDirection))
-        }
+/** A virtual grid of erasing strips, applied only while drawing cage strokes. */
+internal fun cageGapMask(cellWidth: Float, cellHeight: Float, columns: Int = 9, rows: Int = 9): Path = Path().apply {
+    val periodX = cellWidth / CAGE_REPEATS_PER_CELL
+    val periodY = cellHeight / CAGE_REPEATS_PER_CELL
+    // A half-period gap leaves half-period dashes. Both are anchored to the
+    // board, so runs of any length have exactly the same phase across cells.
+    for (index in 0..columns * CAGE_REPEATS_PER_CELL) {
+        val center = index * periodX
+        addRect(Rect(center - periodX / 4, -cellHeight, center + periodX / 4, (rows + 1) * cellHeight))
+    }
+    for (index in 0..rows * CAGE_REPEATS_PER_CELL) {
+        val center = index * periodY
+        addRect(Rect(-cellWidth, center - periodY / 4, (columns + 1) * cellWidth, center + periodY / 4))
     }
 }
 
-/** Whole dashes fitted between equal corner arms, with equal gaps at both ends. */
-internal fun cageDashIntervals(length: Float, arm: Float, dash: Float, preferredGap: Float): List<Pair<Float, Float>> {
-    val available = (length - 2 * arm).coerceAtLeast(0f)
-    val count = ((available - preferredGap) / (dash + preferredGap)).roundToInt().coerceAtLeast(0)
-    val gap = (available - count * dash) / (count + 1)
-    return List(count) { index ->
-        val start = arm + gap + index * (dash + gap)
-        start to start + dash
-    }
-}
-
-/** Each straight run restarts its pattern so no dash is clipped at a turn. */
-internal fun cageDashes(
-    cells: Set<CellPosition>, cellWidth: Float, cellHeight: Float, inset: Float,
-    strokeWidth: Float, dash: Float, gap: Float,
-): Path = Path().apply {
-    val corners = cageCornerPositions(cells, cellWidth, cellHeight, inset, strokeWidth)
-    // Include the half-stroke at the elbow in the arm's visible length. This
-    // also puts arm tips on pixel boundaries on both sides of a snapped corner.
-    val arm = (minOf(dash, (cellWidth - 2 * inset) / 2, (cellHeight - 2 * inset) / 2) - strokeWidth / 2).coerceAtLeast(0f)
-    corners.forEach { (position, horizontal, vertical) ->
-        moveTo(position.x + horizontal * arm, position.y)
-        lineTo(position.x, position.y)
-        lineTo(position.x, position.y + vertical * arm)
-    }
-    // Visit each run once, from its left or top corner. Matching directions also
-    // keep disconnected cages and holes from joining across empty space.
-    corners.forEach { corner ->
-        for (horizontal in listOf(true, false)) {
-            if ((if (horizontal) corner.horizontal else corner.vertical) != 1) continue
-            val start = if (horizontal) corner.position.x else corner.position.y
-            val end = corners.filter { other ->
-                if (horizontal) other.position.y == corner.position.y && other.position.x > start && other.horizontal == -1
-                else other.position.x == corner.position.x && other.position.y > start && other.vertical == -1
-            }.minOfOrNull { if (horizontal) it.position.x else it.position.y } ?: continue
-            cageDashIntervals(end - start, arm, dash, gap).forEach { (from, to) ->
-                if (horizontal) {
-                    moveTo(start + from, corner.position.y)
-                    lineTo(start + to, corner.position.y)
-                } else {
-                    moveTo(corner.position.x, start + from)
-                    lineTo(corner.position.x, start + to)
-                }
-            }
-        }
-    }
-}
-
-internal fun cageOutlinePaint(width: Float, colour: Color = Color(0xFF826B87)) = Paint().apply {
+internal fun cageOutlinePaint(width: Float, colour: Color = Color(0xFF826B87), antiAlias: Boolean = false) = Paint().apply {
     color = colour
     style = PaintingStyle.Stroke
     strokeWidth = width
     strokeCap = StrokeCap.Butt
-    // Pixel-aligned shafts and a single opaque draw keep corners the same colour.
-    isAntiAlias = false
+    strokeJoin = StrokeJoin.Miter
+    isAntiAlias = antiAlias
 }
 
-/** Join inset cell interiors before stroking, so the dash pattern follows the entire cage. */
+/** Join inset cell interiors into a solid outline without shared internal borders. */
 internal fun cageOutline(
     cells: Set<CellPosition>, cellWidth: Float, cellHeight: Float, inset: Float,
-    strokeWidth: Float = 0f,
+    insetY: Float = inset,
 ): Path {
     var outline = Path()
-    // Place the edges of the stroke on physical pixel boundaries. Otherwise a
-    // one-pixel line straddles two pixels and its corners appear darker than its sides.
-    fun align(value: Float) = alignCageCoordinate(value, strokeWidth)
     fun add(left: Float, top: Float, right: Float, bottom: Float) {
-        val rectangle = Path().apply { addRect(Rect(align(left), align(top), align(right), align(bottom))) }
+        val rectangle = Path().apply { addRect(Rect(left, top, right, bottom)) }
         outline = Path.combine(PathOperation.Union, outline, rectangle)
     }
     cells.forEach { cell ->
         val left = cell.column * cellWidth + inset
-        val top = cell.row * cellHeight + inset
+        val top = cell.row * cellHeight + insetY
         val right = (cell.column + 1) * cellWidth - inset
-        val bottom = (cell.row + 1) * cellHeight - inset
+        val bottom = (cell.row + 1) * cellHeight - insetY
         add(left, top, right, bottom)
         // Bridges cross shared cell borders, including both inset margins.
         if (CellPosition(cell.row, cell.column + 1) in cells) add(right, top, right + 2 * inset, bottom)
-        if (CellPosition(cell.row + 1, cell.column) in cells) add(left, bottom, right, bottom + 2 * inset)
+        if (CellPosition(cell.row + 1, cell.column) in cells) add(left, bottom, right, bottom + 2 * insetY)
         if (CellPosition(cell.row, cell.column + 1) in cells &&
             CellPosition(cell.row + 1, cell.column) in cells &&
             CellPosition(cell.row + 1, cell.column + 1) in cells) {
-            add(right, bottom, right + 2 * inset, bottom + 2 * inset)
+            add(right, bottom, right + 2 * inset, bottom + 2 * insetY)
         }
     }
     return outline
