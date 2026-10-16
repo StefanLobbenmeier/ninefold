@@ -86,10 +86,20 @@ class BoardSelectionTest {
         assertEquals(emptySet(), boardCellsAlongSegment(0f, 1f / 9, 1f, 1f / 9))
     }
 
-    @Test fun clicksKeepFullCellTargetsButDragsUseOnlyInnerHalf() {
+    @Test fun clicksKeepFullCellTargetsButDragsUseInnerThreeQuarters() {
         assertEquals(CellPosition(0, 0), boardCellAt(.1f / 9, .5f / 9))
-        assertEquals(emptySet(), boardCellsAlongSegment(.1f / 9, .5f / 9, .2f / 9, .5f / 9))
-        assertEquals(setOf(CellPosition(0, 0)), boardCellsAlongSegment(.3f / 9, .3f / 9, .7f / 9, .7f / 9))
+        assertEquals(emptySet(), boardCellsAlongSegment(.05f / 9, .5f / 9, .1f / 9, .5f / 9))
+        assertEquals(setOf(CellPosition(0, 0)), boardCellsAlongSegment(.15f / 9, .15f / 9, .85f / 9, .15f / 9))
+        assertEquals(setOf(CellPosition(0, 0)), boardCellsAlongSegment(.85f / 9, .15f / 9, .85f / 9, .85f / 9))
+    }
+
+    @Test fun multipleSelectionDragsUseFullCellTargets() {
+        assertEquals(setOf(CellPosition(0, 0)),
+            boardCellsAlongSegment(.01f / 9, .01f / 9, .99f / 9, .01f / 9, additive = true))
+        assertEquals(setOf(CellPosition(0, 0)),
+            boardCellsAlongSegment(.99f / 9, .01f / 9, .99f / 9, .99f / 9, additive = true))
+        assertEquals((0..8).map { CellPosition(0, it) }.toSet(),
+            boardCellsAlongSegment(0f, .01f / 9, 1f, .01f / 9, additive = true))
     }
 
     @Test fun invalidCoordinatesDoNotSelectCells() {

@@ -330,7 +330,8 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                         val start = boardCellAt(down.position.x / size.width, down.position.y / size.height)
                         if (start != null) {
-                            val gesture = BoardSelectionGesture(currentSelection, start, currentAdditive)
+                            val additive = currentAdditive
+                            val gesture = BoardSelectionGesture(currentSelection, start, additive)
                             var gestureSelection = gesture.visit()
                             var previous = down.position
                             down.consume()
@@ -341,6 +342,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                                 val crossed = boardCellsAlongSegment(
                                     previous.x / size.width, previous.y / size.height,
                                     change.position.x / size.width, change.position.y / size.height,
+                                    additive = additive,
                                 )
                                 val next = gesture.visit(crossed)
                                 if (next != gestureSelection) {

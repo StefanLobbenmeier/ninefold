@@ -34,9 +34,10 @@ internal fun boardCellAt(x: Float, y: Float): CellPosition? {
     return CellPosition((y * 9).toInt(), (x * 9).toInt())
 }
 
-/** Drag targets are centered half-size squares, leaving lanes between cells to dodge neighbors. */
-internal fun boardCellsAlongSegment(startX: Float, startY: Float, endX: Float, endY: Float): Set<CellPosition> {
+/** Drag targets span 75% of each cell, or the full cell for additive selection. */
+internal fun boardCellsAlongSegment(startX: Float, startY: Float, endX: Float, endY: Float, additive: Boolean = false): Set<CellPosition> {
     if (!listOf(startX, startY, endX, endY).all { it.isFinite() }) return emptySet()
+    val inset = if (additive) 0f else .125f
     val dx = endX - startX
     val dy = endY - startY
     return buildSet {
@@ -52,8 +53,8 @@ internal fun boardCellsAlongSegment(startX: Float, startY: Float, endX: Float, e
                 return enter <= exit
             }
             // Intersect the whole segment so fast drags still include every crossed target.
-            if (intersectsAxis(startX, dx, (column + .25f) / 9f, (column + .75f) / 9f) &&
-                intersectsAxis(startY, dy, (row + .25f) / 9f, (row + .75f) / 9f)) {
+            if (intersectsAxis(startX, dx, (column + inset) / 9f, (column + 1f - inset) / 9f) &&
+                intersectsAxis(startY, dy, (row + inset) / 9f, (row + 1f - inset) / 9f)) {
                 add(CellPosition(row, column))
             }
         }
