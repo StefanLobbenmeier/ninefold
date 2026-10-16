@@ -154,7 +154,8 @@ class FogRenderingTest {
             marks.forEach { mark ->
                 val x = (mark.center.column * cell).toInt()
                 val y = (mark.center.row * cell).toInt()
-                val radius = (cell * if (mark.text.isNullOrBlank()) minOf(.2, mark.width * .4, mark.height * .4) else .2).toInt()
+                // Stay inside the solid fill of dots rendered at 75% of their source size.
+                val radius = (cell * if (mark.text.isNullOrBlank()) minOf(.125, mark.width * .25, mark.height * .25) else .2).toInt()
                 var compared = 0
                 for (dy in -radius..radius) for (dx in -radius..radius) {
                     if (mark.rounded && dx * dx + dy * dy > radius * radius) continue
