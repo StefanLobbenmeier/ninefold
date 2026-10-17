@@ -1,6 +1,7 @@
 package de.ninefold
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +29,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.jetbrains.compose.resources.painterResource
+import ninefold.shared.generated.resources.Res
+import ninefold.shared.generated.resources.ninefold_icon
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
@@ -112,7 +116,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()) {
         Surface(color = Paper) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(Glyph.Grid)
+                Image(painterResource(Res.drawable.ninefold_icon), contentDescription = null, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(10.dp))
                 Text("NINEFOLD", fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontSize = 13.sp, modifier = Modifier.weight(1f))
                 IconButton({ refreshRequest++ }, enabled = !refreshing, modifier = Modifier.semantics { contentDescription = "Refresh" }) { AppIcon(Glyph.Refresh) }
