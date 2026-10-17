@@ -3,6 +3,24 @@ package de.ninefold
 import kotlin.test.*
 
 class BoardSelectionTest {
+    @Test fun singleSelectionTapTogglesOnlyTheSoleSelectedCell() {
+        val first = CellPosition(0, 0)
+        val second = CellPosition(0, 1)
+        assertEquals(emptySet(), BoardSelectionGesture(setOf(first), first, false).tap())
+        assertEquals(setOf(second), BoardSelectionGesture(setOf(first), second, false).tap())
+        assertEquals(setOf(first), BoardSelectionGesture(emptySet(), first, false).tap())
+        assertEquals(setOf(first), BoardSelectionGesture(setOf(first, second), first, false).tap())
+        assertEquals(setOf(second), BoardSelectionGesture(setOf(first, second), second, false).tap())
+    }
+
+    @Test fun draggingFromTheSoleSelectedCellKeepsItSelected() {
+        val first = CellPosition(0, 0)
+        val second = CellPosition(0, 1)
+        val gesture = BoardSelectionGesture(setOf(first), first, false)
+        assertEquals(setOf(first), gesture.visit())
+        assertEquals(setOf(first, second), gesture.visit(setOf(second)))
+    }
+
     @Test fun toolSensitiveSelectionUsesTheActiveModesMatchingRules() {
         val cells = List(81) { CellState() }.toMutableList().also {
             it[0] = CellState(value = 4)

@@ -3,12 +3,15 @@ package de.ninefold
 /** Keep the gesture's initial operation even when it crosses cells in the opposite state. */
 internal class BoardSelectionGesture(
     private val initial: Set<CellPosition>,
-    start: CellPosition,
-    additive: Boolean,
+    private val start: CellPosition,
+    private val additive: Boolean,
 ) {
     private val removing = additive && start in initial
     private val base = if (additive) initial else emptySet()
     private val visited = mutableSetOf(start)
+
+    fun tap(): Set<CellPosition> =
+        if (!additive && initial == setOf(start)) emptySet() else visit()
 
     fun visit(cells: Set<CellPosition> = emptySet()): Set<CellPosition> {
         visited.addAll(cells)

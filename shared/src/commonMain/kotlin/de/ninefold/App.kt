@@ -210,7 +210,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     }
     fun select(position: CellPosition) {
         if (colourSettings != null) return
-        changeSelection(BoardSelectionGesture(selected, position, multiSelect).visit())
+        changeSelection(BoardSelectionGesture(selected, position, multiSelect).tap())
     }
     fun smartSelect(position: CellPosition, additive: Boolean) {
         if (colourSettings != null) return
@@ -576,6 +576,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                                 lastTapPosition = null
                                 lastTapTime = Long.MIN_VALUE
                             } else if (!moved) {
+                                currentDragSelection?.invoke(gesture.tap())
                                 lastTapPosition = start
                                 lastTapTime = lastEventTime
                             } else {
