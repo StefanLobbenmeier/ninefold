@@ -665,13 +665,17 @@ private fun BoxScope.PuzzleGraphics(
         }
         puzzle.arrows.forEach { arrow ->
             val color = arrow.color.toComposeColor() ?: Color.Gray
-            drawConstraintLine(arrow.points.map(::at), color, (arrow.thickness / 50.0 * cell).toFloat().coerceAtLeast(1.5f))
+            val width = (arrow.thickness / 50.0 * cell).toFloat().coerceAtLeast(1.5f)
+            drawConstraintLine(arrow.points.map(::at), color, width)
             val tip = arrow.points.lastOrNull()?.let(::at); val previous = arrow.points.dropLast(1).lastOrNull()?.let(::at)
             if (tip != null && previous != null) {
                 val angle = atan2((tip.y - previous.y).toDouble(), (tip.x - previous.x).toDouble())
                 val length = (arrow.headLength * cell).toFloat()
-                drawLine(color, tip, Offset(tip.x - length * cos(angle - .55).toFloat(), tip.y - length * sin(angle - .55).toFloat()), 2f)
-                drawLine(color, tip, Offset(tip.x - length * cos(angle + .55).toFloat(), tip.y - length * sin(angle + .55).toFloat()), 2f)
+                drawConstraintLine(listOf(
+                    Offset(tip.x - length * cos(angle - .55).toFloat(), tip.y - length * sin(angle - .55).toFloat()),
+                    tip,
+                    Offset(tip.x - length * cos(angle + .55).toFloat(), tip.y - length * sin(angle + .55).toFloat()),
+                ), color, width)
             }
         }
         puzzle.overlays.filterNot { it in hiddenOverlays }.forEach(::overlay)
