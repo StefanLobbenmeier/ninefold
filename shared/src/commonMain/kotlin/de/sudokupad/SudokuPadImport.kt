@@ -149,7 +149,8 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     } }.joinToString("")
     val solution = metadata.string("solution") ?: root.array("solution")?.mapNotNull(JsonElement::asInt)?.joinToString("")
     val rulesText = metadata.string("rules") ?: metadata.string("ruleset") ?: "Normal sudoku rules apply."
-    val rules = rulesText.lines().map(String::trim).filter(String::isNotEmpty).ifEmpty { listOf("Normal sudoku rules apply.") }
+    val rules = rulesText.trim().takeIf(String::isNotEmpty)?.lines()?.map(String::trim)
+        ?: listOf("Normal sudoku rules apply.")
     val successMessage = importedSuccessMessage(root, metadata)
 
     val rawCages = root.array(if (fpuzzles) "killercage" else "cages") ?: root.array("cages") ?: JsonArray(emptyList())
