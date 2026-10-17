@@ -285,7 +285,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         val landscapePhone = maxWidth >= 600.dp && maxWidth < 850.dp && maxWidth > maxHeight
         val compact = maxWidth < 850.dp && !landscapePhone
         Column(Modifier.fillMaxSize()) {
-            TopBar { clearSelection(); onBrowse() }
+            TopBar(puzzle, shareBaseUrl) { clearSelection(); onBrowse() }
             if (compact) {
                 Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     PuzzleHeading(puzzle, compact = true, elapsed = elapsed)
@@ -343,12 +343,42 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
 
 
 @Composable
-private fun TopBar(onBrowse: () -> Unit) {
+private fun TopBar(puzzle: Puzzle, shareBaseUrl: String, onBrowse: () -> Unit) {
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    val link = remember(puzzle, shareBaseUrl) { runCatching { puzzleShareLink(puzzle, shareBaseUrl) } }
+    val copyLink: (String) -> Unit = { url ->
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            val message = try {
+                clipboard.setClipEntry(puzzleLinkClipEntry(url))
+                "Puzzle link copied"
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) { "Could not copy puzzle link. Try copying it from Rules." }
+            snackbar.showSnackbar(message)
+        }
+    }
+    PopupSnackbar(snackbar)
+
     Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onBrowse, Modifier.semantics { contentDescription = "Back to puzzles" }) { AppIcon(Glyph.Back) }
         Text("NINEFOLD", fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontSize = 12.sp, color = Moss)
         Spacer(Modifier.weight(1f))
-        Text("A little space to think.", fontSize = 12.sp, color = Moss)
+        IconButton({
+            link.fold(
+                onSuccess = { url -> sharePuzzle(url, puzzle.title) { copyLink(url) } },
+                onFailure = { error -> scope.launch { snackbar.showSnackbar(error.message ?: "Could not share puzzle") } },
+            )
+        }, Modifier.semantics { contentDescription = "Share puzzle" }) { AppIcon(Glyph.Share) }
+    }
+}
+
+@Composable
+private fun PopupSnackbar(state: SnackbarHostState) {
+    if (state.currentSnackbarData != null) {
+        androidx.compose.ui.window.Popup(alignment = Alignment.BottomCenter) {
+            SnackbarHost(state, Modifier.padding(16.dp))
+        }
     }
 }
 
