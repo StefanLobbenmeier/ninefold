@@ -176,7 +176,8 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         } else null
     }
     val lines = parseLines(root, fpuzzles)
-    val overlays = root.array("overlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
+    val rawOverlays = root.array("overlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
+    val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText)
     val underlays = root.array("underlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
     val arrows = parseArrows(root, fpuzzles, overlays)
     val outsideClues = parseOutsideClues(rulesText, overlays, arrows)
@@ -196,6 +197,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         overlays = overlays,
         underlays = underlays,
         outsideClues = outsideClues,
+        quadruples = quadruples,
         fogLights = fog.takeIf { hasFog },
         fogLinks = fogLinks,
         sourceUrl = sourceUrl,
@@ -211,6 +213,33 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
             },
         successMessage = successMessage,
     )
+}
+
+/** Some exporters split a quadruple into a circle and one tiny overlay per digit. */
+private fun importQuadruples(overlays: List<PuzzleOverlay>, rules: String): Pair<List<PuzzleOverlay>, List<QuadrupleClue>> {
+    if (!rules.contains("quadruple", ignoreCase = true)) return overlays to emptyList()
+    val labels = mutableSetOf<PuzzleOverlay>()
+    val replacements = mutableMapOf<PuzzleOverlay, PuzzleOverlay>()
+    val clues = overlays.mapNotNull { circle ->
+        val row = circle.center.row.toInt()
+        val column = circle.center.column.toInt()
+        if (!circle.rounded || circle.width !in .3..1.0 || circle.height !in .3..1.0 ||
+            row !in 1..8 || column !in 1..8 ||
+            abs(circle.center.row - row) > .001 || abs(circle.center.column - column) > .001) return@mapNotNull null
+        val parts = overlays.filter { it != circle && it.width <= .2 && it.height <= .2 &&
+            abs(it.center.row - circle.center.row) < circle.height / 2 &&
+            abs(it.center.column - circle.center.column) < circle.width / 2 &&
+            it.text?.toIntOrNull() in 1..9
+        }
+        val digits = if (parts.isNotEmpty()) parts.map { it.text!!.toInt() }
+            else circle.text.orEmpty().filter(Char::isDigit).map { it.digitToInt() }
+        if (digits.isEmpty() || digits.size > 4 || digits.any { it !in 1..9 }) return@mapNotNull null
+        labels += parts
+        replacements[circle] = circle.copy(text = digits.chunked(2).joinToString("\n") { it.joinToString(" ") })
+        QuadrupleClue(digits, listOf(CellPosition(row - 1, column - 1), CellPosition(row - 1, column),
+            CellPosition(row, column - 1), CellPosition(row, column)))
+    }
+    return overlays.filterNot { it in labels }.map { replacements[it] ?: it } to clues
 }
 
 private fun importedSuccessMessage(root: JsonObject, metadata: JsonObject): String? {

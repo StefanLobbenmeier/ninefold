@@ -36,6 +36,9 @@ data class PuzzleOverlay(
     val backgroundColor: String? = null, val borderColor: String? = null, val textColor: String? = null,
     val text: String? = null, val rounded: Boolean = false, val thickness: Double = 1.0,
 )
+@Serializable
+data class QuadrupleClue(val digits: List<Int>, val cells: List<CellPosition>)
+
 enum class OutsideClueType { Unspecified, Skyscraper, DiagonalSum }
 @Serializable
 data class OutsideClue(val value: Int, val position: GridPoint, val cells: List<CellPosition>, val type: OutsideClueType)
@@ -61,6 +64,7 @@ data class Puzzle(
     val lines: List<PuzzleLine> = emptyList(), val arrows: List<PuzzleArrow> = emptyList(),
     val overlays: List<PuzzleOverlay> = emptyList(), val underlays: List<PuzzleOverlay> = emptyList(),
     val outsideClues: List<OutsideClue> = emptyList(),
+    val quadruples: List<QuadrupleClue> = emptyList(),
     /** Present (even when empty) when this is a fog puzzle. */
     val fogLights: Set<CellPosition>? = null,
     /** Null uses regular 3×3 fog; a present list uses only the specified reveals. */
@@ -133,6 +137,22 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
                 candidate in otherValues || (total != null && (otherValues.sum() + candidate > total ||
                     (otherValues.size == indices.size - 1 && otherValues.sum() + candidate != total)))
             }
+            if (invalid.isNotEmpty()) pencilMarks.getOrPut(index, ::mutableSetOf).addAll(invalid)
+        }
+    }
+    if (includeSpecialRules) puzzle.quadruples.forEach { clue ->
+        val indices = clue.cells.map(CellPosition::index)
+        fun possible(candidateIndex: Int? = null, candidate: Int? = null): Boolean {
+            val values = indices.mapNotNull { if (it == candidateIndex) candidate else cells[it].value }
+            val missing = clue.digits.groupingBy { it }.eachCount().entries.sumOf { (digit, count) ->
+                (count - values.count { it == digit }).coerceAtLeast(0)
+            }
+            return missing <= indices.size - values.size
+        }
+        if (!possible()) conflicts += indices.filter { cells[it].value != null }
+        indices.filter { cells[it].value == null }.forEach { index ->
+            val invalid = (cells[index].cornerNotes + cells[index].centreNotes)
+                .filterTo(mutableSetOf()) { !possible(index, it) }
             if (invalid.isNotEmpty()) pencilMarks.getOrPut(index, ::mutableSetOf).addAll(invalid)
         }
     }
