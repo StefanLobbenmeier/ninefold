@@ -92,8 +92,9 @@ test('regular browser tabs are untouched', () => {
     assert.equal(p.writes.length, 0);
 });
 
-test('external link captures geometry synchronously and keeps the original HTTPS URL', () => {
+test('external link captures geometry synchronously before Safari handoff', () => {
     const p = page();
+    p.context.navigator.userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15';
     let clicked = false;
     const link = { click() { clicked = true; p.window.innerHeight = 750; }, remove() {} };
     p.document.createElement = () => link;
@@ -101,7 +102,38 @@ test('external link captures geometry synchronously and keeps the original HTTPS
     vm.runInContext(resource('external-links.js'), p.context);
     p.window.ninefoldOpenExternalLink('https://sudokupad.app/synthetic');
     assert.equal(clicked, true);
-    assert.equal(link.href, 'https://sudokupad.app/synthetic');
+    assert.equal(link.href, 'x-safari-https://sudokupad.app/synthetic');
     assert.equal(link.target, '_self');
     p.event('focus'); p.flush(); assert.equal(p.writes.length, 6);
 });
+
+const iphone = version => `Mozilla/5.0 (iPhone; CPU iPhone OS ${version}_0 like Mac OS X) AppleWebKit/605.1.15`;
+const destination = 'https://example.org/puzzle%2F1?next=https://example.net/a%3Fb#https://example.net/';
+for (const [name, standalone, userAgent, uri, expected, target] of [
+    ['iOS 17 preserves the complete destination', true, iphone(17), destination, `x-safari-${destination}`, '_self'],
+    ['iOS 26', true, iphone(26), destination, `x-safari-${destination}`, '_self'],
+    ['desktop-mode iPad', true, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Version/18.5 Safari/605.1.15', destination, `x-safari-${destination}`, '_self'],
+    ['iOS 16 fallback', true, iphone(16), destination, destination, '_self'],
+    ['unknown version fallback', true, '', destination, destination, '_self'],
+    ['Safari browser tab', false, iphone(18), destination, destination, '_blank'],
+    ['other browsers', undefined, 'Mozilla/5.0 Chrome/130.0', destination, destination, '_blank'],
+    ['same-origin link', true, iphone(18), '/help?q=1#top', 'https://example.test/help?q=1#top', '_blank'],
+    ['HTTP stays HTTP', true, iphone(18), 'http://example.org/path', 'http://example.org/path', '_self'],
+    ['custom scheme', true, iphone(18), 'mailto:test@example.org', 'mailto:test@example.org', '_self'],
+]) {
+    test(`external links: ${name}`, () => {
+        const p = page();
+        Object.assign(p.context.navigator, { standalone, userAgent });
+        const events = [];
+        const link = { click() { events.push('click'); }, remove() { events.push('remove'); } };
+        p.document.createElement = () => link;
+        p.document.body = { appendChild() { events.push('append'); } };
+        p.window.ninefoldPrepareExternalViewport = () => events.push('prepare');
+        vm.runInContext(resource('external-links.js'), p.context);
+        p.window.ninefoldOpenExternalLink(uri);
+        assert.equal(link.href, expected);
+        assert.equal(link.target, target);
+        assert.equal(link.rel, 'external noopener noreferrer');
+        assert.deepEqual(events, ['append', 'prepare', 'click', 'remove']);
+    });
+}
