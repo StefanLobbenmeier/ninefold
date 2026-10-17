@@ -1,4 +1,4 @@
-rootProject.name = "sudokupad"
+rootProject.name = "ninefold"
 
 pluginManagement {
     repositories {

@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		3199291459B232AFC9BEEAD4 /* sudokupad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = sudokupad.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3199291459B232AFC9BEEAD4 /* Ninefold.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ninefold.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,7 +59,7 @@
 		F7E79E0105575CBD623A30D9 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				3199291459B232AFC9BEEAD4 /* sudokupad.app */,
+				3199291459B232AFC9BEEAD4 /* Ninefold.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,7 +87,7 @@
 			packageProductDependencies = (
 			);
 			productName = iosApp;
-			productReference = 3199291459B232AFC9BEEAD4 /* sudokupad.app */;
+			productReference = 3199291459B232AFC9BEEAD4 /* Ninefold.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

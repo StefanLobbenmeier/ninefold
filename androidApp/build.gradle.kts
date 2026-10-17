@@ -20,11 +20,11 @@ dependencies {
 }
 
 android {
-    namespace = "de.sudokupad"
+    namespace = "de.ninefold"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "de.sudokupad"
+        applicationId = "de.ninefold"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
