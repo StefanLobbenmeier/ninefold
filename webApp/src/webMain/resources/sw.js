@@ -1,9 +1,10 @@
 // Replaced by prepare-offline-release.py after the production distribution is built.
 const RELEASE = null;
-const APP_CACHE_PREFIX = 'ninefold-app-';
+const scope = new URL(self.registration.scope);
+// CacheStorage is shared by every worker on this origin, including PR previews.
+const APP_CACHE_PREFIX = `ninefold-app-${encodeURIComponent(scope.href)}:`;
 const APP_CACHE = APP_CACHE_PREFIX + RELEASE?.version;
 const DATA_CACHE = 'ninefold-offline-data-v1';
-const scope = new URL(self.registration.scope);
 const assetUrls = new Set((RELEASE?.assets || []).map(asset => new URL(asset.path, scope).href));
 const isFontAsset = url => url.origin === 'https://fonts.gstatic.com';
 
