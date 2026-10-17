@@ -4,6 +4,14 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class BoardGeometryTest {
+    @Test fun collapsedBoardKeepsCellMeasurementsNonnegative() {
+        for (extent in listOf(0f, 1f, 2f)) {
+            val axis = BoardAxis(extent, 2f)
+            assertEquals(0f, axis.cellSize)
+            assertEquals(extent, axis.start(8) + axis.cellSize)
+        }
+    }
+
     @Test fun boxDividersReserveExtraSpaceWithoutReducingCellInteriors() {
         val axis = BoardAxis(452f, 1f)
         assertEquals(50f, axis.cellSize)

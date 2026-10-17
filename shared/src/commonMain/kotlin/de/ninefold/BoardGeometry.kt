@@ -4,8 +4,10 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** Equal-sized cells, with extra space reserved for the two heavier box dividers. */
-internal class BoardAxis(val extent: Float, val boxGap: Float) {
-    val cellSize = (extent - 2 * boxGap) / 9f
+internal class BoardAxis(val extent: Float, boxGap: Float) {
+    // Rotation can temporarily measure the board smaller than its dividers.
+    val boxGap = boxGap.coerceIn(0f, extent.coerceAtLeast(0f) / 2f)
+    val cellSize = (extent - 2 * this.boxGap).coerceAtLeast(0f) / 9f
     fun start(index: Int): Float = index * cellSize + (index / 3) * boxGap
 
     fun divider(index: Int): Float =

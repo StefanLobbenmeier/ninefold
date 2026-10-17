@@ -1,5 +1,7 @@
 package de.ninefold
 
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
@@ -37,6 +39,30 @@ class AppStartupTest {
 
     private fun emptyIndex() = SudokuIndexRepository(MemorySudokuIndexCache()) {
         """{"schemaVersion":1,"generatedAt":"2026-10-15","sources":[],"entries":[]}"""
+    }
+
+    @Test
+    fun puzzleStartsAfterRotatingToShortLandscape() {
+        val landscape = androidx.compose.runtime.mutableStateOf(false)
+        val storage = MemoryAppStorage()
+        val index = emptyIndex()
+        val puzzle = SudokuFixtures.classic.copy(title = "Rotation puzzle")
+        compose.setContent {
+            androidx.compose.foundation.layout.Box(
+                androidx.compose.ui.Modifier.requiredSize(
+                    if (landscape.value) 812.dp else 375.dp,
+                    if (landscape.value) 300.dp else 812.dp,
+                )
+            ) {
+                App(storage = storage, indexRepository = index, initialShareLink = puzzleShareLink(puzzle))
+            }
+        }
+        compose.runOnIdle { landscape.value = true }
+        compose.onNodeWithText("Okay, start puzzle").performClick()
+        compose.onNodeWithContentDescription("Back to puzzles").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Erase").assertIsDisplayed()
+        compose.runOnIdle { landscape.value = false }
+        compose.onNodeWithContentDescription("Erase").assertIsDisplayed()
     }
 
     @Test

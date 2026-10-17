@@ -282,7 +282,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             if (!down.isConsumed && colourSettings == null) clearSelection()
         }
     }) {
-        val compact = maxWidth < 850.dp
+        val landscapePhone = maxWidth >= 600.dp && maxWidth < 850.dp && maxWidth > maxHeight
+        val compact = maxWidth < 850.dp && !landscapePhone
         Column(Modifier.fillMaxSize()) {
             TopBar { clearSelection(); onBrowse() }
             if (compact) {
@@ -295,7 +296,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                     Controls(effectiveMode, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
                 }
             } else {
-                Row(Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
+                Row(Modifier.fillMaxSize().padding(if (landscapePhone) 8.dp else 28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
                         PuzzleHeading(puzzle, elapsed = elapsed)
                         Spacer(Modifier.height(18.dp))
@@ -304,8 +305,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                             SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                         }
                     }
-                    Column(Modifier.widthIn(min = 270.dp, max = 350.dp)) {
-                        SideCard("PLAY") { Controls(effectiveMode, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }) }
+                    Column(Modifier.widthIn(min = 270.dp, max = 350.dp).verticalScroll(rememberScrollState())) {
+                        SideCard("PLAY") { Controls(effectiveMode, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
                             RulesText(puzzle.rules)
