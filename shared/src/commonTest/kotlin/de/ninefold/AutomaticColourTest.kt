@@ -5,6 +5,46 @@ import kotlin.test.*
 class AutomaticColourTest {
     private val rules = mapOf(7 to AutomaticColourRule(true, setOf(1, 2, 3)))
 
+    @Test fun ruleTextEnablesRelevantFirstOpenDefaults() {
+        val cases = listOf(
+            "Cells are even." to setOf(CellColour.Blue, CellColour.Orange),
+            "ODD digits occupy circles." to setOf(CellColour.Blue, CellColour.Orange),
+            "Lines alternate parity." to setOf(CellColour.Blue, CellColour.Orange),
+            "Digits separated by a ‘V’ sum to 5." to setOf(CellColour.Green),
+            "An X indicates a sum of 10." to setOf(CellColour.Green, CellColour.Red),
+            "Standard XV rules apply." to setOf(CellColour.Green, CellColour.Red),
+            "German whisper lines have differences of at least five." to setOf(CellColour.Green, CellColour.Red),
+            "GERMAN-WHISPERS lines." to setOf(CellColour.Green, CellColour.Red),
+            "Even circles and V clues." to setOf(CellColour.Blue, CellColour.Orange, CellColour.Green),
+            "Normal sudoku rules apply. Values on arrows sum to the circle. Extra dots." to emptySet(),
+            "Dutch whisper lines." to emptySet(),
+        )
+        cases.forEach { (text, expected) ->
+            val puzzle = SudokuFixtures.empty.copy(rules = listOf(text))
+            val actual = puzzle.initialAutomaticColours(null)
+            assertEquals(expected.map { it.number }.toSet(), actual.filterValues { it.enabled }.keys, text)
+            assertEquals(DefaultAutomaticColours.mapValues { it.value.numbers }, actual.mapValues { it.value.numbers })
+        }
+    }
+
+    @Test fun inferredDefaultsPersistAndUserDisablingThemSurvivesReopening() {
+        val puzzle = SudokuFixtures.empty.copy(rules = listOf("Even and odd cells. German whispers. X and V clues."))
+        val storage = MemoryAppStorage()
+        val repository = GameRepository(storage)
+        val defaults = puzzle.initialAutomaticColours(null)
+        repository.saveGame(SavedGame(puzzle, puzzle.startingCells(), true, automaticColours = defaults))
+        val restored = assertNotNull(GameRepository(storage).game(puzzle))
+        assertEquals(defaults, puzzle.initialAutomaticColours(restored))
+
+        val configured = defaults.mapValues { (_, rule) -> rule.copy(enabled = false) } +
+            (CellColour.Green.number to AutomaticColourRule(false, setOf(2, 4)))
+        repository.saveGame(restored.copy(automaticColours = configured))
+        val reopened = assertNotNull(GameRepository(storage).game(puzzle))
+        assertEquals(configured, puzzle.initialAutomaticColours(reopened))
+        // Existing games without automatic-colour settings retain their disabled defaults too.
+        assertEquals(DefaultAutomaticColours, puzzle.initialAutomaticColours(SavedGame(puzzle, puzzle.startingCells(), true)))
+    }
+
     @Test fun matchesDigitsAndNonemptySubsetsOfCentreMarksOnly() {
         val cells = listOf(
             CellState(value = 2), CellState(centreNotes = setOf(1, 3)),

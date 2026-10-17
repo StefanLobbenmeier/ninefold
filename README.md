@@ -211,7 +211,10 @@ undo/redo history are saved with the game.
 
 Long-press a colour swatch to configure automatic colouring. Each colour has its own enable switch
 and matching numbers, saved per game across restarts. Disabled presets are green for 1–3,
-yellow for 4–6, red for 7–9, blue for even numbers, and orange for odd numbers. An A marks enabled swatches.
+yellow for 4–6, red for 7–9, blue for even numbers, and orange for odd numbers. Enabled swatches show their configured numbers in ascending order.
+On first opening a new game, rule text enables blue and orange for odd/even or parity rules,
+green for V clues, and green and red for X/XV clues or German whisper lines. Saved settings
+always take priority, so disabling a colour or customizing its numbers persists across restarts.
 Colours are calculated live from each cell's digit or nonempty centre marks, which must all belong
 to the configured numbers. Corner marks do not trigger colouring. All matching colours appear
 alongside manual colours. Editing cells or changing or disabling a rule updates the whole grid
