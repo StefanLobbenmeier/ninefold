@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -56,6 +57,21 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     val scope = rememberCoroutineScope()
     val playScroll = rememberLazyListState()
     val browseScroll = rememberLazyListState()
+    var progressFilter by rememberSaveable { mutableStateOf(CatalogProgress.All) }
+    var difficultyFilter by rememberSaveable { mutableStateOf(CatalogDifficulty.All) }
+    val completedUrls = remember(games.games) {
+        games.games.values.filter { it.completed }.mapNotNull { it.puzzle.sourceUrl }.toSet()
+    }
+    val entries = index?.entries.orEmpty()
+    val filteredEntries = remember(entries, completedUrls, progressFilter, difficultyFilter) {
+        entries.filter { progressFilter.matches(it.puzzleUrl in completedUrls) && difficultyFilter.matches(it.durationSeconds) }
+    }
+    fun scrollToFilters() { scope.launch { browseScroll.scrollToItem(0) } }
+    fun resetFilters() {
+        progressFilter = CatalogProgress.All
+        difficultyFilter = CatalogDifficulty.All
+        scrollToFilters()
+    }
 
     fun reimport(sourceUrl: String, title: String, videoUrl: String?) {
         if (reimporting != null || opening != null) return
@@ -185,7 +201,18 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                     if (current.entries.isEmpty()) Text("No puzzles have been published yet.")
                 }
             }
-            items(index?.entries.orEmpty(), key = { "catalog.${it.id}" }) { entry ->
+            if (entries.isNotEmpty()) item {
+                CatalogFilters(filteredEntries.size, entries.size, progressFilter, difficultyFilter,
+                    onProgress = { progressFilter = it; scrollToFilters() },
+                    onDifficulty = { difficultyFilter = it; scrollToFilters() }, onReset = ::resetFilters)
+            }
+            if (entries.isNotEmpty() && filteredEntries.isEmpty()) item {
+                Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("No puzzles match these filters.")
+                    TextButton(::resetFilters) { Text("Clear filters") }
+                }
+            }
+            items(filteredEntries, key = { "catalog.${it.id}" }) { entry ->
                 val status = statuses[entry.id] ?: DownloadStatus.Waiting
                 val openPuzzle: () -> Unit = {
                     opening = entry.id
