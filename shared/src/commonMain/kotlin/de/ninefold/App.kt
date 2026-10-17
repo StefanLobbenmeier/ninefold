@@ -132,6 +132,7 @@ fun App(
 internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl: String, onBrowse: () -> Unit) {
     val saved = remember(puzzle) { repository.game(puzzle) }
     var cells by remember(puzzle) { mutableStateOf(saved?.cells ?: puzzle.startingCells()) }
+    val digitCounts = remember(cells) { cells.mapNotNull { it.value }.groupingBy { it }.eachCount() }
     var automaticColours by remember(puzzle) { mutableStateOf(saved?.automaticColours ?: DefaultAutomaticColours) }
     var finalized by remember(puzzle) { mutableStateOf(cells) }
     var colourSettings by remember { mutableStateOf<CellColour?>(null) }
@@ -293,7 +294,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                         val boardSize = minOf(maxWidth, maxHeight)
                         SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     }
-                    Controls(effectiveMode, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
+                    Controls(effectiveMode, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
                 }
             } else {
                 Row(Modifier.fillMaxSize().padding(if (landscapePhone) 8.dp else 28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
@@ -306,7 +307,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                         }
                     }
                     Column(Modifier.widthIn(min = 270.dp, max = 350.dp).verticalScroll(rememberScrollState())) {
-                        SideCard("PLAY") { Controls(effectiveMode, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
+                        SideCard("PLAY") { Controls(effectiveMode, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
                             RulesText(puzzle.rules)
@@ -750,7 +751,7 @@ private fun SideCard(label: String, content: @Composable ColumnScope.() -> Unit)
 }
 
 @Composable
-private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, onColourSettings: (CellColour) -> Unit, automaticColours: Map<Int, AutomaticColourRule>, multiple: Boolean, onMultiple: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, compact: Boolean = false) {
+private fun Controls(mode: InputMode, digitCounts: Map<Int, Int>, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, onColourSettings: (CellColour) -> Unit, automaticColours: Map<Int, AutomaticColourRule>, multiple: Boolean, onMultiple: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, compact: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             (1..9).chunked(3).forEach { numbers ->
@@ -768,7 +769,16 @@ private fun Controls(mode: InputMode, onMode: (InputMode) -> Unit, onNumber: (In
                                 if (automaticColours[number]?.enabled == true) Text("A", color = if (colour == CellColour.DarkGrey) Color.White else Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         } else OutlinedButton({ onNumber(number) }, buttonModifier, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) {
-                            Text(number.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(number.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                                val count = digitCounts[number] ?: 0
+                                if (count > 0) Text(
+                                    count.toString(),
+                                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 6.dp)
+                                        .semantics { contentDescription = "$count placed" },
+                                    fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Medium, color = Moss,
+                                )
+                            }
                         }
                     }
                 }
