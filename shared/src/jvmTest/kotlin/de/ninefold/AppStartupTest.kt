@@ -148,18 +148,21 @@ class AppStartupTest {
 
                 compose.onNodeWithText("NINEFOLD").assertIsDisplayed()
                 compose.onNodeWithText("Browse").performClick()
-                compose.onNodeWithText("Find your next challenge.").assertIsDisplayed()
+                compose.onNodeWithText("Find your next challenge").assertIsDisplayed()
+                val updatedSummary = " · 1 offline · Updated " + java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT)
+                    .format(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).parse("2026-10-12"))
                 compose.waitUntil(timeoutMillis = 10_000) {
-                    compose.onAllNodesWithText("1 puzzles · 1 ready offline · Updated 2026-10-12")
+                    compose.onAllNodesWithText(updatedSummary)
                         .fetchSemanticsNodes().isNotEmpty()
                 }
                 compose.onNodeWithText("Startup puzzle").assertIsDisplayed()
-                compose.onNodeWithText("1 puzzles · 1 ready offline · Updated 2026-10-12").assertIsDisplayed()
+                compose.onNodeWithText("1 puzzles").assertIsDisplayed()
+                compose.onNodeWithText(updatedSummary).assertIsDisplayed()
                 compose.onNodeWithContentDescription("Play Startup puzzle").assertIsEnabled()
                 compose.onNodeWithText("SudokuPad").performClick()
                 compose.onNodeWithText("Source video").performClick()
                 assertEquals(listOf("https://sudokupad.app/startup", "https://www.youtube.com/watch?v=startup"), openedUrls)
-                compose.onNodeWithText("Find your next challenge.").assertIsDisplayed()
+                compose.onNodeWithText("Find your next challenge").assertIsDisplayed()
                 assertEquals("Startup puzzle", repository.cached()?.entries?.single()?.title)
 
                 // Opening Import also composes the FileKit picker integration.
@@ -172,7 +175,7 @@ class AppStartupTest {
                 compose.onNodeWithText("Okay, start puzzle").assertIsDisplayed()
                 compose.onNodeWithText("Okay, start puzzle").performClick()
                 compose.onNodeWithContentDescription("Back to puzzles").performClick()
-                compose.onNodeWithText("Find your next challenge.").assertIsDisplayed()
+                compose.onNodeWithText("Find your next challenge").assertIsDisplayed()
                 compose.onNodeWithText("Play").performClick()
                 compose.onNodeWithContentDescription("Continue Startup puzzle").assertIsDisplayed()
             }
