@@ -11,6 +11,7 @@ dependencies {
     implementation(libs.filekit.dialogs.compose)
 
     implementation(compose.desktop.currentOs)
+    implementation(libs.compose.components.resources)
     implementation(libs.kotlinx.coroutinesSwing)
 
     implementation(libs.compose.uiToolingPreview)
@@ -25,6 +26,9 @@ compose.desktop {
             modules("jdk.security.auth")
             packageName = "de.ninefold"
             packageVersion = "1.0.0"
+            macOS { iconFile.set(project.file("icons/ninefold.icns")) }
+            windows { iconFile.set(project.file("icons/ninefold.ico")) }
+            linux { iconFile.set(project.file("icons/ninefold.png")) }
         }
     }
 }
