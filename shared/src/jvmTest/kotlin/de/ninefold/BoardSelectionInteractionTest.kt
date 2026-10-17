@@ -192,6 +192,20 @@ class BoardSelectionInteractionTest {
         compose.onNodeWithText("Corner").assertIsSelected()
     }
 
+    @Test fun altTemporarilyTogglesLettersInBothDirections() {
+        openPlayer()
+        compose.onRoot().performKeyInput { keyDown(Key.AltLeft) }
+        compose.onNodeWithText("A–Z").assertExists()
+        compose.onRoot().performKeyInput { pressKey(Key.A); keyUp(Key.AltLeft) }
+        cell(1, 3).assertContentDescriptionContains("A", substring = true)
+        compose.onNodeWithText("1–9").performClick()
+        compose.onNodeWithText("A–Z").assertExists()
+        compose.onRoot().performKeyInput { keyDown(Key.AltLeft) }
+        compose.onNodeWithText("1–9").assertExists()
+        compose.onRoot().performKeyInput { keyUp(Key.AltLeft) }
+        compose.onNodeWithText("A–Z").assertExists()
+    }
+
     @Test fun heldModifiersPreviewTheTemporaryInputMode() {
         openPlayer()
         compose.onRoot().performKeyInput { keyDown(Key.ShiftLeft) }
