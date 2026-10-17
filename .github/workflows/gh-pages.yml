@@ -39,9 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pages: write
-      id-token: write
-    # Serialize branch updates and deployment of the combined main/preview site.
+      pages: read
+    # Serialize updates to the shared deployment branch.
     concurrency:
       group: github-pages
       cancel-in-progress: false
@@ -64,59 +63,34 @@ jobs:
       - name: Build web app (Wasm)
         run: ./gradlew :webApp:wasmJsBrowserDistribution --console=plain
 
+      - name: Prepare Pages output
+        run: touch webApp/build/dist/wasmJs/productionExecutable/.nojekyll
+
       # Fork pull requests have a read-only token. Still build them, without publishing.
-      - name: Update Pages branch
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          site="$RUNNER_TEMP/pages-site"
-          if git ls-remote --exit-code --heads origin gh-pages; then
-            git fetch origin gh-pages
-            git worktree add "$site" FETCH_HEAD
-          else
-            git worktree add --detach "$site"
-            git -C "$site" checkout --orphan gh-pages
-            git -C "$site" rm -rf .
-          fi
-          destination="$site"
-          if [ -n "$PR_NUMBER" ]; then
-            destination="$site/previews/pr-$PR_NUMBER"
-            mkdir -p "$destination"
-          fi
-          # Main releases preserve all previews and the site's custom domain.
-          rsync -a --delete --exclude=.git --exclude=previews --exclude=CNAME \
-            webApp/build/dist/wasmJs/productionExecutable/ "$destination/"
-          touch "$site/.nojekyll"
-          git -C "$site" config user.name 'github-actions[bot]'
-          git -C "$site" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git -C "$site" add --all
-          if ! git -C "$site" diff --cached --quiet; then
-            git -C "$site" commit -m "Deploy ${PR_NUMBER:+PR #$PR_NUMBER }${GITHUB_SHA}"
-            git -C "$site" push origin HEAD:gh-pages
-          fi
-
-      - name: Upload Pages artifact
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: ${{ runner.temp }}/pages-site
-
-      - name: Deploy to GitHub Pages
+      - name: Deploy to Pages branch
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: webApp/build/dist/wasmJs/productionExecutable
+          target-folder: ${{ github.event_name == 'pull_request' && format('pr-preview/pr-{0}', github.event.pull_request.number) || '' }}
+          clean-exclude: |
+            pr-preview/
+            CNAME
+          force: false
 
       - name: Report deployment URL
         if: steps.deployment.outcome == 'success'
         id: url
         env:
-          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          url="${PAGE_URL%/}/"
+          url="$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url)"
+          url="${url%/}/"
           if [ -n "$PR_NUMBER" ]; then
-            url="${url}previews/pr-$PR_NUMBER/"
+            url="${url}pr-preview/pr-$PR_NUMBER/"
           fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployment: $url" >> "$GITHUB_STEP_SUMMARY"
