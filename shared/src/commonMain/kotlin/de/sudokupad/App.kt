@@ -286,7 +286,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         Column(Modifier.fillMaxSize()) {
             TopBar { clearSelection(); onBrowse() }
             if (compact) {
-                Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     PuzzleHeading(puzzle, compact = true, elapsed = elapsed)
                     BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                         val boardSize = minOf(maxWidth, maxHeight)
@@ -296,8 +296,13 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                 }
             } else {
                 Row(Modifier.fillMaxSize().padding(28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PuzzleHeading(puzzle, elapsed = elapsed); Spacer(Modifier.height(18.dp)); SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect) { select(it) }
+                    Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        PuzzleHeading(puzzle, elapsed = elapsed)
+                        Spacer(Modifier.height(18.dp))
+                        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                            val boardSize = minOf(maxWidth, maxHeight, 600.dp)
+                            SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
+                        }
                     }
                     Column(Modifier.widthIn(min = 270.dp, max = 350.dp)) {
                         SideCard("PLAY") { Controls(effectiveMode, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }) }
@@ -358,9 +363,13 @@ private fun PuzzleHeading(puzzle: Puzzle, compact: Boolean = false, elapsed: Lon
                 if (isEmpty()) add("CLASSIC")
             }
             Text(types.joinToString(" · "), color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-            Text(puzzle.title, fontSize = if (compact) 20.sp else 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis); Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(puzzle.title, modifier = Modifier.weight(1f), fontSize = if (compact) 20.sp else 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!compact) Text(formatElapsed(elapsed), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(formatElapsed(elapsed), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        if (compact) Text(formatElapsed(elapsed), modifier = Modifier.padding(start = 12.dp), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
