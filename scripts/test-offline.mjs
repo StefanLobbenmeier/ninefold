@@ -9,7 +9,7 @@ import vm from 'node:vm';
 
 const template = readFileSync(new URL('../webApp/src/webMain/resources/sw.js', import.meta.url), 'utf8');
 const generator = fileURLToPath(new URL('./prepare-offline-release.py', import.meta.url));
-const scope = 'https://example.test/sudokupad/';
+const scope = 'https://example.test/ninefold/';
 
 const cacheName = (release, workerScope = scope) => `ninefold-app-${encodeURIComponent(workerScope)}:${release.manifest.version}`;
 
@@ -19,7 +19,7 @@ function release(version = 'old') {
         'index.html': `HTML ${version}`, 'styles.css': 'styles', 'offline.js': 'registration',
         'webApp.js': `loader ${version}`, 'chunks/runtime.mjs': `runtime ${version}`,
         'chunks/app.wasm': `wasm ${version}`, 'fonts/fallback.ttf': 'font',
-        'composeResources/sudokupad.shared.generated.resources/font/lora.ttf': 'synthetic editorial font',
+        'composeResources/ninefold.shared.generated.resources/font/lora.ttf': 'synthetic editorial font',
     };
     try {
         for (const [path, contents] of Object.entries(files)) {

@@ -6,7 +6,7 @@ import vm from 'node:vm';
 // Exercise the actual browser callbacks in both Kotlin interop implementations.
 for (const target of ['js', 'wasmJs']) {
     const source = readFileSync(new URL(
-        `../shared/src/${target}Main/kotlin/de/sudokupad/PageVisibility.${target}.kt`, import.meta.url,
+        `../shared/src/${target}Main/kotlin/de/ninefold/PageVisibility.${target}.kt`, import.meta.url,
     ), 'utf8').split('"""')[1];
 
     function observe(initialVisibility = 'visible') {

@@ -1,3 +1,7 @@
+# Ninefold
+
+Ninefold is a cross-platform Sudoku app with offline play and SudokuPad puzzle import.
+
 This is a Kotlin Multiplatform project targeting Android, iOS, Web, Desktop (JVM).
 
 * [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,

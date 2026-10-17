@@ -18,12 +18,12 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "de.sudokupad.MainKt"
+        mainClass = "de.ninefold.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             modules("jdk.security.auth")
-            packageName = "de.sudokupad"
+            packageName = "de.ninefold"
             packageVersion = "1.0.0"
         }
     }
