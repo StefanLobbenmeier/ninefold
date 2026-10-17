@@ -115,14 +115,17 @@ class AppStartupTest {
         val puzzle = SudokuFixtures.classic.copy(title = "Shared puzzle")
         compose.setContent { App(storage = storage, indexRepository = emptyIndex(), initialShareLink = puzzleShareLink(puzzle)) }
         compose.onAllNodesWithText("Shared puzzle").assertCountEquals(2)
-        compose.onNodeWithText("Puzzle link").assertIsDisplayed()
-        compose.onNodeWithText("Copy puzzle link").assertIsEnabled()
+        compose.onNodeWithText("SHARE PUZZLE").assertDoesNotExist()
+        compose.onNodeWithText("Copy puzzle link").assertDoesNotExist()
         compose.onNodeWithText("Okay, start puzzle").performClick()
         compose.waitForIdle()
         assertEquals(puzzle, GameRepository(storage).game(puzzle)?.puzzle)
         compose.onNodeWithText("Rules").performClick()
-        compose.onNodeWithText("Copy puzzle link").performClick()
-        compose.onNodeWithText("Copied!").assertIsDisplayed()
+        compose.onNodeWithText("SHARE PUZZLE").assertDoesNotExist()
+        compose.onNodeWithText("Copy puzzle link").assertDoesNotExist()
+        compose.onNodeWithText("Okay").performClick()
+        compose.onNodeWithContentDescription("Share puzzle").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Puzzle link copied").assertIsDisplayed()
     }
 
     @Test

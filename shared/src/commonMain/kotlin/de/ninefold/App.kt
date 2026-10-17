@@ -285,7 +285,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         val landscapePhone = maxWidth >= 600.dp && maxWidth < 850.dp && maxWidth > maxHeight
         val compact = maxWidth < 850.dp && !landscapePhone
         Column(Modifier.fillMaxSize()) {
-            TopBar { clearSelection(); onBrowse() }
+            TopBar(puzzle, shareBaseUrl) { clearSelection(); onBrowse() }
             if (compact) {
                 Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     PuzzleHeading(puzzle, compact = true, elapsed = elapsed)
@@ -324,7 +324,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             save()
         }) { colourSettings = null }
     }
-    if (showRules) RulesDialog(puzzle, shareBaseUrl, starting = !started) {
+    if (showRules) RulesDialog(puzzle, starting = !started) {
         if (!started) { clock.start(); started = true; save() }
         showRules = false
     }
@@ -343,12 +343,42 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
 
 
 @Composable
-private fun TopBar(onBrowse: () -> Unit) {
+private fun TopBar(puzzle: Puzzle, shareBaseUrl: String, onBrowse: () -> Unit) {
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    val link = remember(puzzle, shareBaseUrl) { runCatching { puzzleShareLink(puzzle, shareBaseUrl) } }
+    val copyLink: (String) -> Unit = { url ->
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            val message = try {
+                clipboard.setClipEntry(puzzleLinkClipEntry(url))
+                "Puzzle link copied"
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) { "Could not copy puzzle link. Please try again." }
+            snackbar.showSnackbar(message)
+        }
+    }
+    PopupSnackbar(snackbar)
+
     Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onBrowse, Modifier.semantics { contentDescription = "Back to puzzles" }) { AppIcon(Glyph.Back) }
         Text("NINEFOLD", fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontSize = 12.sp, color = Moss)
         Spacer(Modifier.weight(1f))
-        Text("A little space to think.", fontSize = 12.sp, color = Moss)
+        IconButton({
+            link.fold(
+                onSuccess = { url -> sharePuzzle(url, puzzle.title) { copyLink(url) } },
+                onFailure = { error -> scope.launch { snackbar.showSnackbar(error.message ?: "Could not share puzzle") } },
+            )
+        }, Modifier.semantics { contentDescription = "Share puzzle" }) { AppIcon(Glyph.Share) }
+    }
+}
+
+@Composable
+private fun PopupSnackbar(state: SnackbarHostState) {
+    if (state.currentSnackbarData != null) {
+        androidx.compose.ui.window.Popup(alignment = Alignment.BottomCenter) {
+            SnackbarHost(state, Modifier.padding(16.dp))
+        }
     }
 }
 
@@ -841,13 +871,8 @@ private fun IndentedCheckOption(label: String, checked: Boolean, onChecked: (Boo
 }
 
 @Composable
-private fun RulesDialog(puzzle: Puzzle, shareBaseUrl: String, starting: Boolean, onDismiss: () -> Unit) {
+private fun RulesDialog(puzzle: Puzzle, starting: Boolean, onDismiss: () -> Unit) {
     val uriHandler = LocalUriHandler.current
-    val clipboard = LocalClipboard.current
-    val scope = rememberCoroutineScope()
-    val shareLink = remember(puzzle, shareBaseUrl) { runCatching { puzzleShareLink(puzzle, shareBaseUrl) } }
-    var copied by remember { mutableStateOf(false) }
-    var copyError by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = { if (!starting) onDismiss() },
         confirmButton = { Button(onDismiss) { Text(if (starting) "Okay, start puzzle" else "Okay") } },
@@ -859,21 +884,6 @@ private fun RulesDialog(puzzle: Puzzle, shareBaseUrl: String, starting: Boolean,
             if (puzzle.videoUrl != null || puzzle.sourceUrl != null) HorizontalDivider(Modifier.padding(vertical = 8.dp))
             puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Watch source video") } }
             puzzle.sourceUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad") } }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text("SHARE PUZZLE", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
-            Text("Open this link on another device to import this puzzle.", Modifier.padding(vertical = 5.dp), fontSize = 12.sp)
-            shareLink.getOrNull()?.let { url ->
-                OutlinedTextField(value = url, onValueChange = {}, readOnly = true,
-                    label = { Text("Puzzle link") }, maxLines = 2, modifier = Modifier.fillMaxWidth())
-                TextButton({ scope.launch {
-                    try {
-                        clipboard.setClipEntry(puzzleLinkClipEntry(url))
-                        copied = true; copyError = null
-                    } catch (error: CancellationException) { throw error }
-                    catch (error: Exception) { copyError = "Could not copy the link. Select it above to copy manually." }
-                } }) { Text(if (copied) "Copied!" else "Copy puzzle link") }
-            }
-            (copyError ?: shareLink.exceptionOrNull()?.message)?.let { Text(it, color = ErrorRed, fontSize = 12.sp) }
             if (starting) Text("Your timer starts when you tap Okay.", color = Color.Gray, fontSize = 12.sp)
         } }, shape = RoundedCornerShape(22.dp),
     )
