@@ -65,6 +65,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
@@ -297,16 +298,15 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                     Controls(effectiveMode, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
                 }
             } else {
-                Row(Modifier.fillMaxSize().padding(if (landscapePhone) 8.dp else 28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
-                    Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-                        PuzzleHeading(puzzle, elapsed = elapsed)
-                        Spacer(Modifier.height(18.dp))
-                        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                            val boardSize = minOf(maxWidth, maxHeight, 600.dp)
-                            SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
-                        }
-                    }
-                    Column(Modifier.widthIn(min = 270.dp, max = 350.dp).verticalScroll(rememberScrollState())) {
+                DesktopPlayerLayout(
+                    modifier = Modifier.fillMaxSize().padding(if (landscapePhone) 8.dp else 28.dp),
+                    compact = landscapePhone,
+                    heading = { PuzzleHeading(puzzle, compact = landscapePhone, elapsed = elapsed) },
+                    board = {
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
+                    },
+                ) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         SideCard("PLAY") { Controls(effectiveMode, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
@@ -383,9 +383,55 @@ private fun PopupSnackbar(state: SnackbarHostState) {
     }
 }
 
+// Measure the heading before sizing the square; the sidebar stays attached even on ultrawide screens.
+@Composable
+internal fun DesktopPlayerLayout(
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    heading: @Composable () -> Unit,
+    board: @Composable () -> Unit,
+    controls: @Composable () -> Unit,
+) {
+    Layout(content = {
+        Box { heading() }
+        Box { board() }
+        BoxWithConstraints {
+            val density = LocalDensity.current
+            val scale = if (compact) 1f else (maxWidth / 350.dp).coerceAtLeast(1f)
+            // Scale the whole panel together: touch targets, icons, labels, spacing and notes.
+            CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
+                controls()
+            }
+        }
+    }, modifier = modifier) { measurables, constraints ->
+        val gap = (if (compact) 16.dp else 28.dp).roundToPx()
+        val headingGap = (if (compact) 8.dp else 18.dp).roundToPx()
+        val baseControlsWidth = (if (compact) 270.dp else 350.dp).roundToPx()
+            .coerceAtMost(constraints.maxWidth / 2)
+        val availableWidth = (constraints.maxWidth - baseControlsWidth - gap).coerceAtLeast(0)
+        val headingHeight = measurables[0].maxIntrinsicHeight(availableWidth)
+        // Above the original 600 dp board size, reserve proportional space for the panel.
+        val controlsRatio = 350f / 600f
+        val widthForBoard = if (compact) availableWidth else minOf(
+            availableWidth, ((constraints.maxWidth - gap) / (1f + controlsRatio)).toInt(),
+        )
+        val boardSize = minOf(widthForBoard, (constraints.maxHeight - headingHeight - headingGap).coerceAtLeast(0))
+        val controlsWidth = if (compact) baseControlsWidth else maxOf(baseControlsWidth, (boardSize * controlsRatio).roundToInt())
+        val headingPlaceable = measurables[0].measure(Constraints.fixed(boardSize, headingHeight))
+        val boardPlaceable = measurables[1].measure(Constraints.fixed(boardSize, boardSize))
+        val controlsPlaceable = measurables[2].measure(Constraints.fixed(controlsWidth, constraints.maxHeight))
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            val left = (constraints.maxWidth - boardSize - gap - controlsWidth) / 2
+            headingPlaceable.placeRelative(left, 0)
+            boardPlaceable.placeRelative(left, headingHeight + headingGap)
+            controlsPlaceable.placeRelative(left + boardSize + gap, 0)
+        }
+    }
+}
+
 @Composable
 private fun PuzzleHeading(puzzle: Puzzle, compact: Boolean = false, elapsed: Long = 0) {
-    Row(Modifier.widthIn(max = 660.dp).fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f)) {
             val types = buildList {
                 if (puzzle.fogLights != null) add("FOG")
@@ -436,8 +482,9 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
         }
     }
     val measurer = rememberTextMeasurer()
-    BoxWithConstraints(modifier.widthIn(max = 600.dp).fillMaxWidth().aspectRatio(1f)) {
-        val digitSize = minOf(24f, maxWidth.value / (9 + padCells * 2) * .6f).sp
+    BoxWithConstraints(modifier.fillMaxWidth().aspectRatio(1f)) {
+        val cellSize = maxWidth / (9 + padCells * 2)
+        val digitSize = (cellSize.value * .6f).sp
         val density = LocalDensity.current
         val inset = with(density) {
             (maxWidth * (padCells.toFloat() / (9 + padCells * 2)) + 2.dp).roundToPx().toDp()
@@ -528,7 +575,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                 when {
                     cell.value != null && (!cell.given || !fogged) -> Text(cell.value.toString(), modifier = Modifier.background(textBackdrop), fontSize = digitSize, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
                     cell.value == null -> {
-                        if (cell.cornerNotes.isNotEmpty()) CornerNotes(cell.cornerNotes, invalidPencilMarks[position.index].orEmpty(), textBackdrop)
+                        if (cell.cornerNotes.isNotEmpty()) CornerNotes(cell.cornerNotes, invalidPencilMarks[position.index].orEmpty(), cellSize, textBackdrop)
                         if (cell.centreNotes.isNotEmpty()) CentreNotes(cell.centreNotes, invalidPencilMarks[position.index].orEmpty(), textBackdrop)
                     }
                 }
@@ -561,8 +608,8 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                                 .padding(start = 3.dp, top = 1.dp)
                                 .background(Color.White.copy(alpha = .9f), RoundedCornerShape(1.dp))
                                 .padding(horizontal = 1.dp),
-                            fontSize = 8.sp,
-                            lineHeight = 9.sp,
+                            fontSize = (cellSize.value * .2f).sp,
+                            lineHeight = (cellSize.value * .225f).sp,
                             color = Color.Black,
                             fontWeight = FontWeight.Normal,
                         )
@@ -733,11 +780,11 @@ private fun BoxScope.CageOverlay(boxGap: Dp, cages: List<KillerCage>) {
 }
 
 @Composable
-private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Color.Transparent) {
+private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>, cellSize: Dp, backdrop: Color = Color.Transparent) {
     val sortedNotes = notes.sorted()
     val corners = listOf(Alignment.TopStart, Alignment.TopEnd, Alignment.BottomStart, Alignment.BottomEnd)
     // Stay inside the cage outlines while leaving room for the centre marks.
-    Box(Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 4.dp)) {
+    Box(Modifier.fillMaxSize().padding(horizontal = cellSize * .15f, vertical = cellSize * .1f)) {
         corners.forEachIndexed { corner, alignment ->
             // Fill the corners first, then pack additional marks beside them.
             val cornerNotes = sortedNotes.filterIndexed { index, _ -> index % corners.size == corner }
@@ -746,7 +793,7 @@ private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Co
                     cornerNotes.forEach { number ->
                         withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
                     }
-                }, modifier = Modifier.align(alignment).background(backdrop), fontSize = 10.sp, lineHeight = 10.sp, maxLines = 1)
+                }, modifier = Modifier.align(alignment).background(backdrop), fontSize = (cellSize.value * .25f).sp, lineHeight = (cellSize.value * .25f).sp, maxLines = 1)
             }
         }
     }
@@ -755,7 +802,7 @@ private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Co
 @Composable
 private fun CentreNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Color.Transparent) {
     BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        val noteSize = minOf(11f, maxWidth.value / notes.size.coerceAtLeast(1)).sp
+        val noteSize = minOf(maxWidth.value * .275f, maxWidth.value / notes.size.coerceAtLeast(1)).sp
         Text(buildAnnotatedString {
             notes.sorted().forEach { number ->
                 withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
