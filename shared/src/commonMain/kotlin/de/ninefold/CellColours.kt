@@ -31,6 +31,24 @@ internal val DefaultAutomaticColours = mapOf(
     CellColour.Orange.number to AutomaticColourRule(numbers = setOf(1, 3, 5, 7, 9)),
 )
 
+/** Infer first-open defaults only; saved settings, including disabled rules, always win. */
+internal fun Puzzle.initialAutomaticColours(saved: SavedGame?): Map<Int, AutomaticColourRule> {
+    saved?.let { return it.automaticColours }
+    val text = rules.joinToString("\n")
+    fun mentions(pattern: String) = Regex(pattern, RegexOption.IGNORE_CASE).containsMatchIn(text)
+    val parity = mentions("\\b(?:odd|odds|even|evens|parity)\\b")
+    val xv = mentions("\\bXV\\b")
+    val v = xv || mentions("\\bV\\b")
+    val x = xv || mentions("\\bX\\b")
+    val whispers = mentions("\\bgerman[\\s-]+whispers?\\b")
+    val enabled = buildSet {
+        if (parity) addAll(listOf(CellColour.Blue, CellColour.Orange))
+        if (v || x || whispers) add(CellColour.Green)
+        if (x || whispers) add(CellColour.Red)
+    }.map { it.number }.toSet()
+    return DefaultAutomaticColours.mapValues { (colour, rule) -> rule.copy(enabled = colour in enabled) }
+}
+
 /** Display colours are derived from live content; only manual colours belong to cell state. */
 internal fun CellState.displayColours(rules: Map<Int, AutomaticColourRule>): Set<Int> {
     val numbers = value?.let { setOf(it) } ?: centreNotes

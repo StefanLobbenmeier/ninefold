@@ -133,7 +133,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val saved = remember(puzzle) { repository.game(puzzle) }
     var cells by remember(puzzle) { mutableStateOf(saved?.cells ?: puzzle.startingCells()) }
     val digitCounts = remember(cells) { cells.mapNotNull { it.value }.groupingBy { it }.eachCount() }
-    var automaticColours by remember(puzzle) { mutableStateOf(saved?.automaticColours ?: DefaultAutomaticColours) }
+    var automaticColours by remember(puzzle) { mutableStateOf(puzzle.initialAutomaticColours(saved)) }
     var finalized by remember(puzzle) { mutableStateOf(cells) }
     var colourSettings by remember { mutableStateOf<CellColour?>(null) }
     var selected by remember { mutableStateOf(setOf(CellPosition(0, 2))) }
@@ -766,7 +766,9 @@ private fun Controls(mode: InputMode, digitCounts: Map<Int, Int>, onMode: (Input
                             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD)),
                         ) {
                             Box(Modifier.fillMaxSize().padding(7.dp).clip(RoundedCornerShape(5.dp)).background(colour.swatch), contentAlignment = Alignment.Center) {
-                                if (automaticColours[number]?.enabled == true) Text("A", color = if (colour == CellColour.DarkGrey) Color.White else Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                automaticColours[number]?.takeIf { it.enabled }?.let { rule ->
+                                    Text(rule.numbers.sorted().joinToString(""), color = if (colour == CellColour.DarkGrey) Color.White else Ink, fontWeight = FontWeight.Bold, fontSize = if (rule.numbers.size > 5) 10.sp else 12.sp)
+                                }
                             }
                         } else OutlinedButton({ onNumber(number) }, buttonModifier, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
