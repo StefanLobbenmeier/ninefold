@@ -138,6 +138,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var colourSettings by remember { mutableStateOf<CellColour?>(null) }
     var selected by remember { mutableStateOf(setOf(CellPosition(0, 2))) }
     val mode = InputMode.entries.firstOrNull { it.name == repository.settings.inputMode } ?: InputMode.Digit
+    var altHeld by remember { mutableStateOf(false) }
+    val letters = repository.settings.letters != altHeld
     var temporaryMode by remember { mutableStateOf<InputMode?>(null) }
     val effectiveMode = temporaryMode ?: mode
     var showRules by remember { mutableStateOf(saved?.started != true) }
@@ -244,13 +246,14 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     PlayerBackHandler(onBrowse)
     LaunchedEffect(puzzle) { repository.markPlayed(puzzle) }
     LaunchedEffect(puzzle, showRules, showChecking, showSuccess, colourSettings) {
-        if (showRules || showChecking || showSuccess || colourSettings != null) temporaryMode = null
+        if (showRules || showChecking || showSuccess || colourSettings != null) { temporaryMode = null; altHeld = false }
         if (!showRules && !showChecking && !showSuccess && colourSettings == null) focusRequester.requestFocus()
     }
     BoxWithConstraints(Modifier.fillMaxSize().focusRequester(focusRequester).onFocusChanged {
-        if (!it.hasFocus) temporaryMode = null
+        if (!it.hasFocus) { temporaryMode = null; altHeld = false }
     }.onPreviewKeyEvent { event ->
         if (event.type != KeyEventType.KeyDown || showRules || showChecking || showSuccess || colourSettings != null) return@onPreviewKeyEvent false
+        altHeld = event.isAltPressed
         temporaryMode = when {
             (event.isCtrlPressed || event.isMetaPressed) && event.isShiftPressed -> InputMode.Colour
             event.isCtrlPressed || event.isMetaPressed -> InputMode.Centre
@@ -262,11 +265,13 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             primaryModifier = event.isCtrlPressed || event.isMetaPressed,
             shift = event.isShiftPressed,
             alt = event.isAltPressed,
+            letters = repository.settings.letters != event.isAltPressed,
         ) ?: return@onPreviewKeyEvent false
         handleShortcut(shortcut)
         true
     }.onKeyEvent { event ->
         if (event.type == KeyEventType.KeyUp) {
+            altHeld = event.isAltPressed
             temporaryMode = when {
                 (event.isCtrlPressed || event.isMetaPressed) && event.isShiftPressed -> InputMode.Colour
                 event.isCtrlPressed || event.isMetaPressed -> InputMode.Centre
@@ -294,7 +299,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                         val boardSize = minOf(maxWidth, maxHeight)
                         SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     }
-                    Controls(effectiveMode, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
+                    Controls(effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
                 }
             } else {
                 Row(Modifier.fillMaxSize().padding(if (landscapePhone) 8.dp else 28.dp), horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Top) {
@@ -307,7 +312,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                         }
                     }
                     Column(Modifier.widthIn(min = 270.dp, max = 350.dp).verticalScroll(rememberScrollState())) {
-                        SideCard("PLAY") { Controls(effectiveMode, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
+                        SideCard("PLAY") { Controls(effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
                         Spacer(Modifier.height(16.dp))
                         SideCard("PUZZLE NOTES") {
                             RulesText(puzzle.rules)
@@ -519,14 +524,14 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             val background = when { isSelected -> Color.LightGray.copy(alpha = .3f); position.index in conflicts -> Color(0xEFFFF1EC); position.index in uncertain -> Color(0xEFFFEDBD); same -> Color(0xDDE6D9A8); else -> Color.Transparent }.let { if (colours.isNotEmpty()) it.copy(alpha = minOf(it.alpha, .18f)) else it }
             val textBackdrop = if (CellColour.DarkGrey.number in colours) Color.White.copy(alpha = .85f) else Color.Transparent
             val fogged = puzzle.fogLights != null && position !in litCells
-            Box(Modifier.fillMaxSize().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString()}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString()}" else ""}${if (colours.isNotEmpty()) ", colours ${colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.then(if (interactive) Modifier.clickable { onSelect(position) } else Modifier), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value?.symbolText() ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString { it.symbolText() }}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString { it.symbolText() }}" else ""}${if (colours.isNotEmpty()) ", colours ${colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index in uncertain) ", uncertain reading" else ""}" }.then(if (interactive) Modifier.clickable { onSelect(position) } else Modifier), contentAlignment = Alignment.Center) {
                 if (fogged) Canvas(Modifier.matchParentSize()) {
                     drawRect(Color(0xFFB4B7B5))
                     drawCellColours(colours)
                 }
                 Box(Modifier.matchParentSize().background(background))
                 when {
-                    cell.value != null && (!cell.given || !fogged) -> Text(cell.value.toString(), modifier = Modifier.background(textBackdrop), fontSize = digitSize, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
+                    cell.value != null && (!cell.given || !fogged) -> Text(cell.value.symbolText(), modifier = Modifier.background(textBackdrop), fontSize = digitSize, fontWeight = if (cell.given) FontWeight.Black else FontWeight.Medium, color = if (position.index in conflicts) ErrorRed else if (cell.given) Ink else Moss)
                     cell.value == null -> {
                         if (cell.cornerNotes.isNotEmpty()) CornerNotes(cell.cornerNotes, invalidPencilMarks[position.index].orEmpty(), textBackdrop)
                         if (cell.centreNotes.isNotEmpty()) CentreNotes(cell.centreNotes, invalidPencilMarks[position.index].orEmpty(), textBackdrop)
@@ -744,7 +749,7 @@ private fun CornerNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Co
             if (cornerNotes.isNotEmpty()) {
                 Text(buildAnnotatedString {
                     cornerNotes.forEach { number ->
-                        withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
+                        withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.symbolText()) }
                     }
                 }, modifier = Modifier.align(alignment).background(backdrop), fontSize = 10.sp, lineHeight = 10.sp, maxLines = 1)
             }
@@ -758,7 +763,7 @@ private fun CentreNotes(notes: Set<Int>, invalid: Set<Int>, backdrop: Color = Co
         val noteSize = minOf(11f, maxWidth.value / notes.size.coerceAtLeast(1)).sp
         Text(buildAnnotatedString {
             notes.sorted().forEach { number ->
-                withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.toString()) }
+                withStyle(SpanStyle(color = if (number in invalid) ErrorRed else Moss)) { append(number.symbolText()) }
             }
         }, modifier = Modifier.background(backdrop), fontSize = noteSize, lineHeight = noteSize, maxLines = 1, textAlign = TextAlign.Center)
     }
@@ -772,35 +777,37 @@ private fun SideCard(label: String, content: @Composable ColumnScope.() -> Unit)
 }
 
 @Composable
-private fun Controls(mode: InputMode, digitCounts: Map<Int, Int>, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, onColourSettings: (CellColour) -> Unit, automaticColours: Map<Int, AutomaticColourRule>, multiple: Boolean, onMultiple: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, compact: Boolean = false) {
+private fun Controls(mode: InputMode, letters: Boolean, onLetters: () -> Unit, digitCounts: Map<Int, Int>, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, onColourSettings: (CellColour) -> Unit, automaticColours: Map<Int, AutomaticColourRule>, multiple: Boolean, onMultiple: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, compact: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            (1..9).chunked(3).forEach { numbers ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    numbers.forEach { number ->
-                        val colour = if (mode == InputMode.Colour) CellColour.fromNumber(number) else null
-                        val buttonModifier = Modifier.weight(1f).height(if (compact) 44.dp else 52.dp)
-                        if (colour != null) Surface(
-                            modifier = buttonModifier.semantics { contentDescription = "${colour.label}, colour $number" }
-                                .combinedClickable(onClick = { onNumber(number) }, onLongClickLabel = "Automatic colouring settings", onLongClick = { onColourSettings(colour) }),
-                            shape = RoundedCornerShape(10.dp), color = Color.Transparent,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD)),
-                        ) {
-                            Box(Modifier.fillMaxSize().padding(7.dp).clip(RoundedCornerShape(5.dp)).background(colour.swatch), contentAlignment = Alignment.Center) {
-                                automaticColours[number]?.takeIf { it.enabled }?.let { rule ->
-                                    Text(rule.numbers.sorted().joinToString(""), color = if (colour == CellColour.DarkGrey) Color.White else Ink, fontWeight = FontWeight.Bold, fontSize = if (rule.numbers.size > 5) 10.sp else 12.sp)
+            Column(Modifier.heightIn(max = if (compact) 144.dp else 168.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                (if (letters && mode != InputMode.Colour) 10..35 else 1..9).chunked(3).forEach { numbers ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        numbers.forEach { number ->
+                            val colour = if (mode == InputMode.Colour) CellColour.fromNumber(number) else null
+                            val buttonModifier = Modifier.weight(1f).height(if (compact) 44.dp else 52.dp)
+                            if (colour != null) Surface(
+                                modifier = buttonModifier.semantics { contentDescription = "${colour.label}, colour $number" }
+                                    .combinedClickable(onClick = { onNumber(number) }, onLongClickLabel = "Automatic colouring settings", onLongClick = { onColourSettings(colour) }),
+                                shape = RoundedCornerShape(10.dp), color = Color.Transparent,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD)),
+                            ) {
+                                Box(Modifier.fillMaxSize().padding(7.dp).clip(RoundedCornerShape(5.dp)).background(colour.swatch), contentAlignment = Alignment.Center) {
+                                    automaticColours[number]?.takeIf { it.enabled }?.let { rule ->
+                                        Text(rule.numbers.sorted().joinToString(""), color = if (colour == CellColour.DarkGrey) Color.White else Ink, fontWeight = FontWeight.Bold, fontSize = if (rule.numbers.size > 5) 10.sp else 12.sp)
+                                    }
                                 }
-                            }
-                        } else OutlinedButton({ onNumber(number) }, buttonModifier, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(number.toString(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                                val count = digitCounts[number] ?: 0
-                                if (count > 0) Text(
-                                    count.toString(),
-                                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 6.dp)
-                                        .semantics { contentDescription = "$count placed" },
-                                    fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Medium, color = Moss,
-                                )
+                            } else OutlinedButton({ onNumber(number) }, buttonModifier, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text(number.symbolText(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                                    val count = digitCounts[number] ?: 0
+                                    if (count > 0) Text(
+                                        count.toString(),
+                                        modifier = Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 6.dp)
+                                            .semantics { contentDescription = "$count placed" },
+                                        fontSize = 10.sp, lineHeight = 12.sp, fontWeight = FontWeight.Medium, color = Moss,
+                                    )
+                                }
                             }
                         }
                     }
@@ -813,6 +820,7 @@ private fun Controls(mode: InputMode, digitCounts: Map<Int, Int>, onMode: (Input
             }
         }
         Column(Modifier.width(72.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilledTonalButton(onLetters, Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) { Text(if (letters) "A–Z" else "1–9") }
             InputMode.entries.forEach { item -> val active = item == mode
                 Surface(Modifier.fillMaxWidth().height(if (compact) 44.dp else 52.dp).semantics { selected = active }.clickable { onMode(item) }, shape = RoundedCornerShape(10.dp), color = if (active) Moss else Color(0xFFF0F1EA)) {
                     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
