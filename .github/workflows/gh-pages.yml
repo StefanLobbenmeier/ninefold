@@ -11,13 +11,42 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     concurrency:
-      group: build-${{ github.workflow }}-${{ github.ref }}
+      group: test-${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
-    outputs:
-      pages_ready: ${{ steps.pages.outcome == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Test offline startup, release updates, and browser lifecycle
+        run: node --test scripts/test-offline.mjs scripts/test-page-visibility.mjs scripts/test-viewport-recovery.mjs
+
+      - name: Run JVM tests
+        run: xvfb-run --auto-servernum ./gradlew :shared:jvmTest --console=plain
+
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: read
+    # Serialize updates to the shared deployment branch.
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'github-pages-preview' || 'github-pages' }}
+      url: ${{ steps.url.outputs.url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -34,38 +63,34 @@ jobs:
       - name: Build web app (Wasm)
         run: ./gradlew :webApp:wasmJsBrowserDistribution --console=plain
 
-      - name: Test offline startup, release updates, and browser lifecycle
-        run: node --test scripts/test-offline.mjs scripts/test-page-visibility.mjs scripts/test-viewport-recovery.mjs
-
-      - name: Run JVM tests
-        run: xvfb-run --auto-servernum ./gradlew :shared:jvmTest --console=plain
-
-      - name: Prepare Pages artifact
-        if: github.event_name != 'pull_request' && github.ref_name == 'main'
+      - name: Prepare Pages output
         run: touch webApp/build/dist/wasmJs/productionExecutable/.nojekyll
 
-      - name: Upload Pages artifact
-        id: pages
-        if: github.event_name != 'pull_request' && github.ref_name == 'main'
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: webApp/build/dist/wasmJs/productionExecutable
-
-  deploy:
-    needs: build
-    if: needs.build.outputs.pages_ready == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    concurrency:
-      group: github-pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
+      # Fork pull requests have a read-only token. Still build them, without publishing.
+      - name: Deploy to Pages branch
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: webApp/build/dist/wasmJs/productionExecutable
+          target-folder: ${{ github.event_name == 'pull_request' && format('pr-preview/pr-{0}', github.event.pull_request.number) || '' }}
+          clean-exclude: |
+            pr-preview/
+            CNAME
+          force: false
+
+      - name: Report deployment URL
+        if: steps.deployment.outcome == 'success'
+        id: url
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          url="$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url)"
+          url="${url%/}/"
+          if [ -n "$PR_NUMBER" ]; then
+            url="${url}pr-preview/pr-$PR_NUMBER/"
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployment: $url" >> "$GITHUB_STEP_SUMMARY"
