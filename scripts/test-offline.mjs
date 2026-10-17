@@ -11,6 +11,8 @@ const template = readFileSync(new URL('../webApp/src/webMain/resources/sw.js', i
 const generator = fileURLToPath(new URL('./prepare-offline-release.py', import.meta.url));
 const scope = 'https://example.test/sudokupad/';
 
+const cacheName = (release, workerScope = scope) => `ninefold-app-${encodeURIComponent(workerScope)}:${release.manifest.version}`;
+
 function release(version = 'old') {
     const directory = mkdtempSync(`${tmpdir()}/ninefold-offline-`);
     const files = {
@@ -29,7 +31,7 @@ function release(version = 'old') {
         execFileSync('python3', [generator, directory]);
         const source = readFileSync(`${directory}/sw.js`, 'utf8');
         const manifest = JSON.parse(source.match(/const RELEASE = (.*);/)[1]);
-        return { source, manifest, files, cacheName: `ninefold-app-${manifest.version}` };
+        return { source, manifest, files, cacheName: `ninefold-app-${encodeURIComponent(scope)}:${manifest.version}` };
     } finally {
         rmSync(directory, { recursive: true, force: true });
     }
@@ -53,7 +55,7 @@ function storage() {
     };
 }
 
-function worker(release, caches, network) {
+function worker(release, caches, network, workerScope = scope) {
     const handlers = {};
     const requests = [];
     let activations = 0;
@@ -62,7 +64,7 @@ function worker(release, caches, network) {
         fetch: async (...args) => { requests.push(args); return network(...args); },
         // Activation must only be requested by an explicit update message.
         self: {
-            registration: { scope }, addEventListener: (name, handler) => { handlers[name] = handler; },
+            registration: { scope: workerScope }, addEventListener: (name, handler) => { handlers[name] = handler; },
             skipWaiting: async () => { activations++; },
         },
     });
@@ -76,8 +78,8 @@ function worker(release, caches, network) {
         },
     };
 }
-const networkFor = release => async (url) => {
-    const path = new URL(url).pathname.slice('/sudokupad/'.length);
+const networkFor = (release, workerScope = scope) => async (url) => {
+    const path = new URL(url).pathname.slice(new URL(workerScope).pathname.length);
     return new Response(release.files[path], { status: path in release.files ? 200 : 404 });
 };
 const old = release();
@@ -145,6 +147,48 @@ test('complete update stays separate until activation and preserves puzzle/font 
     assert.equal(caches.entries.has('ninefold-offline-data-v1'), true);
     const newPage = await updater.dispatch('fetch', { method: 'GET', mode: 'navigate', url: scope });
     assert.equal(await newPage.text(), next.files['index.html']);
+});
+
+for (const previewRelease of [old, next]) {
+    test(`deployment scopes retain independent caches with ${previewRelease === old ? 'identical' : 'different'} releases`, async () => {
+        const caches = storage();
+        const previewScope = scope + 'pr-preview/pr-123/';
+        const main = worker(old, caches, networkFor(old));
+        const preview = worker(previewRelease, caches, networkFor(previewRelease, previewScope), previewScope);
+        await main.dispatch('install');
+        await main.dispatch('activate');
+        await preview.dispatch('install');
+        await preview.dispatch('activate');
+        assert.equal(caches.entries.has(old.cacheName), true);
+        assert.equal(caches.entries.has(cacheName(previewRelease, previewScope)), true);
+
+        const update = worker(next, caches, networkFor(next));
+        await update.dispatch('install');
+        await update.dispatch('activate');
+        assert.equal(caches.entries.has(old.cacheName), false);
+        assert.equal(caches.entries.has(cacheName(previewRelease, previewScope)), true);
+        for (const [release, workerScope] of [[next, scope], [previewRelease, previewScope]]) {
+            const offline = worker(release, caches, () => { throw new Error('No internet'); }, workerScope);
+            for (const [path, contents] of Object.entries(release.files)) {
+                const response = await offline.dispatch('fetch', { method: 'GET', mode: 'cors', url: workerScope + path });
+                assert.equal(await response.text(), contents);
+            }
+            const page = await offline.dispatch('fetch', { method: 'GET', mode: 'navigate', url: workerScope });
+            assert.equal(await page.text(), release.files['index.html']);
+            assert.equal(offline.requests.length, 0);
+        }
+    });
+}
+
+test('failed installation in another scope preserves an identical installed release', async () => {
+    const caches = storage();
+    await worker(old, caches, networkFor(old)).dispatch('install');
+    const previewScope = scope + 'pr-preview/pr-123/';
+    const preview = worker(old, caches, async () => new Response('Unavailable', { status: 503 }), previewScope);
+    await assert.rejects(preview.dispatch('install'));
+    assert.equal(caches.entries.has(cacheName(old, previewScope)), false);
+    const page = await worker(old, caches, networkFor(old)).dispatch('fetch', { method: 'GET', mode: 'navigate', url: scope });
+    assert.equal(await page.text(), old.files['index.html']);
 });
 
 test('a missing cached shell does not fall through to an incompatible online version', async () => {
