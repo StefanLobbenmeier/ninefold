@@ -191,8 +191,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 }
             } else {
             item {
-                Text("Find your next challenge.", fontFamily = editorialFont(), fontSize = 34.sp, lineHeight = 40.sp)
-                Text("A collection of curious grids, ready for a quiet moment.", modifier = Modifier.padding(top = 4.dp))
+                Text("Find your next challenge", fontFamily = editorialFont(), fontSize = 34.sp, lineHeight = 40.sp)
                 if (refreshing) {
                     LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
                     Text(if (index == null) "Loading puzzles…" else "Refreshing puzzles…")
@@ -200,15 +199,17 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 indexError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 games.storageError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 index?.let { current ->
-                    val ready = current.entries.count { statuses[it.id] == DownloadStatus.Ready }
-                    Text("${current.entries.size} puzzles · $ready ready offline · ${if (cached) "Saved index" else "Updated"} ${current.generatedAt.take(10)}", style = MaterialTheme.typography.bodySmall)
                     if (current.entries.isEmpty()) Text("No puzzles have been published yet.")
                 }
             }
             if (entries.isNotEmpty()) item {
                 CatalogFilters(filteredEntries.size, entries.size, progressFilter, difficultyFilter,
                     onProgress = { progressFilter = it; scrollToFilters() },
-                    onDifficulty = { difficultyFilter = it; scrollToFilters() }, onReset = ::resetFilters)
+                    onDifficulty = { difficultyFilter = it; scrollToFilters() }, onReset = ::resetFilters,
+                    summary = index?.let { current ->
+                        val ready = current.entries.count { statuses[it.id] == DownloadStatus.Ready }
+                        "$ready offline · ${if (cached) "Saved index" else "Updated"} ${deviceDate(current.generatedAt.take(10))}"
+                    })
             }
             if (entries.isNotEmpty() && filteredEntries.isEmpty()) item {
                 Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -245,26 +246,43 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                         } else null,
                     ),
                 ) {
-                    entry.thumbnailUrl?.let { VideoThumbnail(it, entry.durationSeconds) }
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (entry.thumbnailUrl == null && status == DownloadStatus.Ready) games.cachedPuzzle(entry)?.let { puzzle ->
-                            val saved = games.game(puzzle)
-                            PuzzlePreview(puzzle, saved?.cells ?: remember(puzzle) { puzzle.startingCells() },
-                                Modifier.size(80.dp), saved?.automaticColours ?: emptyMap())
-                            Spacer(Modifier.width(12.dp))
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val wide = maxWidth >= 600.dp
+                        val details: @Composable () -> Unit = {
+                            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (entry.thumbnailUrl == null && status == DownloadStatus.Ready) games.cachedPuzzle(entry)?.let { puzzle ->
+                                    val saved = games.game(puzzle)
+                                    PuzzlePreview(puzzle, saved?.cells ?: remember(puzzle) { puzzle.startingCells() },
+                                        Modifier.size(80.dp), saved?.automaticColours ?: emptyMap())
+                                    Spacer(Modifier.width(12.dp))
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text(entry.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("${entry.source} · ${entry.publishedAt.take(10)}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp))
+                                    Text(status.label, style = MaterialTheme.typography.bodySmall, color = if (status == DownloadStatus.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                                    PuzzleSourceLinks(entry.puzzleUrl, entry.videoUrl)
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                PuzzleOpenButton(
+                                    action = if (status == DownloadStatus.Failed) "Retry" else "Play",
+                                    title = entry.title, enabled = (status == DownloadStatus.Ready || status == DownloadStatus.Failed) && opening == null && reimporting == null,
+                                    opening = opening == entry.id, onOpen = openPuzzle,
+                                )
+                            }
                         }
-                        Column(Modifier.weight(1f)) {
-                            Text(entry.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("${entry.source} · ${entry.publishedAt.take(10)}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp))
-                            Text(status.label, style = MaterialTheme.typography.bodySmall, color = if (status == DownloadStatus.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                            PuzzleSourceLinks(entry.puzzleUrl, entry.videoUrl)
+                        if (wide) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                entry.thumbnailUrl?.let {
+                                    VideoThumbnail(it, entry.durationSeconds, Modifier.width(240.dp))
+                                }
+                                Box(Modifier.weight(1f)) { details() }
+                            }
+                        } else {
+                            Column {
+                                entry.thumbnailUrl?.let { VideoThumbnail(it, entry.durationSeconds) }
+                                details()
+                            }
                         }
-                        Spacer(Modifier.width(8.dp))
-                        PuzzleOpenButton(
-                            action = if (status == DownloadStatus.Failed) "Retry" else "Play",
-                            title = entry.title, enabled = (status == DownloadStatus.Ready || status == DownloadStatus.Failed) && opening == null && reimporting == null,
-                            opening = opening == entry.id, onOpen = openPuzzle,
-                        )
                     }
                 }
             }

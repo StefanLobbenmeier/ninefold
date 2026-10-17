@@ -25,7 +25,7 @@ private val thumbnailClient by lazy { HttpClient() }
 private val thumbnails = mutableMapOf<String, ImageBitmap>()
 
 @Composable
-internal fun VideoThumbnail(url: String, durationSeconds: Int?) {
+internal fun VideoThumbnail(url: String, durationSeconds: Int?, modifier: Modifier = Modifier) {
     var bitmap by remember(url) { mutableStateOf(thumbnails[url]) }
     LaunchedEffect(url) {
         if (bitmap == null) try {
@@ -41,7 +41,7 @@ internal fun VideoThumbnail(url: String, durationSeconds: Int?) {
         catch (error: CancellationException) { throw error }
         catch (_: Exception) { /* The video remains useful without a network image. */ }
     }
-    Box(Modifier.fillMaxWidth().heightIn(max = 220.dp).aspectRatio(16f / 9).background(Sage), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxWidth().aspectRatio(16f / 9).background(Sage), contentAlignment = Alignment.Center) {
         val image = bitmap
         if (image != null) Image(image, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else AppIcon(Glyph.Grid, Modifier.size(48.dp))

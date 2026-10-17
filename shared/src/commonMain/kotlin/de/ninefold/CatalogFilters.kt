@@ -36,12 +36,16 @@ internal enum class CatalogDifficulty(val label: String) {
 internal fun CatalogFilters(
     count: Int, total: Int, progress: CatalogProgress, difficulty: CatalogDifficulty,
     onProgress: (CatalogProgress) -> Unit, onDifficulty: (CatalogDifficulty) -> Unit, onReset: () -> Unit,
+    summary: String? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val active = (if (progress != CatalogProgress.All) 1 else 0) + (if (difficulty != CatalogDifficulty.All) 1 else 0)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(if (active == 0) "$total puzzles" else "$count of $total puzzles",
-            style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        FlowRow(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+            Text(if (active == 0) "$total puzzles" else "$count of $total puzzles",
+                style = MaterialTheme.typography.bodySmall)
+            summary?.let { Text(" · $it", style = MaterialTheme.typography.bodySmall) }
+        }
         Box {
             TextButton({ expanded = true }) {
                 AppIcon(Glyph.Settings)
