@@ -544,13 +544,30 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                         }
                     }
                 }
-                if (!fogged) puzzle.cages.firstOrNull { position in it.cells }?.let { cage -> if (cage.total != null && position == cage.cells.minBy { it.index }) Text(cage.total.toString(), Modifier.align(Alignment.TopStart).padding(start = 3.dp, top = 1.dp), fontSize = 8.sp, color = Color(0xFF765A7C), fontWeight = FontWeight.Bold) }
             }
                 } } }
                 CageOverlay(boxGap, puzzle.cages.mapNotNull { cage ->
                     val visible = cage.cells.intersect(litCells)
                     cage.copy(cells = visible).takeIf { visible.isNotEmpty() }
                 })
+                // Paint totals after the cage borders so the backing softens the dashes beneath them.
+                BoardCells(boxGap) { repeat(9) { row -> repeat(9) { column ->
+                    val position = CellPosition(row, column)
+                    val cage = puzzle.cages.firstOrNull { it.total != null && position == it.cells.minByOrNull { cell -> cell.index } }
+                    Box(Modifier.fillMaxSize()) {
+                        if (cage != null && position in litCells) Text(
+                            cage.total.toString(),
+                            Modifier.align(Alignment.TopStart)
+                                .padding(start = 3.dp, top = 1.dp)
+                                .background(Color.White.copy(alpha = .9f), RoundedCornerShape(1.dp))
+                                .padding(horizontal = 1.dp),
+                            fontSize = 8.sp,
+                            lineHeight = 9.sp,
+                            color = Color.Black,
+                            fontWeight = FontWeight.Normal,
+                        )
+                    }
+                } } }
             }
             // Keep cell boundaries above the opaque fog layer.
             Canvas(Modifier.fillMaxSize().padding(inset)) {
