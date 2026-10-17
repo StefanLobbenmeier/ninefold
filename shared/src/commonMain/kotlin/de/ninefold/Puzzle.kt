@@ -2,6 +2,10 @@ package de.ninefold
 
 import kotlinx.serialization.Serializable
 
+/** Symbols 1–9 are digits; 10–35 represent A–Z in saved values and notes. */
+internal fun Int.symbolText(): String = if (this in 10..35) ('A' + (this - 10)).toString() else toString()
+private fun Int.isDigitSymbol(): Boolean = this in 1..9
+
 @Serializable
 data class CellPosition(val row: Int, val column: Int) { val index: Int get() = row * 9 + column }
 @Serializable
@@ -124,22 +128,35 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
     if (includeSpecialRules) puzzle.cages.forEach { cage ->
         val indices = cage.cells.map(CellPosition::index)
         markDuplicates(indices)
-        val values = indices.mapNotNull { cells[it].value }
+        val values = indices.mapNotNull { cells[it].value?.takeIf(Int::isDigitSymbol) }
         val total = cage.total
         if (total != null && (values.sum() > total || (values.size == indices.size && values.sum() != total))) {
-            conflicts.addAll(indices.filter { cells[it].value != null })
+            conflicts.addAll(indices.filter { cells[it].value?.isDigitSymbol() == true })
         }
         indices.filter { cells[it].value == null }.forEach { index ->
-            val otherValues = indices.filter { it != index }.mapNotNull { cells[it].value }
+            val otherSymbols = indices.filter { it != index }.mapNotNull { cells[it].value }
+            val otherValues = otherSymbols.filter(Int::isDigitSymbol)
             val cell = cells[index]
             val candidates = cell.cornerNotes + cell.centreNotes
             val invalid = candidates.filterTo(mutableSetOf()) { candidate ->
-                candidate in otherValues || (total != null && (otherValues.sum() + candidate > total ||
+                candidate in otherSymbols || (candidate.isDigitSymbol() && total != null && (otherValues.sum() + candidate > total ||
                     (otherValues.size == indices.size - 1 && otherValues.sum() + candidate != total)))
             }
             if (invalid.isNotEmpty()) pencilMarks.getOrPut(index, ::mutableSetOf).addAll(invalid)
         }
     }
+    val numericCells = cells.map { cell -> cell.copy(value = cell.value?.takeIf(Int::isDigitSymbol), cornerNotes = cell.cornerNotes.filterTo(mutableSetOf(), Int::isDigitSymbol), centreNotes = cell.centreNotes.filterTo(mutableSetOf(), Int::isDigitSymbol)) }
+    if (includeSpecialRules) checkNumericSpecialRules(puzzle, numericCells).let { result ->
+        conflicts += result.cells
+        result.pencilMarks.forEach { (index, marks) -> pencilMarks.getOrPut(index, ::mutableSetOf).addAll(marks) }
+    }
+    return PuzzleCheckResult(conflicts, pencilMarks.mapValues { it.value.toSet() })
+}
+
+private fun checkNumericSpecialRules(puzzle: Puzzle, cells: List<CellState>): PuzzleCheckResult {
+    val conflicts = mutableSetOf<Int>()
+    val pencilMarks = mutableMapOf<Int, MutableSet<Int>>()
+    val includeSpecialRules = true
     if (includeSpecialRules) puzzle.quadruples.forEach { clue ->
         val indices = clue.cells.map(CellPosition::index)
         fun possible(candidateIndex: Int? = null, candidate: Int? = null): Boolean {
@@ -258,13 +275,13 @@ fun checkAgainstSolution(puzzle: Puzzle, cells: List<CellState>): PuzzleCheckRes
     }
     cells.forEachIndexed { index, cell ->
         val answer = solution.getOrNull(index)?.digitToIntOrNull() ?: return@forEachIndexed
-        if (!cell.given && cell.value != null && answer != cell.value) conflicts += index
+        if (!cell.given && cell.value?.isDigitSymbol() == true && answer != cell.value) conflicts += index
         if (cell.cornerNotes.isNotEmpty()) {
-            val invalid = cell.cornerNotes - validCornerDigits[block(index)].orEmpty()
+            val invalid = cell.cornerNotes.filterTo(mutableSetOf(), Int::isDigitSymbol) - validCornerDigits[block(index)].orEmpty()
             if (invalid.isNotEmpty()) pencilMarks[index] = invalid
         }
-        if (cell.centreNotes.isNotEmpty() && answer !in cell.centreNotes) {
-            pencilMarks[index] = pencilMarks[index].orEmpty() + cell.centreNotes
+        if (cell.centreNotes.any(Int::isDigitSymbol) && answer !in cell.centreNotes) {
+            pencilMarks[index] = pencilMarks[index].orEmpty() + cell.centreNotes.filter(Int::isDigitSymbol)
         }
     }
     return PuzzleCheckResult(conflicts, pencilMarks)

@@ -61,4 +61,28 @@ class DesktopPlayerLayoutTest {
             assertTrue(kotlin.math.abs(((board.left - player.left) - (player.right - controls.right)).value) <= 1f)
         }
     }
+    @Test fun sidebarKeepsInputAtBottomWithShortAndLongRules() {
+        val rulesHeight = mutableStateOf(100)
+        compose.setContent {
+            DesktopPlayerSidebar(
+                modifier = Modifier.requiredSize(350.dp, 700.dp).testTag("sidebar"),
+                rules = { Box(Modifier.height(rulesHeight.value.dp).testTag("rules")) },
+                input = { Box(Modifier.height(300.dp).testTag("input")) },
+            )
+        }
+        listOf(100, 2000).forEach { height ->
+            compose.runOnIdle { rulesHeight.value = height }
+            val sidebar = compose.onNodeWithTag("sidebar").getUnclippedBoundsInRoot()
+            val input = compose.onNodeWithTag("input").getUnclippedBoundsInRoot()
+            val rules = compose.onNodeWithTag("rules").fetchSemanticsNode().boundsInRoot
+            assertEquals(sidebar.bottom, input.bottom)
+            assertEquals(300.dp, input.bottom - input.top)
+            assertTrue(rules.bottom <= compose.onNodeWithTag("input").fetchSemanticsNode().boundsInRoot.top)
+            if (height == 100) {
+                val shortRules = compose.onNodeWithTag("rules").getUnclippedBoundsInRoot()
+                assertEquals(16.dp, input.top - shortRules.bottom)
+            }
+        }
+    }
+
 }

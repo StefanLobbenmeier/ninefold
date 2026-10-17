@@ -15,8 +15,11 @@ internal sealed interface GameShortcut {
 }
 
 /** Maps hardware keys without depending on a particular desktop or mobile native event type. */
-internal fun gameShortcut(key: Key, primaryModifier: Boolean, shift: Boolean, alt: Boolean = false): GameShortcut? {
-    if (alt) return null
+internal fun gameShortcut(key: Key, primaryModifier: Boolean, shift: Boolean, alt: Boolean = false, letters: Boolean = false): GameShortcut? {
+    if (letters) {
+        val letter = listOf(Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.I, Key.J, Key.K, Key.L, Key.M, Key.N, Key.O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z).indexOf(key)
+        if (letter >= 0) return GameShortcut.Enter(10 + letter, when { primaryModifier && shift -> InputMode.Colour; primaryModifier -> InputMode.Centre; shift -> InputMode.Corner; else -> null })
+    }
 
     val digit = when (key) {
         Key.Zero, Key.NumPad0 -> 0
@@ -60,7 +63,7 @@ internal fun gameShortcut(key: Key, primaryModifier: Boolean, shift: Boolean, al
         Key.Backspace, Key.Delete, Key.NumPadDelete -> return GameShortcut.Enter(null, null)
         Key.Escape -> return GameShortcut.ClearSelection
     }
-    if (primaryModifier || shift) return null
+    if (primaryModifier || shift || alt) return null
     return when (key) {
         Key.Spacebar -> GameShortcut.CycleMode(1)
         // Y shares Z's physical position on a German keyboard layout.
