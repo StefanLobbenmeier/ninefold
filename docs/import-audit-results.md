@@ -180,4 +180,3 @@ Generated 2026-10-18T13:42:30.773773Z. Source: repository Sudoku index.
 
 - validation: Some graphical clues have no automatic validation; original rule text is preserved in special rules. (1); paths: $.rules
 - validation: Original rule text is preserved for manual review in special rules; only modeled constraints are automatically checked. (1); paths: $.rules
-
