@@ -50,7 +50,9 @@ internal fun parseSudokuPadPayload(payload: String, sourceUrl: String? = null): 
     val decoded = if (encoded.startsWith("{") || encoded.startsWith("[")) encoded
         else lzStringDecompressFromBase64(percentDecode(encoded))
     val root = parsePackedJson(decoded)
-    return puzzleFromJson(root, format == "fpuz", sourceUrl)
+    return puzzleFromJson(root, format == "fpuz", sourceUrl).let { puzzle ->
+        puzzle.copy(importOmissions = sudokuPadOmissions(root, format == "fpuz", puzzle))
+    }
 }
 
 private fun parsePackedJson(input: String): JsonObject {

@@ -74,6 +74,7 @@ data class Puzzle(
     /** Null uses regular 3×3 fog; a present list uses only the specified reveals. */
     val fogLinks: List<FogLink>? = null, val sourceUrl: String? = null, val videoUrl: String? = null,
     val antiKnight: Boolean = false, val successMessage: String? = null,
+    val importOmissions: List<ImportOmission> = emptyList(),
 ) {
     fun startingCells(): List<CellState> = givens.map { char ->
         val value = char.digitToIntOrNull()?.takeIf { it in 1..9 }

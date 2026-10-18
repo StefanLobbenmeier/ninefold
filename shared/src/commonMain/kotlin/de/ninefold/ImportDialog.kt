@@ -166,7 +166,14 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
                 message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (grid != null) {
                     Text(if (importedPuzzle == null) "Compare every clue with the original, even if the checks pass. Select any cell to add, replace, or erase a digit."
-                        else "Review the imported puzzle. Graphical marks are preserved; only rules with a known meaning are checked automatically.")
+                        else "Review the imported puzzle. Some graphics or data may be omitted; only rules with a known meaning are checked automatically.")
+                    importedPuzzle?.importOmissions?.takeIf { it.isNotEmpty() }?.let { omissions ->
+                        Text("Import report (${omissions.size})", fontWeight = FontWeight.SemiBold)
+                        omissions.groupBy { it.kind to it.detail }.forEach { (finding, entries) ->
+                            Text("${finding.second} (${entries.size})", fontSize = 12.sp)
+                            Text(entries.map { it.path.replace(Regex("\\[\\d+\\]"), "[]") }.distinct().joinToString(), fontSize = 12.sp)
+                        }
+                    }
                     if (importedPuzzle?.antiKnight == true) {
                         Text("Knight’s move rule imported: cells a chess knight’s move apart cannot contain the same digit.")
                     }
@@ -233,7 +240,7 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
                     val warning = importedPuzzle == null && (status == ImportStatus.Conflicts || status == ImportStatus.Unsolvable || (!checking && status == null))
                     Surface(color = if (warning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(10.dp)) {
                         Text(when {
-                            importedPuzzle != null -> "Puzzle metadata and graphics loaded. Unsupported or unassigned visual rules remain display-only; the original rule text is included."
+                            importedPuzzle != null -> "Review the import report and original puzzle. Unsupported or unassigned visual rules remain display-only; the original rule text is included."
                             checking -> "Checking starting clues and solutions…"
                             status == ImportStatus.Conflicts -> "Starting clues break sudoku rules. Red cells repeat a digit in a row, column, or box. This may be an import error; correct the clues before playing."
                             status == ImportStatus.Unsolvable -> "No immediate rule conflicts, but this grid has no solution. Check for a misread or extra clue; the original puzzle may also be invalid."
