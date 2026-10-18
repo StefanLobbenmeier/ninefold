@@ -43,24 +43,56 @@ class DesktopPlayerLayoutTest {
             val scale = node.fetchSemanticsNode().layoutInfo.density.density / compose.density.density
             return DpRect(rect.left * scale, rect.top * scale, rect.right * scale, rect.bottom * scale)
         }
-        listOf(1366 to 768, 1920 to 1080, 3840 to 2160, 3440 to 1440, 850 to 900).forEach { size ->
+        listOf(1366 to 716, 1920 to 1028, 3840 to 2108, 3440 to 1388, 1024 to 716, 844 to 338,
+            1536 to 812, 1280 to 668, 960 to 488).forEach { size ->
             compose.runOnIdle { viewport.value = size }
             val player = bounds("player")
             val board = bounds("board")
             val controls = bounds("controls")
             assertEquals((board.right - board.left), (board.bottom - board.top))
-            assertTrue(kotlin.math.abs((controls.left - board.right).value - 28f) < 1f)
-            val expectedBoard = minOf(size.first - 378, ((size.first - 28) / (1f + 350f / 600f)).toInt(), size.second - 98)
-            val expectedControls = maxOf(350, (expectedBoard * (350f / 600f)).roundToInt())
+            val slot = minOf(size.second, (size.first / 1.7f).toInt())
+            val margin = (slot * 0.05f).roundToInt()
+            val expectedBoard = slot - margin
+            val frameWidth = minOf(size.first, (size.second * 2.1f).toInt())
+            val expectedControls = minOf(455, frameWidth - slot - margin)
+            assertTrue(kotlin.math.abs((controls.left - board.right).value - margin) <= 1f)
             assertEquals(expectedBoard.dp, board.right - board.left)
             assertTrue(kotlin.math.abs((controls.right - controls.left).value - expectedControls) < 1f)
             val button = bounds("button")
-            assertTrue(kotlin.math.abs((button.bottom - button.top).value - 52f * expectedControls / 350) < 1f)
+            assertTrue(kotlin.math.abs((button.bottom - button.top).value - 52f * minOf(expectedControls / 350f, (slot - 92) / 500f, 1.3f)) < 1f)
             assertTrue(board.bottom <= player.bottom)
             assertTrue(controls.right <= player.right)
-            assertTrue(kotlin.math.abs(((board.left - player.left) - (player.right - controls.right)).value) <= 1f)
+            assertEquals(player.top + ((size.second - slot) / 2 + margin / 2).dp, board.top)
+            assertTrue(bounds("button").bottom <= controls.bottom)
+            // The heading is in the sidebar: even an 80 dp heading costs no board height.
+            assertTrue(board.top < controls.top)
         }
     }
+    @Test fun portraitGivesBoardWidthBeforeMetadataAndInput() {
+        val viewport = mutableStateOf(390 to 792)
+        compose.setContent {
+            val (width, height) = viewport.value
+            PortraitPlayerLayout(
+                modifier = Modifier.requiredSize(width.dp, height.dp).testTag("portrait"),
+                heading = { Box(Modifier.height(80.dp).testTag("heading")) },
+                board = { Box(Modifier.fillMaxSize().testTag("board")) },
+                controls = { Box(Modifier.fillMaxSize().testTag("controls")) },
+            )
+        }
+        listOf(390 to 792, 375 to 615, 850 to 848, 768 to 972).forEach { size ->
+            compose.runOnIdle { viewport.value = size }
+            val player = compose.onNodeWithTag("portrait").getUnclippedBoundsInRoot()
+            val board = compose.onNodeWithTag("board").getUnclippedBoundsInRoot()
+            val heading = compose.onNodeWithTag("heading").getUnclippedBoundsInRoot()
+            val expectedSize = minOf(size.first, (size.second / 1.5f).toInt()) - 5
+            assertEquals(expectedSize.dp, board.right - board.left)
+            assertEquals(board.right - board.left, board.bottom - board.top)
+            assertTrue(board.bottom <= heading.top)
+            assertTrue(board.bottom <= player.bottom)
+            assertEquals(80.dp, heading.bottom - heading.top)
+        }
+    }
+
     @Test fun sidebarKeepsInputAtBottomWithShortAndLongRules() {
         val rulesHeight = mutableStateOf(100)
         compose.setContent {
