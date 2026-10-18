@@ -325,6 +325,21 @@ private fun parseLines(root: JsonObject, fpuzzles: Boolean): List<PuzzleLine> {
 }
 
 private fun parseFpuzzlesOverlays(root: JsonObject): List<PuzzleOverlay> = buildList {
+    // Decorative circles may sit between two cells or at a four-cell intersection.
+    root.array("circle").orEmpty().forEach { element ->
+        val circle = element.jsonObject
+        val cells = circle.array("cells").orEmpty().mapNotNull(::parseCell)
+        if (cells.isNotEmpty()) add(PuzzleOverlay(
+            center = GridPoint(cells.map { it.row + .5 }.average(), cells.map { it.column + .5 }.average()),
+            width = circle.double("width") ?: .5,
+            height = circle.double("height") ?: .5,
+            backgroundColor = circle.string("baseC") ?: "#FFFFFF",
+            borderColor = circle.string("outlineC") ?: "#000000",
+            textColor = circle.string("fontC") ?: "#000000",
+            text = circle.string("value"),
+            rounded = true,
+        ))
+    }
     fun pairMarks(feature: String, background: String, border: String?, defaultText: String? = null) {
         root.array(feature).orEmpty().forEach { element ->
             val mark = element.jsonObject
