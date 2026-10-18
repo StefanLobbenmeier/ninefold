@@ -289,23 +289,23 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             if (!down.isConsumed && colourSettings == null) clearSelection()
         }
     }) {
-        val landscapePhone = maxWidth >= 600.dp && maxWidth < 850.dp && maxWidth > maxHeight
-        val compact = maxWidth < 850.dp && !landscapePhone
+        val compact = maxWidth <= maxHeight - 52.dp
+        val landscapePhone = !compact && maxHeight < 600.dp
         Column(Modifier.fillMaxSize()) {
             TopBar(puzzle, shareBaseUrl) { clearSelection(); onBrowse() }
             if (compact) {
-                Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    PuzzleHeading(puzzle, compact = true, elapsed = elapsed)
-                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                        val boardSize = minOf(maxWidth, maxHeight)
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.size(boardSize), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
-                    }
+                PortraitPlayerLayout(
+                    modifier = Modifier.fillMaxSize(),
+                    heading = { PuzzleHeading(puzzle, compact = true, elapsed = elapsed) },
+                    board = {
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
+                    },
+                ) {
                     Controls(effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
                 }
             } else {
                 DesktopPlayerLayout(
-                    modifier = Modifier.fillMaxSize().padding(if (landscapePhone) 8.dp else 28.dp),
-                    compact = landscapePhone,
+                    modifier = Modifier.fillMaxSize(),
                     heading = { PuzzleHeading(puzzle, compact = landscapePhone, elapsed = elapsed) },
                     board = {
                         SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
@@ -410,11 +410,10 @@ internal fun DesktopPlayerSidebar(
     }
 }
 
-// Measure the heading before sizing the square; the sidebar stays attached even on ultrawide screens.
+// In portrait the square gets the width first; metadata and scaled input share the space below.
 @Composable
-internal fun DesktopPlayerLayout(
+internal fun PortraitPlayerLayout(
     modifier: Modifier = Modifier,
-    compact: Boolean = false,
     heading: @Composable () -> Unit,
     board: @Composable () -> Unit,
     controls: @Composable () -> Unit,
@@ -424,34 +423,77 @@ internal fun DesktopPlayerLayout(
         Box { board() }
         BoxWithConstraints {
             val density = LocalDensity.current
-            val scale = if (compact) 1f else (maxWidth / 350.dp).coerceAtLeast(1f)
+            val scale = minOf(maxWidth / 350.dp, maxHeight / 350.dp, 1.3f).coerceAtLeast(0.01f)
+            CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) { controls() }
+            }
+        }
+    }, modifier = modifier) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val frameWidth = minOf(width, (height / 1.5f).toInt())
+        val frameHeight = minOf(height, (frameWidth * 2.1f).toInt())
+        val margin = 5.dp.roundToPx().coerceAtMost(frameWidth)
+        val boardSize = frameWidth - margin
+        val controlsWidth = minOf(boardSize, 455.dp.roundToPx())
+        val remaining = (frameHeight - frameWidth).coerceAtLeast(0)
+        val headingHeight = measurables[0].maxIntrinsicHeight(controlsWidth).coerceAtMost(remaining)
+        val headingPlaceable = measurables[0].measure(Constraints.fixed(controlsWidth, headingHeight))
+        val boardPlaceable = measurables[1].measure(Constraints.fixed(boardSize, boardSize))
+        val controlsPlaceable = measurables[2].measure(Constraints.fixed(controlsWidth, remaining - headingHeight))
+        layout(width, height) {
+            val top = (height - frameHeight) / 2
+            val controlsLeft = (width - controlsWidth) / 2
+            boardPlaceable.placeRelative((width - boardSize) / 2, top + margin / 2)
+            headingPlaceable.placeRelative(controlsLeft, top + frameWidth)
+            controlsPlaceable.placeRelative(controlsLeft, top + frameWidth + headingHeight)
+        }
+    }
+}
+
+// SudokuPad fits a landscape frame between 1.7:1 and 2.1:1, with a 5% board margin.
+// Keep metadata beside the board so long headings never reduce the playing area.
+@Composable
+internal fun DesktopPlayerLayout(
+    modifier: Modifier = Modifier,
+    heading: @Composable () -> Unit,
+    board: @Composable () -> Unit,
+    controls: @Composable () -> Unit,
+) {
+    Layout(content = {
+        Box { heading() }
+        Box { board() }
+        BoxWithConstraints {
+            val density = LocalDensity.current
+            val scale = minOf(maxWidth / 350.dp, maxHeight / 500.dp, 1.3f).coerceAtLeast(0.01f)
             // Scale the whole panel together: touch targets, icons, labels, spacing and notes.
             CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
                 controls()
             }
         }
     }, modifier = modifier) { measurables, constraints ->
-        val gap = (if (compact) 16.dp else 28.dp).roundToPx()
-        val headingGap = (if (compact) 8.dp else 18.dp).roundToPx()
-        val baseControlsWidth = (if (compact) 270.dp else 350.dp).roundToPx()
-            .coerceAtMost(constraints.maxWidth / 2)
-        val availableWidth = (constraints.maxWidth - baseControlsWidth - gap).coerceAtLeast(0)
-        val headingHeight = measurables[0].maxIntrinsicHeight(availableWidth)
-        // Above the original 600 dp board size, reserve proportional space for the panel.
-        val controlsRatio = 350f / 600f
-        val widthForBoard = if (compact) availableWidth else minOf(
-            availableWidth, ((constraints.maxWidth - gap) / (1f + controlsRatio)).toInt(),
-        )
-        val boardSize = minOf(widthForBoard, (constraints.maxHeight - headingHeight - headingGap).coerceAtLeast(0))
-        val controlsWidth = if (compact) baseControlsWidth else maxOf(baseControlsWidth, (boardSize * controlsRatio).roundToInt())
-        val headingPlaceable = measurables[0].measure(Constraints.fixed(boardSize, headingHeight))
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val slot = minOf(height, (width / 1.7f).toInt())
+        val frameWidth = minOf(width, (height * 2.1f).toInt())
+        val margin = (slot * 0.05f).roundToInt()
+        val boardSize = (slot - margin).coerceAtLeast(0)
+        val controlsWidth = (frameWidth - slot - margin).coerceIn(0, 455.dp.roundToPx())
+        val headingGap = 12.dp.roundToPx().coerceAtMost(slot)
+        val headingHeight = measurables[0].maxIntrinsicHeight(controlsWidth)
+            .coerceAtMost((slot - headingGap).coerceAtLeast(0))
+        val headingPlaceable = measurables[0].measure(Constraints.fixed(controlsWidth, headingHeight))
         val boardPlaceable = measurables[1].measure(Constraints.fixed(boardSize, boardSize))
-        val controlsPlaceable = measurables[2].measure(Constraints.fixed(controlsWidth, constraints.maxHeight))
-        layout(constraints.maxWidth, constraints.maxHeight) {
-            val left = (constraints.maxWidth - boardSize - gap - controlsWidth) / 2
-            headingPlaceable.placeRelative(left, 0)
-            boardPlaceable.placeRelative(left, headingHeight + headingGap)
-            controlsPlaceable.placeRelative(left + boardSize + gap, 0)
+        val controlsPlaceable = measurables[2].measure(
+            Constraints.fixed(controlsWidth, (slot - headingHeight - headingGap).coerceAtLeast(0)),
+        )
+        layout(width, height) {
+            val left = (width - frameWidth) / 2
+            val top = (height - slot) / 2
+            val sidebarLeft = left + slot + margin / 2
+            boardPlaceable.placeRelative(left + margin / 2, top + margin / 2)
+            headingPlaceable.placeRelative(sidebarLeft, top)
+            controlsPlaceable.placeRelative(sidebarLeft, top + headingHeight + headingGap)
         }
     }
 }

@@ -32,6 +32,7 @@ import kotlinx.serialization.json.Json
 import org.junit.Rule
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class AppStartupTest {
     @get:Rule
@@ -63,6 +64,9 @@ class AppStartupTest {
         compose.onNodeWithContentDescription("Erase").assertIsDisplayed()
         compose.runOnIdle { landscape.value = false }
         compose.onNodeWithContentDescription("Erase").assertIsDisplayed()
+        val erase = compose.onNodeWithContentDescription("Erase").fetchSemanticsNode().boundsInRoot
+        val rules = compose.onNodeWithText("Rules").fetchSemanticsNode().boundsInRoot
+        assertTrue(rules.top >= erase.bottom, "Portrait actions must sit below the keypad")
     }
 
     @Test
