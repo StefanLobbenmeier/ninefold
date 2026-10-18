@@ -12,6 +12,23 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun importsFpuzzlesCircleArtworkBetweenCellsAndAtIntersections() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"circle":[
+            {"cells":["R1C1","R1C2"],"baseC":"#FFFFFF","outlineC":"#000000","width":0.35,"height":0.35},
+            {"cells":["R3C3","R2C3"],"baseC":"#000000","outlineC":"#000000","width":0.35,"height":0.35},
+            {"cells":["R4C4","R4C5","R5C4","R5C5"],"baseC":"#FFE100","outlineC":"#000000","width":0.5,"height":0.5},
+            {"cells":["R7C7","R6C6","R7C6","R6C7"],"baseC":"#FF0000","outlineC":"#336699","fontC":"#123456","value":"A","width":0.45,"height":0.6},
+            {"cells":[]}
+        ]"""))
+        assertEquals(listOf(
+            PuzzleOverlay(GridPoint(.5, 1.0), .35, .35, "#FFFFFF", "#000000", "#000000", rounded = true),
+            PuzzleOverlay(GridPoint(2.0, 2.5), .35, .35, "#000000", "#000000", "#000000", rounded = true),
+            PuzzleOverlay(GridPoint(4.0, 4.0), .5, .5, "#FFE100", "#000000", "#000000", rounded = true),
+            PuzzleOverlay(GridPoint(6.0, 6.0), .45, .6, "#FF0000", "#336699", "#123456", "A", rounded = true),
+        ), puzzle.overlays)
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+    }
+
     @Test fun importsFpuzzlesLineOutlineColorsForEveryPath() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"line":[
             {"lines":[["R1C1","R1C2"],["R2C1","R2C2"]],"outlineC":"#3366FF"},
