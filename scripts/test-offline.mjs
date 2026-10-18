@@ -55,7 +55,7 @@ function storage() {
     };
 }
 
-function worker(release, caches, network, workerScope = scope) {
+function worker(release, caches, network, workerScope = scope, windows = []) {
     const handlers = {};
     const requests = [];
     let activations = 0;
@@ -64,6 +64,7 @@ function worker(release, caches, network, workerScope = scope) {
         fetch: async (...args) => { requests.push(args); return network(...args); },
         // Activation must only be requested by an explicit update message.
         self: {
+            clients: { matchAll: async () => windows },
             registration: { scope: workerScope }, addEventListener: (name, handler) => { handlers[name] = handler; },
             skipWaiting: async () => { activations++; },
         },
@@ -195,7 +196,7 @@ test('a missing cached shell does not fall through to an incompatible online ver
     const offline = worker(old, storage(), () => { throw new Error('Should not fetch'); });
     const response = await offline.dispatch('fetch', { method: 'GET', mode: 'navigate', url: scope });
     assert.equal(response.status, 503);
-    assert.match(await response.text(), /reconnect/);
+    assert.match(await response.text(), /Repair app/);
     assert.equal(offline.requests.length, 0);
 });
 
@@ -346,4 +347,52 @@ test('initial installation and unsupported browsers do not prompt or reload', as
     const unsupported = await browserUpdates({ supported: false });
     assert.deepEqual(unsupported.states, ['None']);
     assert.equal(unsupported.intervals.length, 0);
+});
+
+
+test('accepted update preserves assets for pages still controlled by the previous worker', async () => {
+    const caches = storage();
+    const previous = worker(old, caches, networkFor(old));
+    await previous.dispatch('install');
+    const updater = worker(next, caches, networkFor(next), scope, [{ url: scope + '?puzzle=synthetic' }]);
+    await updater.dispatch('install');
+    await updater.dispatch('message', { type: 'activate-update' });
+    await updater.dispatch('activate');
+    const page = await previous.dispatch('fetch', { method: 'GET', mode: 'navigate', url: scope });
+    assert.equal(await page.text(), old.files['index.html']);
+    for (const [path, contents] of Object.entries(old.files)) {
+        const asset = await previous.dispatch('fetch', { method: 'GET', mode: 'cors', url: scope + path });
+        assert.equal(await asset.text(), contents);
+    }
+    assert.equal(await (await updater.dispatch('fetch', { method: 'GET', mode: 'navigate', url: scope })).text(), next.files['index.html']);
+});
+
+test('repair checks the network before unregistering and never clears stored data', async () => {
+    const broken = worker(old, storage(), () => { throw new Error('Offline'); });
+    const response = await broken.dispatch('fetch', { method: 'GET', mode: 'navigate', url: scope });
+    const html = await response.text();
+    const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+    for (const online of [false, true]) {
+        const button = {};
+        const status = {};
+        const calls = [];
+        vm.runInNewContext(script, {
+            URL, Date,
+            document: { getElementById: id => id === 'repair' ? button : status },
+            location: { href: scope + '?puzzle=synthetic', reload: () => calls.push('reload') },
+            navigator: { serviceWorker: { getRegistration: async () => ({ unregister: async () => calls.push('unregister') }) } },
+            fetch: async (url, options) => {
+                calls.push('fetch');
+                assert.equal(url.pathname, '/ninefold/');
+                assert.equal(options.cache, 'no-store');
+                return { ok: online };
+            },
+        });
+        await button.onclick();
+        assert.deepEqual(calls, online ? ['fetch', 'unregister', 'reload'] : ['fetch']);
+        if (!online) {
+            assert.equal(button.disabled, false);
+            assert.match(status.textContent, /try again/);
+        }
+    }
 });
