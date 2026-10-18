@@ -50,7 +50,9 @@ internal fun parseSudokuPadPayload(payload: String, sourceUrl: String? = null): 
     val decoded = if (encoded.startsWith("{") || encoded.startsWith("[")) encoded
         else lzStringDecompressFromBase64(percentDecode(encoded))
     val root = parsePackedJson(decoded)
-    return puzzleFromJson(root, format == "fpuz", sourceUrl)
+    return puzzleFromJson(root, format == "fpuz", sourceUrl).let { puzzle ->
+        puzzle.copy(importOmissions = sudokuPadOmissions(root, format == "fpuz", puzzle))
+    }
 }
 
 private fun parsePackedJson(input: String): JsonObject {
@@ -144,9 +146,22 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     require(sourceCells.size == 9 && sourceCells.all { it.jsonArray.size == 9 }) {
         "Only 9×9 SudokuPad puzzles are currently supported."
     }
+    val initialValues = mutableMapOf<Int, Int>()
     val givens = sourceCells.flatMap { row -> row.jsonArray.map { cell ->
         cell.jsonObject.int("value")?.takeIf { it in 1..9 }?.digitToChar() ?: '.'
     } }.joinToString("")
+    val fixedGivens = givens.mapIndexed { index, digit ->
+        val cell = sourceCells[index / 9].jsonArray[index % 9].jsonObject
+        if (fpuzzles && cell.boolean("given") == false && digit in '1'..'9') {
+            initialValues[index] = digit.digitToInt()
+            '.'
+        } else digit
+    }.joinToString("")
+    val cellShading = sourceCells.flatMapIndexed { r, row -> row.jsonArray.mapIndexedNotNull { c, element ->
+        element.jsonObject.string("color")?.takeIf(::isImportedCellColor)?.let { color ->
+            PuzzleOverlay(GridPoint(r + .5, c + .5), 1.0, 1.0, color, rounded = false)
+        }
+    } }
     val solution = metadata.string("solution") ?: root.array("solution")?.mapNotNull(JsonElement::asInt)?.joinToString("")
     val rulesText = metadata.string("rules") ?: metadata.string("ruleset") ?: "Normal sudoku rules apply."
     val rules = rulesText.trim().takeIf(String::isNotEmpty)?.lines()?.map(String::trim)
@@ -163,6 +178,14 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         val trigger = entry.obj("trigger") ?: return@mapNotNull null
         FogLink(parseFogCells(trigger["cell"]), parseFogCells(effect["cells"]))
     }
+    // SCL cages are graphical unless uniqueness is explicit or stated in the rules.
+    // f-puzzles killercage entries carry killer semantics by definition.
+    val defaultUnique = fpuzzles || Regex("killer", RegexOption.IGNORE_CASE).containsMatchIn(rulesText) ||
+        Regex("digits (?:cannot|can not|must not) repeat in (?:a )?cages?", RegexOption.IGNORE_CASE).containsMatchIn(rulesText)
+    val sharedCageTotal = rules.mapNotNull { rule ->
+        Regex("^(?:all )?cages sum to (\\d+|fifteen)[.!]?$", RegexOption.IGNORE_CASE)
+            .matchEntire(rule)?.groupValues?.get(1)?.let { if (it.equals("fifteen", true)) 15 else it.toIntOrNull() }
+    }.distinct().singleOrNull()?.takeIf { it > 0 }
     val cages = rawCages.mapNotNull { element ->
         val cage = element.jsonObject
         val cells = cage.array("cells").orEmpty().mapNotNull(::parseCell).toSet()
@@ -172,13 +195,14 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
             fog += parseFogCells(JsonPrimitive(cage.string("value")!!.substringAfter(':', "")))
             null
         } else if (cells.isNotEmpty() && (value != null || cage.string("value").isNullOrBlank())) {
-            KillerCage(value, cells)
+            KillerCage(value, cells, unique = cage.boolean("unique") ?: defaultUnique,
+                ruleTotal = sharedCageTotal.takeIf { value == null })
         } else null
     }
     val lines = parseLines(root, fpuzzles)
     val rawOverlays = root.array("overlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
     val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText)
-    val underlays = root.array("underlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
+    val underlays = cellShading + root.array("underlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
     val arrows = parseArrows(root, fpuzzles, overlays)
     val outsideClues = parseOutsideClues(rulesText, overlays, arrows)
     val hasFog = fogLinks != null || root.containsKey("foglight") || rawCages.any {
@@ -187,7 +211,8 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     return Puzzle(
         title = metadata.string("title") ?: "Imported SudokuPad puzzle",
         author = metadata.string("author") ?: "Unknown setter",
-        givens = givens,
+        givens = fixedGivens,
+        initialValues = initialValues,
         solution = solution?.filter(Char::isDigit)?.takeIf { it.length == 81 },
         cages = cages,
         rules = rules,
@@ -513,3 +538,7 @@ private fun lzDecompress(length: Int, resetValue: Int, nextValue: (Int) -> Int):
     }
     throw IllegalArgumentException("Incomplete SudokuPad compression data.")
 }
+
+/** Restrict authored shading to unambiguous CSS hex colors; other encodings remain reported. */
+internal fun isImportedCellColor(value: String): Boolean =
+    Regex("#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})").matches(value)

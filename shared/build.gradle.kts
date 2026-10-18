@@ -103,3 +103,14 @@ kotlin {
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
 }
+
+// Explicit live tool: ./gradlew :shared:importAudit -PauditLinks=/path/links.txt -PauditOutput=/path/report.md
+val auditCompilation = kotlin.targets.getByName("jvm").compilations.getByName("main")
+tasks.register<JavaExec>("importAudit") {
+    group = "verification"
+    description = "Opt-in live SudokuPad omission audit (network, no puzzle payloads retained)"
+    dependsOn("jvmMainClasses")
+    mainClass.set("de.ninefold.ImportAuditKt")
+    classpath = files(auditCompilation.output.allOutputs, auditCompilation.runtimeDependencyFiles)
+    args(providers.gradleProperty("auditLinks").getOrElse(""), providers.gradleProperty("auditOutput").getOrElse(""))
+}
