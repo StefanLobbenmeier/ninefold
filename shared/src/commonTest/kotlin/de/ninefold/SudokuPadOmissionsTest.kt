@@ -29,11 +29,12 @@ class SudokuPadOmissionsTest {
         assertTrue(puzzle.importOmissions.any { it.kind == "validation" })
     }
 
-    @Test fun explicitFalseAndDiscardedSolutionsRemainVisible() {
+    @Test fun supportedFalseIsNotReportedButDiscardedSolutionsRemainVisible() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties = """
             "metadata":{"solution":"123"},"cages":[{"cells":[[0,0]],"unique":false}]
         """))
-        assertTrue(puzzle.importOmissions.any { it.path == "$.cages[0].unique" })
+        assertFalse(puzzle.importOmissions.any { it.path == "$.cages[0].unique" })
+        assertFalse(puzzle.cages.single().unique)
         assertTrue(puzzle.importOmissions.any { it.path == "$.solution" })
     }
 

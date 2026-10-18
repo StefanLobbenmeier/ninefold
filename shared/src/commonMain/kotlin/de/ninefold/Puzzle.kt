@@ -12,7 +12,12 @@ data class CellPosition(val row: Int, val column: Int) { val index: Int get() = 
 data class CellState(val value: Int? = null, val given: Boolean = false, val cornerNotes: Set<Int> = emptySet(), val centreNotes: Set<Int> = emptySet(), val colours: Set<Int> = emptySet())
 /** A null total preserves an unlabelled cage; its sum may be specified only in the rules. */
 @Serializable
-data class KillerCage(val total: Int?, val cells: Set<CellPosition>)
+data class KillerCage(
+    val total: Int?, val cells: Set<CellPosition>,
+    val unique: Boolean = true,
+    /** Sum stated in prose, without adding a printed clue to the artwork. */
+    val ruleTotal: Int? = null,
+)
 @Serializable
 data class FogLink(val triggers: Set<CellPosition>, val cells: Set<CellPosition>)
 @Serializable
@@ -128,9 +133,9 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
 
     if (includeSpecialRules) puzzle.cages.forEach { cage ->
         val indices = cage.cells.map(CellPosition::index)
-        markDuplicates(indices)
+        if (cage.unique) markDuplicates(indices)
         val values = indices.mapNotNull { cells[it].value?.takeIf(Int::isDigitSymbol) }
-        val total = cage.total
+        val total = cage.total ?: cage.ruleTotal
         if (total != null && (values.sum() > total || (values.size == indices.size && values.sum() != total))) {
             conflicts.addAll(indices.filter { cells[it].value?.isDigitSymbol() == true })
         }
@@ -140,7 +145,7 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
             val cell = cells[index]
             val candidates = cell.cornerNotes + cell.centreNotes
             val invalid = candidates.filterTo(mutableSetOf()) { candidate ->
-                candidate in otherSymbols || (candidate.isDigitSymbol() && total != null && (otherValues.sum() + candidate > total ||
+                (cage.unique && candidate in otherSymbols) || (candidate.isDigitSymbol() && total != null && (otherValues.sum() + candidate > total ||
                     (otherValues.size == indices.size - 1 && otherValues.sum() + candidate != total)))
             }
             if (invalid.isNotEmpty()) pencilMarks.getOrPut(index, ::mutableSetOf).addAll(invalid)

@@ -165,6 +165,14 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         val trigger = entry.obj("trigger") ?: return@mapNotNull null
         FogLink(parseFogCells(trigger["cell"]), parseFogCells(effect["cells"]))
     }
+    // SCL cages are graphical unless uniqueness is explicit or stated in the rules.
+    // f-puzzles killercage entries carry killer semantics by definition.
+    val defaultUnique = fpuzzles || Regex("killer", RegexOption.IGNORE_CASE).containsMatchIn(rulesText) ||
+        Regex("digits (?:cannot|can not|must not) repeat in (?:a )?cages?", RegexOption.IGNORE_CASE).containsMatchIn(rulesText)
+    val sharedCageTotal = rules.mapNotNull { rule ->
+        Regex("^(?:all )?cages sum to (\\d+|fifteen)[.!]?$", RegexOption.IGNORE_CASE)
+            .matchEntire(rule)?.groupValues?.get(1)?.let { if (it.equals("fifteen", true)) 15 else it.toIntOrNull() }
+    }.distinct().singleOrNull()?.takeIf { it > 0 }
     val cages = rawCages.mapNotNull { element ->
         val cage = element.jsonObject
         val cells = cage.array("cells").orEmpty().mapNotNull(::parseCell).toSet()
@@ -174,7 +182,8 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
             fog += parseFogCells(JsonPrimitive(cage.string("value")!!.substringAfter(':', "")))
             null
         } else if (cells.isNotEmpty() && (value != null || cage.string("value").isNullOrBlank())) {
-            KillerCage(value, cells)
+            KillerCage(value, cells, unique = cage.boolean("unique") ?: defaultUnique,
+                ruleTotal = sharedCageTotal.takeIf { value == null })
         } else null
     }
     val lines = parseLines(root, fpuzzles)

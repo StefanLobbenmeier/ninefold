@@ -82,14 +82,18 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
         else points(obj["wayPoints"], "$path.wayPoints", 2)
         if (fpuzzles && key == "arrow" && ((obj["cells"] as? JsonArray)?.size ?: 0) > 1) report("$path.cells", "Only the first arrow bulb cell is used for validation.", "validation")
     }
-    for (key in listOf("cages", "killercage")) objects(key, "cells value") { obj, path ->
+    for (key in listOf("cages", "killercage")) objects(key, "cells value unique") { obj, path ->
         val value = (obj["value"] as? JsonPrimitive)?.content.orEmpty()
+        if (meaningful(obj["unique"] ?: JsonNull) && (obj["unique"] as? JsonPrimitive)?.booleanOrNull == null)
+            report("$path.unique", "Unrecognized cage uniqueness; only boolean flags are supported.")
         val marker = value.substringBefore(':').lowercase().trim()
         if (marker !in setOf("title", "author", "rules", "solution", "msgcorrect", "foglight")) {
             points(obj["cells"], "$path.cells", 1)
             if (value.isNotBlank() && value.toIntOrNull() == null) report("$path.value", "Non-numeric cage label and cage are dropped.")
         }
     }
+    if (puzzle.cages.any { it.total == null && it.ruleTotal == null })
+        report("$.rules", "Unlabelled cages preserve geometry and uniqueness only; additional cage rules require manual review in special rules.", "validation")
     objects("triggereffect", "trigger effect") { obj, path ->
         val trigger = obj["trigger"] as? JsonObject
         val effect = obj["effect"] as? JsonObject
