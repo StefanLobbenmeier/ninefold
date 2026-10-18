@@ -306,7 +306,10 @@ private fun parseLines(root: JsonObject, fpuzzles: Boolean): List<PuzzleLine> {
         groups.mapNotNull { points ->
             val parsed = points.mapNotNull(::parsePoint)
             parsed.takeIf { it.size > 1 }?.let {
-                PuzzleLine(it, line.string("lineC") ?: line.string("color") ?: "#A0A0A0", line.double("thickness") ?: 6.0)
+                // f-puzzles stores generic line colors in outlineC.
+                val color = (if (fpuzzles) line.string("outlineC") else null)
+                    ?: line.string("lineC") ?: line.string("color") ?: "#A0A0A0"
+                PuzzleLine(it, color, line.double("thickness") ?: 6.0)
             }
         }
     }

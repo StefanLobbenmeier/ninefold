@@ -12,6 +12,16 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun importsFpuzzlesLineOutlineColorsForEveryPath() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"line":[
+            {"lines":[["R1C1","R1C2"],["R2C1","R2C2"]],"outlineC":"#3366FF"},
+            {"lines":[["R3C1","R3C2"]],"outlineC":"#33CC66"},
+            {"lines":[["R4C1","R4C2"]]}
+        ]"""))
+        assertEquals(listOf("#3366FF", "#3366FF", "#33CC66", "#A0A0A0"), puzzle.lines.map { it.color })
+        assertEquals(listOf(GridPoint(0.5, 0.5), GridPoint(0.5, 1.5)), puzzle.lines.first().points)
+    }
+
     @Test fun importsLegacyCageMetadataWithoutCreatingCages() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
             """"ca":[{"v":"title: Synthetic dots"},{"v":"author: Test setter"},{"v":"rules: Normal sudoku rules apply.\nGray dots: consecutive or double."},{"v":"solution: ${SudokuFixtures.classic.solution}"}]"""))
