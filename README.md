@@ -182,6 +182,14 @@ in `~/.ninefold` on Desktop. Failed local saves display an error.
 Catalog parsing, refresh, cache preservation, and unavailable storage are covered by
 `./gradlew :shared:jvmTest`.
 
+### Playing on desktop
+
+The top bar shows the puzzle title and author, elapsed time, pause, and sharing. Long titles
+truncate while the timer and actions stay visible. The sidebar uses a smaller keypad so more
+of the rules fit beside the board. Pause opens the rules and stops the timer, including while
+switching tabs or apps; Resume puzzle (or dismissing the rules) continues it. Checking options
+are available from the keypad's settings button.
+
 ### Playing on a phone
 
 The player keeps the board and a T9-style number keypad within the available screen height,

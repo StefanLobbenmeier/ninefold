@@ -33,6 +33,19 @@ class BoardSelectionInteractionTest {
         }
     }
 
+    @Test fun pauseOpensRulesAndResumeRestoresKeyboardInput() {
+        openPlayer()
+        compose.onNodeWithContentDescription("Pause game").performClick()
+        compose.onNodeWithText("Resume puzzle").assertIsDisplayed()
+        compose.onNodeWithText("Game paused. Your timer resumes when you close the rules.").assertIsDisplayed()
+        compose.onNodeWithText("Resume puzzle").performClick()
+        compose.onRoot().performKeyInput { pressKey(Key.Five) }
+        cell(1, 3).assertContentDescriptionContains("column 3, 5", substring = true)
+        compose.onNodeWithText("CLASSIC").assertDoesNotExist()
+        compose.onNodeWithText("Checking settings").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Checking settings").assertExists()
+    }
+
     private fun cell(row: Int, column: Int) = compose.onNode(
         hasContentDescription("Row $row, column $column,", substring = true),
     )
@@ -275,7 +288,7 @@ class BoardSelectionInteractionTest {
         assertSelection()
         compose.onNodeWithContentDescription("Select multiple").performTouchInput { click() }
         clickCell(4, 4)
-        compose.onNodeWithText("Selection test").performTouchInput { click() }
+        compose.onNodeWithText("Selection test", substring = true).performTouchInput { click() }
         assertSelection()
     }
     @Test fun colourPaletteSupportsGroupUndoRedoAndIndependentErase() {

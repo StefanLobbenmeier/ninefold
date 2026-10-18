@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 
-internal enum class Glyph { Back, Play, Grid, Add, Erase, Multiple, Undo, Redo, Rules, Check, Settings, Refresh, Share }
+internal enum class Glyph { Back, Play, Pause, Grid, Add, Erase, Multiple, Undo, Redo, Rules, Check, Settings, Refresh, Share }
 
 /** Small, consistent stroke icons; labels live on their interactive parents. */
 @Composable
@@ -33,6 +33,7 @@ internal fun AppIcon(glyph: Glyph, modifier: Modifier = Modifier) {
                 path(5f to 12f, 5f to 21f, 19f to 21f, 19f to 12f)
             }
             Glyph.Back -> { line(4f,12f,20f,12f); path(10f to 5f, 3f to 12f, 10f to 19f) }
+            Glyph.Pause -> { line(8f, 5f, 8f, 19f); line(16f, 5f, 16f, 19f) }
             Glyph.Play -> path(8f to 4f, 20f to 12f, 8f to 20f, close = true)
             Glyph.Add -> { line(12f,5f,12f,19f); line(5f,12f,19f,12f) }
             Glyph.Grid -> { drawRect(color, Offset(3*scale,3*scale), Size(18*scale,18*scale), style = Stroke(1.8f*scale)); for(i in listOf(9f,15f)) { line(i,3f,i,21f); line(3f,i,21f,i) } }

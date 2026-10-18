@@ -144,12 +144,13 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var temporaryMode by remember { mutableStateOf<InputMode?>(null) }
     val effectiveMode = temporaryMode ?: mode
     var showRules by remember { mutableStateOf(saved?.started != true) }
+    var paused by remember(puzzle) { mutableStateOf(false) }
     var started by remember(puzzle) { mutableStateOf(saved?.started ?: false) }
     val multiSelect = repository.settings.multiSelect
     val clock = remember(puzzle) { GameClock().also { it.restore(repository.elapsed(puzzle)) } }
     val completionResult = remember(puzzle, cells) { puzzle.completionCheck(cells) }
     val completed = completionResult?.cells?.isEmpty() == true
-    val elapsed = rememberGameElapsed(puzzle, repository, clock, started, completed)
+    val elapsed = rememberGameElapsed(puzzle, repository, clock, started, completed, paused = paused)
     var completionAcknowledged by remember(puzzle) { mutableStateOf(completed) }
     var showSuccess by remember(puzzle) { mutableStateOf(false) }
     var showChecking by remember { mutableStateOf(false) }
@@ -292,7 +293,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         val compact = maxWidth <= maxHeight - 52.dp
         val landscapePhone = !compact && maxHeight < 600.dp
         Column(Modifier.fillMaxSize()) {
-            TopBar(puzzle, shareBaseUrl) { clearSelection(); onBrowse() }
+            TopBar(puzzle, shareBaseUrl, desktop = !compact, elapsed = elapsed, canPause = started && !completed, onPause = { paused = true; showRules = true }) { clearSelection(); onBrowse() }
             if (compact) {
                 PortraitPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
@@ -306,7 +307,6 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             } else {
                 DesktopPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
-                    heading = { PuzzleHeading(puzzle, compact = landscapePhone, elapsed = elapsed) },
                     board = {
                         SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     },
@@ -315,12 +315,16 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                         rules = {
                             SideCard("PUZZLE NOTES") {
                                 RulesText(puzzle.rules)
-                                HorizontalDivider(Modifier.padding(vertical = 10.dp), color = Color(0xFFE5E5DE))
-                                TextButton({ clearSelection(); showChecking = true }, Modifier.fillMaxWidth()) { Text("Checking settings") }
                             }
                         },
                         input = {
-                            SideCard("PLAY") { Controls(effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
+                            val density = LocalDensity.current
+                            val inputScale = if (landscapePhone) 1f else 0.6f
+                            // Reduce the panel height while keeping the small mode labels readable.
+                            val inputFontScale = if (landscapePhone) 1f else 0.8f
+                            CompositionLocalProvider(LocalDensity provides Density(density.density * inputScale, density.fontScale * inputFontScale / inputScale)) {
+                                SideCard("PLAY") { Controls(effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
+                            }
                         },
                     )
                 }
@@ -333,8 +337,9 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             save()
         }) { colourSettings = null }
     }
-    if (showRules) RulesDialog(puzzle, starting = !started) {
+    if (showRules) RulesDialog(puzzle, starting = !started, paused = paused) {
         if (!started) { clock.start(); started = true; save() }
+        paused = false
         showRules = false
     }
     if (showChecking) CheckingDialog(
@@ -352,7 +357,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
 
 
 @Composable
-private fun TopBar(puzzle: Puzzle, shareBaseUrl: String, onBrowse: () -> Unit) {
+private fun TopBar(puzzle: Puzzle, shareBaseUrl: String, desktop: Boolean, elapsed: Long, canPause: Boolean, onPause: () -> Unit, onBrowse: () -> Unit) {
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -371,8 +376,17 @@ private fun TopBar(puzzle: Puzzle, shareBaseUrl: String, onBrowse: () -> Unit) {
 
     Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onBrowse, Modifier.semantics { contentDescription = "Back to puzzles" }) { AppIcon(Glyph.Back) }
-        Text("NINEFOLD", fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontSize = 12.sp, color = Moss)
-        Spacer(Modifier.weight(1f))
+        if (desktop) {
+            Text(buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Ink)) { append(puzzle.title) }
+                withStyle(SpanStyle(color = Color(0xFF737772))) { append("   by ${puzzle.author}") }
+            }, modifier = Modifier.weight(1f).padding(horizontal = 12.dp), fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(formatElapsed(elapsed), color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            IconButton(onPause, enabled = canPause, modifier = Modifier.semantics { contentDescription = "Pause game" }) { AppIcon(Glyph.Pause) }
+        } else {
+            Text("NINEFOLD", fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontSize = 12.sp, color = Moss)
+            Spacer(Modifier.weight(1f))
+        }
         IconButton({
             link.fold(
                 onSuccess = { url -> sharePuzzle(url, puzzle.title) { copyLink(url) } },
@@ -452,16 +466,14 @@ internal fun PortraitPlayerLayout(
 }
 
 // SudokuPad fits a landscape frame between 1.7:1 and 2.1:1, with a 5% board margin.
-// Keep metadata beside the board so long headings never reduce the playing area.
+// Metadata lives in the top bar, leaving the full sidebar height for rules and input.
 @Composable
 internal fun DesktopPlayerLayout(
     modifier: Modifier = Modifier,
-    heading: @Composable () -> Unit,
     board: @Composable () -> Unit,
     controls: @Composable () -> Unit,
 ) {
     Layout(content = {
-        Box { heading() }
         Box { board() }
         BoxWithConstraints {
             val density = LocalDensity.current
@@ -479,21 +491,14 @@ internal fun DesktopPlayerLayout(
         val margin = (slot * 0.05f).roundToInt()
         val boardSize = (slot - margin).coerceAtLeast(0)
         val controlsWidth = (frameWidth - slot - margin).coerceIn(0, 455.dp.roundToPx())
-        val headingGap = 12.dp.roundToPx().coerceAtMost(slot)
-        val headingHeight = measurables[0].maxIntrinsicHeight(controlsWidth)
-            .coerceAtMost((slot - headingGap).coerceAtLeast(0))
-        val headingPlaceable = measurables[0].measure(Constraints.fixed(controlsWidth, headingHeight))
-        val boardPlaceable = measurables[1].measure(Constraints.fixed(boardSize, boardSize))
-        val controlsPlaceable = measurables[2].measure(
-            Constraints.fixed(controlsWidth, (slot - headingHeight - headingGap).coerceAtLeast(0)),
-        )
+        val boardPlaceable = measurables[0].measure(Constraints.fixed(boardSize, boardSize))
+        val controlsPlaceable = measurables[1].measure(Constraints.fixed(controlsWidth, slot))
         layout(width, height) {
             val left = (width - frameWidth) / 2
             val top = (height - slot) / 2
             val sidebarLeft = left + slot + margin / 2
             boardPlaceable.placeRelative(left + margin / 2, top + margin / 2)
-            headingPlaceable.placeRelative(sidebarLeft, top)
-            controlsPlaceable.placeRelative(sidebarLeft, top + headingHeight + headingGap)
+            controlsPlaceable.placeRelative(sidebarLeft, top)
         }
     }
 }
@@ -892,7 +897,7 @@ private fun SideCard(label: String, content: @Composable ColumnScope.() -> Unit)
 private fun Controls(mode: InputMode, letters: Boolean, onLetters: () -> Unit, digitCounts: Map<Int, Int>, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, onColourSettings: (CellColour) -> Unit, automaticColours: Map<Int, AutomaticColourRule>, multiple: Boolean, onMultiple: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, compact: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Column(Modifier.heightIn(max = if (compact) 144.dp else 168.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.heightIn(max = if (compact) 144.dp else 170.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 (if (letters && mode != InputMode.Colour) 10..35 else 1..9).chunked(3).forEach { numbers ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         numbers.forEach { number ->
@@ -940,8 +945,8 @@ private fun Controls(mode: InputMode, letters: Boolean, onLetters: () -> Unit, d
                             listOf(CellColour.Red, CellColour.Yellow, CellColour.Blue).forEachIndexed { index, colour ->
                                 drawRect(colour.swatch, Offset(index * size.width / 3, 2.dp.toPx()), Size(size.width / 3, size.height - 4.dp.toPx()))
                             }
-                        } else Text(item.mark, color = if (active) Color.White else Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                        Text(item.label, color = if (active) Color.White else Color.Gray, fontSize = 10.sp)
+                        } else Text(item.mark, color = if (active) Color.White else Ink, fontSize = 17.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold)
+                        Text(item.label, color = if (active) Color.White else Color.Gray, fontSize = 10.sp, lineHeight = 12.sp)
                     }
                 }
             }
@@ -1024,11 +1029,11 @@ private fun IndentedCheckOption(label: String, checked: Boolean, onChecked: (Boo
 }
 
 @Composable
-private fun RulesDialog(puzzle: Puzzle, starting: Boolean, onDismiss: () -> Unit) {
+private fun RulesDialog(puzzle: Puzzle, starting: Boolean, paused: Boolean = false, onDismiss: () -> Unit) {
     val uriHandler = LocalUriHandler.current
     AlertDialog(
         onDismissRequest = { if (!starting) onDismiss() },
-        confirmButton = { Button(onDismiss) { Text(if (starting) "Okay, start puzzle" else "Okay") } },
+        confirmButton = { Button(onDismiss) { Text(if (starting) "Okay, start puzzle" else if (paused) "Resume puzzle" else "Okay") } },
         containerColor = Color.White,
         title = { Column { Text(puzzle.title, maxLines = 2, overflow = TextOverflow.Ellipsis); Text("by ${puzzle.author}", style = MaterialTheme.typography.bodyMedium, color = Moss) } },
         text = { Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
@@ -1037,6 +1042,7 @@ private fun RulesDialog(puzzle: Puzzle, starting: Boolean, onDismiss: () -> Unit
             if (puzzle.videoUrl != null || puzzle.sourceUrl != null) HorizontalDivider(Modifier.padding(vertical = 8.dp))
             puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Watch source video") } }
             puzzle.sourceUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad") } }
+            if (paused) Text("Game paused. Your timer resumes when you close the rules.", color = Color.Gray, fontSize = 12.sp)
             if (starting) Text("Your timer starts when you tap Okay.", color = Color.Gray, fontSize = 12.sp)
         } }, shape = RoundedCornerShape(22.dp),
     )

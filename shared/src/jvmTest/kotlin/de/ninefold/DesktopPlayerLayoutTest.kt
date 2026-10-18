@@ -26,7 +26,6 @@ class DesktopPlayerLayoutTest {
             val (width, height) = viewport.value
             DesktopPlayerLayout(
                 modifier = Modifier.requiredSize(width.dp, height.dp).testTag("player"),
-                heading = { Box(Modifier.height(80.dp)) },
                 board = {
                     SudokuBoard(SudokuFixtures.classic, SudokuFixtures.classic.startingCells(),
                         emptySet(), emptySet(), modifier = Modifier.fillMaxSize().testTag("board"), onSelect = {})
@@ -59,13 +58,13 @@ class DesktopPlayerLayoutTest {
             assertEquals(expectedBoard.dp, board.right - board.left)
             assertTrue(kotlin.math.abs((controls.right - controls.left).value - expectedControls) < 1f)
             val button = bounds("button")
-            assertTrue(kotlin.math.abs((button.bottom - button.top).value - 52f * minOf(expectedControls / 350f, (slot - 92) / 500f, 1.3f)) < 1f)
+            assertTrue(kotlin.math.abs((button.bottom - button.top).value - 52f * minOf(expectedControls / 350f, slot / 500f, 1.3f)) < 1f)
             assertTrue(board.bottom <= player.bottom)
             assertTrue(controls.right <= player.right)
             assertEquals(player.top + ((size.second - slot) / 2 + margin / 2).dp, board.top)
             assertTrue(bounds("button").bottom <= controls.bottom)
-            // The heading is in the sidebar: even an 80 dp heading costs no board height.
-            assertTrue(board.top < controls.top)
+            // The sidebar can use the entire frame height.
+            assertTrue(controls.top <= board.top)
         }
     }
     @Test fun portraitGivesBoardWidthBeforeMetadataAndInput() {

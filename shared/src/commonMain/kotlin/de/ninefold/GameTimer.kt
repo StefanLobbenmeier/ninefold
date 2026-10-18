@@ -10,6 +10,7 @@ internal fun rememberGameElapsed(
     clock: GameClock,
     started: Boolean,
     completed: Boolean,
+    paused: Boolean = false,
     observeVisibility: ((Boolean) -> Unit) -> (() -> Unit) = ::observePageVisibility,
 ): Long {
     var elapsed by remember(puzzle) { mutableStateOf(repository.elapsed(puzzle)) }
@@ -22,14 +23,14 @@ internal fun rememberGameElapsed(
         }
         onDispose { unsubscribe() }
     }
-    LaunchedEffect(started, completed, puzzle, clock) {
+    LaunchedEffect(started, completed, paused, puzzle, clock) {
         if (started) {
-            if (completed) clock.stop() else clock.start()
+            if (completed || paused) clock.stop() else clock.start()
             elapsed = clock.elapsedSeconds()
             repository.saveElapsed(puzzle, elapsed)
             // Visibility pauses the clock, not this observer. Hide/show can be conflated
             // before recomposition, so a loop that exits on hide may never restart.
-            while (!completed) {
+            while (!completed && !paused) {
                 delay(200)
                 val next = clock.elapsedSeconds()
                 if (next != elapsed) {
