@@ -297,7 +297,6 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             if (compact) {
                 PortraitPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
-                    heading = { PuzzleHeading(puzzle, compact = true, elapsed = elapsed) },
                     board = {
                         SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     },
@@ -374,19 +373,21 @@ private fun TopBar(puzzle: Puzzle, shareBaseUrl: String, desktop: Boolean, elaps
     }
     PopupSnackbar(snackbar)
 
-    Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = if (desktop) 12.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onBrowse, Modifier.semantics { contentDescription = "Back to puzzles" }) { AppIcon(Glyph.Back) }
         if (desktop) {
             Text(buildAnnotatedString {
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Ink)) { append(puzzle.title) }
                 withStyle(SpanStyle(color = Color(0xFF737772))) { append("   by ${puzzle.author}") }
             }, modifier = Modifier.weight(1f).padding(horizontal = 12.dp), fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(formatElapsed(elapsed), color = Ink, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            IconButton(onPause, enabled = canPause, modifier = Modifier.semantics { contentDescription = "Pause game" }) { AppIcon(Glyph.Pause) }
         } else {
-            Text("NINEFOLD", fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontSize = 12.sp, color = Moss)
-            Spacer(Modifier.weight(1f))
+            Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                Text(puzzle.title, color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
+        Text(formatElapsed(elapsed), color = Ink, fontSize = if (desktop) 16.sp else 13.sp, fontWeight = FontWeight.SemiBold)
+        IconButton(onPause, enabled = canPause, modifier = Modifier.semantics { contentDescription = "Pause game" }) { AppIcon(Glyph.Pause) }
         IconButton({
             link.fold(
                 onSuccess = { url -> sharePuzzle(url, puzzle.title) { copyLink(url) } },
@@ -424,20 +425,18 @@ internal fun DesktopPlayerSidebar(
     }
 }
 
-// In portrait the square gets the width first; metadata and scaled input share the space below.
+// In portrait the square gets the width first; input fills the space below.
 @Composable
 internal fun PortraitPlayerLayout(
     modifier: Modifier = Modifier,
-    heading: @Composable () -> Unit,
     board: @Composable () -> Unit,
     controls: @Composable () -> Unit,
 ) {
     Layout(content = {
-        Box { heading() }
         Box { board() }
         BoxWithConstraints {
             val density = LocalDensity.current
-            val scale = minOf(maxWidth / 350.dp, maxHeight / 350.dp, 1.3f).coerceAtLeast(0.01f)
+            val scale = minOf(maxWidth / 350.dp, maxHeight / 258.dp, 1.3f).coerceAtLeast(0.01f)
             CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) { controls() }
             }
@@ -451,16 +450,13 @@ internal fun PortraitPlayerLayout(
         val boardSize = frameWidth - margin
         val controlsWidth = minOf(boardSize, 455.dp.roundToPx())
         val remaining = (frameHeight - frameWidth).coerceAtLeast(0)
-        val headingHeight = measurables[0].maxIntrinsicHeight(controlsWidth).coerceAtMost(remaining)
-        val headingPlaceable = measurables[0].measure(Constraints.fixed(controlsWidth, headingHeight))
-        val boardPlaceable = measurables[1].measure(Constraints.fixed(boardSize, boardSize))
-        val controlsPlaceable = measurables[2].measure(Constraints.fixed(controlsWidth, remaining - headingHeight))
+        val boardPlaceable = measurables[0].measure(Constraints.fixed(boardSize, boardSize))
+        val controlsPlaceable = measurables[1].measure(Constraints.fixed(controlsWidth, remaining))
         layout(width, height) {
             val top = (height - frameHeight) / 2
             val controlsLeft = (width - controlsWidth) / 2
             boardPlaceable.placeRelative((width - boardSize) / 2, top + margin / 2)
-            headingPlaceable.placeRelative(controlsLeft, top + frameWidth)
-            controlsPlaceable.placeRelative(controlsLeft, top + frameWidth + headingHeight)
+            controlsPlaceable.placeRelative(controlsLeft, top + frameWidth)
         }
     }
 }
@@ -500,28 +496,6 @@ internal fun DesktopPlayerLayout(
             boardPlaceable.placeRelative(left + margin / 2, top + margin / 2)
             controlsPlaceable.placeRelative(sidebarLeft, top)
         }
-    }
-}
-
-@Composable
-private fun PuzzleHeading(puzzle: Puzzle, compact: Boolean = false, elapsed: Long = 0) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-        Column(Modifier.weight(1f)) {
-            val types = buildList {
-                if (puzzle.fogLights != null) add("FOG")
-                if (puzzle.cages.isNotEmpty()) add("KILLER")
-                if (puzzle.arrows.isNotEmpty()) add("ARROW")
-                if (puzzle.lines.isNotEmpty()) add("LINES")
-                if (isEmpty()) add("CLASSIC")
-            }
-            Text(types.joinToString(" · "), color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(puzzle.title, modifier = Modifier.weight(1f), fontSize = if (compact) 20.sp else 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (!compact) Text(formatElapsed(elapsed), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-            Text("by ${puzzle.author}", color = Color(0xFF737772), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        if (compact) Text(formatElapsed(elapsed), modifier = Modifier.padding(start = 12.dp), color = Ink, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -896,13 +870,19 @@ private fun SideCard(label: String, content: @Composable ColumnScope.() -> Unit)
 @Composable
 private fun Controls(mode: InputMode, letters: Boolean, onLetters: () -> Unit, digitCounts: Map<Int, Int>, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, onColourSettings: (CellColour) -> Unit, automaticColours: Map<Int, AutomaticColourRule>, multiple: Boolean, onMultiple: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, compact: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (compact) Column(Modifier.width(48.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            CompactAction("Undo", Glyph.Undo, onUndo, canUndo)
+            CompactAction("Redo", Glyph.Redo, onRedo, canRedo)
+            CompactAction("Check", Glyph.Check, onCheck, canCheck)
+            FilledTonalIconToggleButton(multiple, { onMultiple() }, Modifier.size(48.dp).semantics { contentDescription = "Select multiple" }, shape = RoundedCornerShape(12.dp)) { AppIcon(Glyph.Multiple) }
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Column(Modifier.heightIn(max = if (compact) 144.dp else 170.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.heightIn(max = if (compact) 156.dp else 170.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 (if (letters && mode != InputMode.Colour) 10..35 else 1..9).chunked(3).forEach { numbers ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         numbers.forEach { number ->
                             val colour = if (mode == InputMode.Colour) CellColour.fromNumber(number) else null
-                            val buttonModifier = Modifier.weight(1f).height(if (compact) 44.dp else 52.dp)
+                            val buttonModifier = Modifier.weight(1f).height(if (compact) 48.dp else 52.dp)
                             if (colour != null) Surface(
                                 modifier = buttonModifier.semantics { contentDescription = "${colour.label}, colour $number" }
                                     .combinedClickable(onClick = { onNumber(number) }, onLongClickLabel = "Automatic colouring settings", onLongClick = { onColourSettings(colour) }),
@@ -914,7 +894,7 @@ private fun Controls(mode: InputMode, letters: Boolean, onLetters: () -> Unit, d
                                         Text(rule.numbers.sorted().joinToString(""), color = if (colour == CellColour.DarkGrey) Color.White else Ink, fontWeight = FontWeight.Bold, fontSize = if (rule.numbers.size > 5) 10.sp else 12.sp)
                                     }
                                 }
-                            } else OutlinedButton({ onNumber(number) }, buttonModifier, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD))) {
+                            } else OutlinedButton({ onNumber(number) }, buttonModifier, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D6CD)), colors = ButtonDefaults.outlinedButtonColors(containerColor = if (compact) Color.White else Color.Transparent)) {
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     Text(number.symbolText(), fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
                                     val count = digitCounts[number] ?: 0
@@ -931,15 +911,20 @@ private fun Controls(mode: InputMode, letters: Boolean, onLetters: () -> Unit, d
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilledTonalIconToggleButton(multiple, { onMultiple() }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = "Select multiple" }, shape = RoundedCornerShape(10.dp)) { AppIcon(Glyph.Multiple) }
-                IconButton(onUndo, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = "Undo" }, enabled = canUndo) { AppIcon(Glyph.Undo) }
-                IconButton({ onNumber(null) }, Modifier.weight(1f).height(if (compact) 44.dp else 52.dp).semantics { contentDescription = if (mode == InputMode.Colour) "Erase colours" else "Erase" }) { AppIcon(Glyph.Erase) }
+                if (compact) {
+                    FilledTonalButton(onLetters, Modifier.weight(1f).height(48.dp).semantics { contentDescription = "Switch numbers and letters" }, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(0.dp)) { Text(if (letters) "A–Z" else "1–9") }
+                    FilledTonalIconButton({ onNumber(null) }, Modifier.weight(1f).height(48.dp).semantics { contentDescription = if (mode == InputMode.Colour) "Erase colours" else "Erase" }, shape = RoundedCornerShape(12.dp)) { AppIcon(Glyph.Erase) }
+                } else {
+                    FilledTonalIconToggleButton(multiple, { onMultiple() }, Modifier.weight(1f).height(52.dp).semantics { contentDescription = "Select multiple" }, shape = RoundedCornerShape(10.dp)) { AppIcon(Glyph.Multiple) }
+                    IconButton(onUndo, Modifier.weight(1f).height(52.dp).semantics { contentDescription = "Undo" }, enabled = canUndo) { AppIcon(Glyph.Undo) }
+                    IconButton({ onNumber(null) }, Modifier.weight(1f).height(52.dp).semantics { contentDescription = if (mode == InputMode.Colour) "Erase colours" else "Erase" }) { AppIcon(Glyph.Erase) }
+                }
             }
         }
-        Column(Modifier.width(72.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilledTonalButton(onLetters, Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) { Text(if (letters) "A–Z" else "1–9") }
+        Column(Modifier.width(if (compact) 60.dp else 72.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!compact) FilledTonalButton(onLetters, Modifier.fillMaxWidth(), contentPadding = PaddingValues(0.dp)) { Text(if (letters) "A–Z" else "1–9") }
             InputMode.entries.forEach { item -> val active = item == mode
-                Surface(Modifier.fillMaxWidth().height(if (compact) 44.dp else 52.dp).semantics { selected = active }.clickable { onMode(item) }, shape = RoundedCornerShape(10.dp), color = if (active) Moss else Color(0xFFF0F1EA)) {
+                Surface(Modifier.fillMaxWidth().height(if (compact) 48.dp else 52.dp).semantics { selected = active }.clickable { onMode(item) }, shape = RoundedCornerShape(10.dp), color = if (active) Moss else Color(0xFFF0F1EA)) {
                     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                         if (item == InputMode.Colour) Canvas(Modifier.size(24.dp, 18.dp)) {
                             listOf(CellColour.Red, CellColour.Yellow, CellColour.Blue).forEachIndexed { index, colour ->
@@ -954,9 +939,17 @@ private fun Controls(mode: InputMode, letters: Boolean, onLetters: () -> Unit, d
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         TextButton(onRules, Modifier.weight(1f)) { AppIcon(Glyph.Rules); Spacer(Modifier.width(6.dp)); Text("Rules") }
-        TextButton(onCheck, Modifier.weight(1f), enabled = canCheck) { AppIcon(Glyph.Check); Spacer(Modifier.width(6.dp)); Text("Check") }
-        IconButton(onRedo, Modifier.semantics { contentDescription = "Redo" }, enabled = canRedo) { AppIcon(Glyph.Redo) }
-        IconButton(onChecking, Modifier.semantics { contentDescription = "Checking settings" }) { AppIcon(Glyph.Settings) }
+        if (!compact) TextButton(onCheck, Modifier.weight(1f), enabled = canCheck) { AppIcon(Glyph.Check); Spacer(Modifier.width(6.dp)); Text("Check") }
+        if (!compact) IconButton(onRedo, Modifier.semantics { contentDescription = "Redo" }, enabled = canRedo) { AppIcon(Glyph.Redo) }
+        if (compact) TextButton(onChecking, Modifier.weight(1f)) { AppIcon(Glyph.Settings); Spacer(Modifier.width(6.dp)); Text("Settings") }
+        else IconButton(onChecking, Modifier.semantics { contentDescription = "Checking settings" }) { AppIcon(Glyph.Settings) }
+    }
+}
+
+@Composable
+private fun CompactAction(label: String, glyph: Glyph, onClick: () -> Unit, enabled: Boolean = true) {
+    FilledTonalIconButton(onClick, Modifier.size(48.dp).semantics { contentDescription = label }, enabled = enabled, shape = RoundedCornerShape(12.dp)) {
+        AppIcon(glyph)
     }
 }
 

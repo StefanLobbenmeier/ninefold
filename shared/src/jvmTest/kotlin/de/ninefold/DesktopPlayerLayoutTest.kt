@@ -67,13 +67,12 @@ class DesktopPlayerLayoutTest {
             assertTrue(controls.top <= board.top)
         }
     }
-    @Test fun portraitGivesBoardWidthBeforeMetadataAndInput() {
+    @Test fun portraitGivesBoardWidthBeforeInput() {
         val viewport = mutableStateOf(390 to 792)
         compose.setContent {
             val (width, height) = viewport.value
             PortraitPlayerLayout(
                 modifier = Modifier.requiredSize(width.dp, height.dp).testTag("portrait"),
-                heading = { Box(Modifier.height(80.dp).testTag("heading")) },
                 board = { Box(Modifier.fillMaxSize().testTag("board")) },
                 controls = { Box(Modifier.fillMaxSize().testTag("controls")) },
             )
@@ -82,13 +81,17 @@ class DesktopPlayerLayoutTest {
             compose.runOnIdle { viewport.value = size }
             val player = compose.onNodeWithTag("portrait").getUnclippedBoundsInRoot()
             val board = compose.onNodeWithTag("board").getUnclippedBoundsInRoot()
-            val heading = compose.onNodeWithTag("heading").getUnclippedBoundsInRoot()
+            val controlsNode = compose.onNodeWithTag("controls")
+            val controlsBounds = controlsNode.getUnclippedBoundsInRoot()
+            val scale = controlsNode.fetchSemanticsNode().layoutInfo.density.density / compose.density.density
+            val controls = DpRect(controlsBounds.left * scale, controlsBounds.top * scale,
+                controlsBounds.right * scale, controlsBounds.bottom * scale)
             val expectedSize = minOf(size.first, (size.second / 1.5f).toInt()) - 5
             assertEquals(expectedSize.dp, board.right - board.left)
             assertEquals(board.right - board.left, board.bottom - board.top)
-            assertTrue(board.bottom <= heading.top)
+            assertTrue(board.bottom <= controls.top)
             assertTrue(board.bottom <= player.bottom)
-            assertEquals(80.dp, heading.bottom - heading.top)
+            assertTrue(controls.bottom <= player.bottom)
         }
     }
 
