@@ -27,11 +27,12 @@ class GameTimerTest {
             override fun onClear() {}
         }, recomposer)
         var visibility: (Boolean) -> Unit = {}
+        var paused by mutableStateOf(false)
         var displayed = -1L
         var unsubscribed = false
         try {
             composition.setContent {
-                val elapsed = rememberGameElapsed(puzzle, repository, clock, true, false) { listener ->
+                val elapsed = rememberGameElapsed(puzzle, repository, clock, true, false, paused = paused) { listener ->
                     visibility = listener
                     listener(true)
                     val unsubscribe: () -> Unit = { unsubscribed = true }
@@ -64,6 +65,30 @@ class GameTimerTest {
                 assertEquals(61L + it, displayed)
                 assertEquals(displayed, repository.elapsed(puzzle))
             }
+            suspend fun render() {
+                Snapshot.sendApplyNotifications()
+                runCurrent()
+                frames.sendFrame(testScheduler.currentTime * 1_000_000)
+                runCurrent()
+            }
+            paused = true
+            render()
+            val pausedAt = displayed
+            visibility(false)
+            advanceTimeBy(2_000)
+            visibility(true)
+            advanceTimeBy(2_000)
+            render()
+            assertEquals(pausedAt, clock.elapsedSeconds())
+            assertEquals(pausedAt, repository.elapsed(puzzle))
+            assertEquals(pausedAt, displayed)
+            paused = false
+            render()
+            advanceTimeBy(1_000)
+            runCurrent()
+            render()
+            assertEquals(pausedAt + 1, displayed)
+            assertEquals(displayed, repository.elapsed(puzzle))
         } finally {
             composition.dispose()
             recomposer.cancel()
