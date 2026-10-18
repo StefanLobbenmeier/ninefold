@@ -12,6 +12,36 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun importsFixedAndEditableCellValuesWithoutChangingSclSemantics() {
+        val payload = SudokuFixtures.fpuzzlesPayload(givens = "12" + ".".repeat(79))
+            .replace("{\"value\":1}", "{\"value\":1,\"given\":true}")
+            .replace("{\"value\":2}", "{\"value\":2,\"given\":false}")
+        val puzzle = parseSudokuPadPayload(payload)
+        assertEquals("1." + ".".repeat(79), puzzle.givens)
+        assertEquals(CellState(1, given = true), puzzle.startingCells()[0])
+        assertEquals(CellState(2), puzzle.startingCells()[1])
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+        assertEquals(puzzle.startingCells(), assertNotNull(puzzleFromShareLink(puzzleShareLink(puzzle))).startingCells())
+        val scl = parseSudokuPadPayload(payload.replace("fpuz", "scl").replace("\"grid\"", "\"cells\""))
+        assertEquals(CellState(2, given = true), scl.startingCells()[1])
+        assertTrue(puzzle.importOmissions.none { it.path.endsWith(".given") })
+        assertEquals(SudokuFixtures.classic.givens, parseSudokuPadPayload(
+            SudokuFixtures.fpuzzlesPayload(SudokuFixtures.classic.givens)).givens)
+    }
+
+    @Test fun importsAuthoredCellShadingAndReportsUnrepresentedMarksAndColors() {
+        val payload = SudokuFixtures.fpuzzlesPayload().replaceFirst("{}",
+            """{"color":"#A8A8A8","givenPencilMarks":[1,3],"given":true}""")
+        val puzzle = parseSudokuPadPayload(payload)
+        assertEquals(listOf(PuzzleOverlay(GridPoint(.5, .5), 1.0, 1.0, "#A8A8A8", rounded = false)), puzzle.underlays)
+        assertTrue(puzzle.importOmissions.any { it.path == "$.grid[0][0].givenPencilMarks" })
+        assertTrue(puzzle.importOmissions.none { it.path.endsWith(".color") || it.path.endsWith(".given") })
+        val malformed = parseSudokuPadPayload(payload.replace("#A8A8A8", "palette-2").replace("\"given\":true", "\"given\":2"))
+        assertTrue(malformed.underlays.isEmpty())
+        assertTrue(malformed.importOmissions.any { it.path.endsWith(".color") })
+        assertTrue(malformed.importOmissions.any { it.path.endsWith(".given") })
+    }
+
     @Test fun importsFpuzzlesCircleArtworkBetweenCellsAndAtIntersections() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"circle":[
             {"cells":["R1C1","R1C2"],"baseC":"#FFFFFF","outlineC":"#000000","width":0.35,"height":0.35},

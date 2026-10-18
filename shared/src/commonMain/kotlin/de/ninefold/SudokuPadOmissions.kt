@@ -60,7 +60,13 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
     }
     for (key in listOf("cells", "grid")) (root[key] as? JsonArray)?.forEachIndexed { r, row ->
         (row as? JsonArray)?.forEachIndexed { c, cell -> (cell as? JsonObject)?.let {
-            fields(it, "$.${key}[$r][$c]", "value")
+            val path = "$.${key}[$r][$c]"
+            fields(it, path, "value given color")
+            if (meaningful(it["given"] ?: JsonNull) && (it["given"] as? JsonPrimitive)?.booleanOrNull == null)
+                report("$path.given", "Unrecognized fixed-clue flag; only boolean flags are supported.")
+            if (meaningful(it["color"] ?: JsonNull) &&
+                (it["color"] as? JsonPrimitive)?.contentOrNull?.let(::isImportedCellColor) != true)
+                report("$path.color", "Cell shading is only imported for CSS hex colors.")
             val digit = (it["value"] as? JsonPrimitive)?.intOrNull
             if (meaningful(it["value"] ?: JsonNull) && digit !in 1..9) report("$.${key}[$r][$c].value", "Value is not imported as a digit.")
         } }
