@@ -4,6 +4,34 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class BoardGeometryTest {
+    @Test fun ordinaryGridNeedsNoOutsideMargin() {
+        assertEquals(0f, SudokuFixtures.classic.boardPaddingCells())
+    }
+
+    @Test fun decorativeArrowsReserveSpaceOnEverySide() {
+        val points = listOf(GridPoint(-.8, 4.5), GridPoint(9.8, 4.5),
+            GridPoint(4.5, -.8), GridPoint(4.5, 9.8))
+        points.forEach { point ->
+            val puzzle = SudokuFixtures.empty.copy(lines = listOf(PuzzleLine(listOf(GridPoint(4.5, 4.5), point))))
+            assertEquals(1f, puzzle.boardPaddingCells())
+        }
+    }
+
+    @Test fun distantArtworkIncludesStrokeAndArrowHead() {
+        val line = PuzzleLine(listOf(GridPoint(4.5, 9.5), GridPoint(4.5, 11.0)), thickness = 10.0)
+        val puzzle = SudokuFixtures.empty.copy(lines = listOf(line))
+        assertEquals(2.1f, puzzle.boardPaddingCells(), .00001f)
+        val arrow = PuzzleArrow(line.points, thickness = 10.0, headLength = .4)
+        assertEquals(2.5f, puzzle.copy(lines = emptyList(), arrows = listOf(arrow)).boardPaddingCells())
+    }
+
+    @Test fun overlayEdgesCountEvenWhenTheirCentersAreInside() {
+        val mark = PuzzleOverlay(GridPoint(0.0, 4.5), width = 1.0, height = 3.0)
+        val puzzle = SudokuFixtures.empty.copy(overlays = listOf(mark))
+        assertEquals(1.5f, puzzle.boardPaddingCells())
+        assertEquals(1.5f, puzzle.copy(overlays = emptyList(), underlays = listOf(mark)).boardPaddingCells())
+    }
+
     @Test fun collapsedBoardKeepsCellMeasurementsNonnegative() {
         for (extent in listOf(0f, 1f, 2f)) {
             val axis = BoardAxis(extent, 2f)

@@ -3,6 +3,29 @@ package de.ninefold
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
+/** Symmetric margin in cell units, keeping the grid square and centered. */
+internal fun Puzzle.boardPaddingCells(): Float {
+    var outside = 0.0
+    fun include(point: GridPoint, halfWidth: Double = 0.0, halfHeight: Double = halfWidth) {
+        outside = maxOf(outside, halfWidth - point.column, point.column + halfWidth - 9,
+            halfHeight - point.row, point.row + halfHeight - 9)
+    }
+    // Some exporters draw outside arrows entirely as decorative line segments.
+    lines.forEach { line ->
+        line.points.forEach { include(it, line.thickness / 100.0) }
+        if (line.rule == LineRule.Thermometer) line.points.firstOrNull()?.let { include(it, .35) }
+    }
+    arrows.forEach { arrow ->
+        arrow.points.forEach { include(it, arrow.thickness / 100.0) }
+        if (arrow.points.size >= 2) {
+            // The head can extend beyond the shaft in either axis.
+            include(arrow.points.last(), arrow.headLength + arrow.thickness / 100.0)
+        }
+    }
+    (overlays + underlays).forEach { include(it.center, it.width / 2, it.height / 2) }
+    return if (outside > 0) maxOf(1.0, outside).toFloat() else 0f
+}
+
 /** Equal-sized cells, with extra space reserved for the two heavier box dividers. */
 internal class BoardAxis(val extent: Float, boxGap: Float) {
     // Rotation can temporarily measure the board smaller than its dividers.
