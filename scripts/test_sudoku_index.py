@@ -3,6 +3,8 @@ import json
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
+import urllib.error
 
 spec = importlib.util.spec_from_file_location("sudoku_index", pathlib.Path(__file__).with_name("update-sudoku-index.py"))
 publisher = importlib.util.module_from_spec(spec)
@@ -22,6 +24,26 @@ def feed(*entries):
 
 
 class SudokuIndexTest(unittest.TestCase):
+    def test_failed_refresh_logs_source_and_preserves_existing_index(self):
+        source = {**SOURCE, "id": "synthetic-channel", "feedUrl": "https://example.test/feed"}
+        error = urllib.error.HTTPError(source["feedUrl"], 404, "Not Found", {}, None)
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory)
+            previous = '{"schemaVersion": 1, "entries": []}\n'
+            (output / "index.json").write_text(previous)
+            sources_file = output / "sources.json"
+            sources_file.write_text(json.dumps([source]))
+            with mock.patch("sys.argv", ["publisher", "--output", directory, "--sources", str(sources_file)]), \
+                    mock.patch.object(publisher.urllib.request, "urlopen", side_effect=error), \
+                    self.assertLogs(publisher.LOGGER, level="INFO") as logs:
+                with self.assertRaises(urllib.error.HTTPError) as raised:
+                    publisher.main()
+            self.assertIs(error, raised.exception)
+            self.assertIn("Fetching source synthetic-channel from https://example.test/feed", logs.output[0])
+            self.assertIn("Failed to refresh source synthetic-channel from https://example.test/feed: HTTPError: HTTP Error 404: Not Found", logs.output[1])
+            self.assertEqual(previous, (output / "index.json").read_text())
+            self.assertFalse((output / "index.js").exists())
+
     def test_youtube_links_and_xml_entities(self):
         payload = feed(video("aaaaaaaaaaa", "<![CDATA[https://sudokupad.app/one) https://www.sudokupad.app/two?setting=1 https://sudokupad.app/one]]>"))
         entries = publisher.youtube_entries(SOURCE, payload)
