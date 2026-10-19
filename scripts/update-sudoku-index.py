@@ -3,6 +3,7 @@
 import argparse
 import datetime as dt
 import json
+import logging
 import os
 import urllib.parse
 import pathlib
@@ -13,6 +14,7 @@ import xml.etree.ElementTree as ET
 ATOM = "http://www.w3.org/2005/Atom"
 MEDIA = "http://search.yahoo.com/mrss/"
 YOUTUBE = "http://www.youtube.com/xml/schemas/2015"
+LOGGER = logging.getLogger(__name__)
 
 
 def utc_timestamp(value: str) -> str:
@@ -119,8 +121,16 @@ def main() -> None:
     for source in sources:
         adapter = ADAPTERS[source["type"]]
         request = urllib.request.Request(source["feedUrl"], headers={"User-Agent": "SudokuPad puzzle index"})
-        with urllib.request.urlopen(request, timeout=30) as response:
-            updates.extend(adapter(source, response.read()))
+        LOGGER.info("Fetching source %s from %s", source["id"], source["feedUrl"])
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                entries = adapter(source, response.read())
+        except Exception as error:
+            LOGGER.error("Failed to refresh source %s from %s: %s: %s",
+                         source["id"], source["feedUrl"], type(error).__name__, error)
+            raise
+        LOGGER.info("Fetched %d entries from source %s", len(entries), source["id"])
+        updates.extend(entries)
     api_key = os.environ.get("YOUTUBE_API_KEY")
     if api_key:
         enrich_video_metadata(updates, api_key)
@@ -130,4 +140,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     main()
