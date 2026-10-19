@@ -44,6 +44,14 @@ internal fun PuzzleOverlay.isKropkiDot(): Boolean =
         width <= .5 && height <= .5 && (backgroundColor != null || borderColor != null) &&
         edgeMarkCells().isNotEmpty()
 
+/** Keep partially hidden quadruples clipped by fog; lift the whole clue once all cells are lit. */
+internal fun PuzzleOverlay.isRevealedQuadruple(clues: List<QuadrupleClue>, litCells: Set<CellPosition>): Boolean =
+    rounded && clues.any { clue ->
+        clue.cells.size == 4 && clue.cells.all { it in litCells } &&
+            abs(center.row - (clue.cells.map { it.row }.average() + .5)) < .001 &&
+            abs(center.column - (clue.cells.map { it.column }.average() + .5)) < .001
+    }
+
 private fun PuzzleOverlay.edgeMarkCells(): List<CellPosition> {
     fun near(a: Double, b: Double) = abs(a - b) < .001
     val row = round(center.row).toInt()

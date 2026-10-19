@@ -526,7 +526,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
     val litCells = remember(puzzle, cells) { puzzle.litCells(cells) }
     val revealedMarks = remember(puzzle, litCells) {
         (puzzle.underlays + puzzle.overlays).filter {
-            (puzzle.fogLights != null || it.isKropkiDot()) && it.isRevealedEdgeMark(litCells)
+            it.isRevealedEdgeMark(litCells) || it.isRevealedQuadruple(puzzle.quadruples, litCells)
         }
     }
     val measurer = rememberTextMeasurer()
@@ -680,7 +680,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     drawLine(color, Offset(0f, y), Offset(size.width, y), width)
                 }
             }
-            // Edge clues are drawn whole above fog and grid lines once either neighbor is lit.
+            // Edge clues and fully revealed quadruples cover the grid with their backing shapes.
             if (revealedMarks.isNotEmpty()) PuzzleGraphics(puzzle, inset, boxGap, measurer, revealedMarks)
             Canvas(Modifier.fillMaxSize().padding(inset)) {
                 val width = 2.dp.toPx()

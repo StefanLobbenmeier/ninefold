@@ -428,7 +428,8 @@ private fun parseOverlay(element: JsonElement): PuzzleOverlay? {
     val center = value["center"]?.let(::parsePoint) ?: return null
     return PuzzleOverlay(
         center, value.double("width") ?: .3, value.double("height") ?: .3,
-        value.string("backgroundColor"), value.string("borderColor") ?: value.string("stroke"),
+        // SVG stroke styles the label; only borderColor outlines the backing shape.
+        value.string("backgroundColor"), value.string("borderColor"),
         value.string("color") ?: value.string("textColor"), value["text"]?.asString(),
         value.boolean("rounded") ?: (value.int("rounded") == 1), value.double("thickness") ?: 1.0,
     )
