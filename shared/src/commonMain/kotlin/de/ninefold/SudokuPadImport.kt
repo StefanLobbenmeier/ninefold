@@ -200,11 +200,21 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         } else null
     }
     val lines = parseLines(root, fpuzzles)
-    val rawOverlays = root.array("overlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
+    val littleKillers = if (fpuzzles) parseFpuzzlesLittleKillers(root) else emptyList()
+    val rawOverlays = littleKillers.map { PuzzleOverlay(it.position, .6, .6, text = it.value.toString()) } + root.array("overlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
     val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText)
     val underlays = cellShading + root.array("underlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
-    val arrows = parseArrows(root, fpuzzles, overlays)
-    val outsideClues = parseOutsideClues(rulesText, overlays, arrows)
+    val arrows = parseArrows(root, fpuzzles, overlays) + littleKillers.map { clue ->
+        val first = clue.cells.first()
+        val dr = (first.row + .5 - clue.position.row).compareTo(0.0)
+        val dc = (first.column + .5 - clue.position.column).compareTo(0.0)
+        PuzzleArrow(listOf(
+            GridPoint(clue.position.row + dr * .35, clue.position.column + dc * .35),
+            GridPoint(clue.position.row + dr * .85, clue.position.column + dc * .85),
+        ))
+    }
+    val outsideClues = littleKillers + parseOutsideClues(rulesText, overlays, arrows)
+        .filter { clue -> littleKillers.none { it.position == clue.position } }
     val hasFog = fogLinks != null || root.containsKey("foglight") || rawCages.any {
         it.jsonObject.string("value")?.startsWith("foglight", ignoreCase = true) == true
     }
@@ -281,6 +291,24 @@ private fun importedSuccessMessage(root: JsonObject, metadata: JsonObject): Stri
         .mapNotNull { value -> marker.matchEntire(value.trim())?.groupValues?.get(1)?.trim() }
         .firstOrNull { it.isNotEmpty() }
 }
+
+/** The outside cell and direction define the diagonal, independently of rule wording. */
+private fun parseFpuzzlesLittleKillers(root: JsonObject): List<OutsideClue> =
+    root.array("littlekillersum").orEmpty().mapNotNull { element ->
+        val clue = element as? JsonObject ?: return@mapNotNull null
+        val position = clue["cell"]?.let(::parsePoint) ?: return@mapNotNull null
+        val value = clue.int("value") ?: return@mapNotNull null
+        val direction = when (clue.string("direction")) {
+            "DR" -> 1 to 1; "DL" -> 1 to -1
+            "UR" -> -1 to 1; "UL" -> -1 to -1
+            else -> return@mapNotNull null
+        }
+        if (position.row in 0.0..9.0 && position.column in 0.0..9.0) return@mapNotNull null
+        val cells = diagonalCells(position, PuzzleArrow(listOf(position,
+            GridPoint(position.row + direction.first, position.column + direction.second))))
+        if (cells.isEmpty()) return@mapNotNull null
+        OutsideClue(value, position, cells, OutsideClueType.DiagonalSum)
+    }
 
 private fun parseOutsideClues(rules: String, overlays: List<PuzzleOverlay>, arrows: List<PuzzleArrow>): List<OutsideClue> =
     overlays.mapNotNull { overlay ->
