@@ -4,6 +4,15 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class BoardGeometryTest {
+    @Test fun onlyOutsideTextCanBeFaded() {
+        val clue = PuzzleOverlay(GridPoint(1.5, -.5), width = 0.0, text = "1 6")
+        kotlin.test.assertTrue(clue.isOutsideTextClue())
+        kotlin.test.assertTrue(clue.copy(center = GridPoint(9.5, 1.5)).isOutsideTextClue())
+        kotlin.test.assertFalse(clue.copy(center = GridPoint(1.5, 1.5)).isOutsideTextClue())
+        kotlin.test.assertFalse(clue.copy(text = " ").isOutsideTextClue())
+        kotlin.test.assertFalse(clue.copy(text = null).isOutsideTextClue())
+    }
+
     @Test fun ordinaryGridNeedsNoOutsideMargin() {
         assertEquals(0f, SudokuFixtures.classic.boardPaddingCells())
     }
