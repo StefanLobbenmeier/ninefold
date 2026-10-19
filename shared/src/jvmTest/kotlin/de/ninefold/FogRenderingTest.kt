@@ -22,6 +22,43 @@ import kotlin.test.assertTrue
 class FogRenderingTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun importedQuadruplesCoverThinAndThickGridLinesButStayHiddenByFog() {
+        val imported = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"metadata":{"rules":"Quadruple circles contain digits from surrounding cells."},"overlays":[
+                {"center":[1,1],"width":0.62,"height":0.62,"rounded":true,"backgroundColor":"#FFFFFF","borderColor":"#000000"},
+                {"center":[1,1],"width":0.1,"height":0.1,"text":2},
+                {"center":[3,3],"width":0.62,"height":0.62,"rounded":true,"backgroundColor":"#FFFFFF","borderColor":"#000000"},
+                {"center":[3,3],"width":0.1,"height":0.1,"text":4}]"""))
+        var puzzle by mutableStateOf(imported)
+        compose.setContent {
+            MaterialTheme {
+                SudokuBoard(puzzle, puzzle.startingCells(), emptySet(), emptySet(),
+                    modifier = Modifier.width(450.dp).testTag("board"), onSelect = {})
+            }
+        }
+        fun checkBacking(expected: Color) {
+            val pixels = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+            val density = pixels.width / 450f
+            val inset = kotlin.math.round(2 * density)
+            val axis = BoardAxis(pixels.width - 2 * inset, kotlin.math.round(.95f * density))
+            for (intersection in listOf(1.0, 3.0)) {
+                val center = inset + axis.at(intersection)
+                // Cross a vertical divider inside the backing, above the digit.
+                val y = (center - axis.cellSize * .23f).toInt()
+                for (dx in -1..1) assertColourClose(expected, pixels[center.toInt() + dx, y])
+            }
+        }
+        checkBacking(Color.White)
+        compose.runOnIdle { puzzle = imported.copy(fogLights = emptySet(), fogLinks = emptyList()) }
+        // Sample off the divider, since the grid deliberately stays visible over fog.
+        val hidden = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+        val cell = hidden.width / 9f
+        for (intersection in listOf(1, 3)) assertColourClose(Color(0xFFB4B7B5),
+            hidden[(cell * (intersection + .1f)).toInt(), (cell * (intersection - .2f)).toInt()])
+        compose.runOnIdle { puzzle = imported.copy(fogLights = imported.quadruples.flatMap { it.cells }.toSet()) }
+        checkBacking(Color.White)
+    }
+
     @Test fun paintedFogKeepsStripesAndOuterBorderWhileHidingPuzzleArtwork() {
         val puzzle = SudokuFixtures.empty.copy(fogLights = emptySet(), fogLinks = emptyList(),
             lines = listOf(PuzzleLine(listOf(GridPoint(.5, .1), GridPoint(.5, .9)), "#000000")))

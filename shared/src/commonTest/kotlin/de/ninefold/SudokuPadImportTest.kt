@@ -12,6 +12,17 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun textStrokeDoesNotBecomeAnOverlayBorder() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"overlays":[
+                {"center":[1,0.5],"width":0.35,"height":0.35,"rounded":true,"text":"X","stroke":"#000000","backgroundColor":"#FFFFFF"},
+                {"center":[2,0.5],"width":0.35,"height":0.35,"rounded":true,"text":"V","stroke":"#000000","borderColor":"#FF0000"}]"""))
+        assertEquals(null, puzzle.overlays[0].borderColor)
+        assertEquals("#FFFFFF", puzzle.overlays[0].backgroundColor)
+        assertEquals("X", puzzle.overlays[0].text)
+        assertEquals("#FF0000", puzzle.overlays[1].borderColor)
+    }
+
     @Test fun importsFixedAndEditableCellValuesWithoutChangingSclSemantics() {
         val payload = SudokuFixtures.fpuzzlesPayload(givens = "12" + ".".repeat(79))
             .replace("{\"value\":1}", "{\"value\":1,\"given\":true}")
