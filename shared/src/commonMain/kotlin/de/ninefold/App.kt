@@ -520,9 +520,8 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
     val currentDragSelection by rememberUpdatedState(onDragSelection)
     val currentToolSelect by rememberUpdatedState(onToolSelect)
     val currentAdditive by rememberUpdatedState(additiveSelection)
-    val hasOutside = (puzzle.overlays + puzzle.underlays).any { it.center.row !in 0.0..9.0 || it.center.column !in 0.0..9.0 } ||
-        puzzle.arrows.any { arrow -> arrow.points.any { it.row !in 0.0..9.0 || it.column !in 0.0..9.0 } }
-    val padCells = if (hasOutside) 1 else 0
+    val padCells = remember(puzzle) { puzzle.boardPaddingCells() }
+    val hasOutside = padCells > 0f
     val litCells = remember(puzzle, cells) { puzzle.litCells(cells) }
     val revealedMarks = remember(puzzle, litCells) {
         (puzzle.underlays + puzzle.overlays).filter {
@@ -535,7 +534,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
         val digitSize = (cellSize.value * .6f).sp
         val density = LocalDensity.current
         val inset = with(density) {
-            (maxWidth * (padCells.toFloat() / (9 + padCells * 2)) + 2.dp).roundToPx().toDp()
+            (maxWidth * (padCells / (9 + padCells * 2)) + 2.dp).roundToPx().toDp()
         }
         // Reserve the extra divider width; match the pixel rounding used by layout spacers.
         val boxGap = with(density) { (1.5.dp - .55.dp).roundToPx().toDp() }
