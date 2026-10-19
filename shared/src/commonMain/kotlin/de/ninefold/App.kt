@@ -135,6 +135,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var cells by remember(puzzle) { mutableStateOf(saved?.cells ?: puzzle.startingCells()) }
     val digitCounts = remember(cells) { cells.mapNotNull { it.value }.groupingBy { it }.eachCount() }
     var automaticColours by remember(puzzle) { mutableStateOf(puzzle.initialAutomaticColours(saved)) }
+    var fadedOutsideClues by remember(puzzle) { mutableStateOf(saved?.fadedOutsideClues.orEmpty()) }
     var finalized by remember(puzzle) { mutableStateOf(cells) }
     var colourSettings by remember { mutableStateOf<CellColour?>(null) }
     var selected by remember { mutableStateOf(setOf(CellPosition(0, 2))) }
@@ -178,11 +179,16 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     }
 
     fun save() {
-        repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack, automaticColours))
+        repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack, automaticColours, fadedOutsideClues))
         repository.saveElapsed(puzzle, clock.elapsedSeconds())
     }
     DisposableEffect(puzzle) {
         onDispose { clock.stop(); repository.saveElapsed(puzzle, clock.elapsedSeconds()) }
+    }
+
+    fun toggleOutsideClue(clue: PuzzleOverlay) {
+        fadedOutsideClues = if (clue in fadedOutsideClues) fadedOutsideClues - clue else fadedOutsideClues + clue
+        save()
     }
 
     fun clearManualChecks() { manualRulesCheck = false; manualSolutionCheck = false }
@@ -285,7 +291,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     }.focusable().edgeSwipeBack { back() }.background(Paper).safeDrawingPadding().pointerInput(Unit) {
         awaitEachGesture {
             // Board gestures and controls consume their presses before the final pass.
-            // An unhandled press is on the background (including outside clues).
+            // An unhandled press is on the background.
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
             if (!down.isConsumed && colourSettings == null) clearSelection()
         }
@@ -298,7 +304,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                 PortraitPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
                     board = {
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     },
                 ) {
                     Controls(effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
@@ -307,7 +313,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                 DesktopPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
                     board = {
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     },
                 ) {
                     DesktopPlayerSidebar(
@@ -515,7 +521,7 @@ private fun CompletionDialog(puzzle: Puzzle, elapsed: Long, onViewPuzzle: () -> 
 }
 
 @Composable
-internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), interactive: Boolean = true, onSelect: (CellPosition) -> Unit) {
+internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), interactive: Boolean = true, fadedOutsideClues: Set<PuzzleOverlay> = emptySet(), onToggleOutsideClue: ((PuzzleOverlay) -> Unit)? = null, onSelect: (CellPosition) -> Unit) {
     val currentSelection by rememberUpdatedState(selected)
     val currentDragSelection by rememberUpdatedState(onDragSelection)
     val currentToolSelect by rememberUpdatedState(onToolSelect)
@@ -530,6 +536,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
     }
     val measurer = rememberTextMeasurer()
     BoxWithConstraints(modifier.fillMaxWidth().aspectRatio(1f)) {
+        val boardWidth = maxWidth
         val cellSize = maxWidth / (9 + padCells * 2)
         val digitSize = (cellSize.value * .6f).sp
         val density = LocalDensity.current
@@ -551,7 +558,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     }
                 }
             }
-            PuzzleGraphics(puzzle, inset, boxGap, measurer, hiddenOverlays = revealedMarks)
+            PuzzleGraphics(puzzle, inset, boxGap, measurer, hiddenOverlays = revealedMarks, fadedOutsideClues = fadedOutsideClues)
             Box(Modifier.fillMaxSize().padding(inset).then(
                 if (!interactive || onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
                     var lastTapPosition: CellPosition? = null
@@ -679,6 +686,22 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     drawLine(color, Offset(0f, y), Offset(size.width, y), width)
                 }
             }
+            // Text clues can have zero-width artwork; include the glyphs in their tap targets.
+            if (interactive && onToggleOutsideClue != null) {
+                val extent = with(density) { (boardWidth - inset * 2).toPx() }
+                val axis = BoardAxis(extent, with(density) { boxGap.toPx() })
+                (puzzle.underlays + puzzle.overlays).filter { it.isOutsideTextClue() }.distinct().forEach { clue ->
+                    val fontSize = with(density) { (max(8f, (clue.height * axis.cellSize * .48).toFloat()) / density.density).sp }
+                    val textSize = measurer.measure(clue.text.orEmpty(), androidx.compose.ui.text.TextStyle(fontSize = fontSize)).size
+                    val width = with(density) { max(axis.cellSize * .8f, max((clue.width * axis.cellSize).toFloat(), textSize.width.toFloat())).toDp() }
+                    val height = with(density) { max(axis.cellSize * .8f, max((clue.height * axis.cellSize).toFloat(), textSize.height.toFloat())).toDp() }
+                    val left = inset + with(density) { axis.at(clue.center.column).toDp() } - width / 2
+                    val top = inset + with(density) { axis.at(clue.center.row).toDp() } - height / 2
+                    Box(Modifier.offset(left, top).size(width, height)
+                        .semantics { contentDescription = "Outside clue ${clue.text}"; this.selected = clue in fadedOutsideClues }
+                        .clickable(onClickLabel = if (clue in fadedOutsideClues) "Restore clue" else "Gray out clue") { onToggleOutsideClue(clue) })
+                }
+            }
             // Edge clues and fully revealed quadruples cover the grid with their backing shapes.
             if (revealedMarks.isNotEmpty()) PuzzleGraphics(puzzle, inset, boxGap, measurer, revealedMarks)
             Canvas(Modifier.fillMaxSize().padding(inset)) {
@@ -734,6 +757,7 @@ private fun DrawScope.drawConstraintLine(points: List<Offset>, color: Color, wid
 private fun BoxScope.PuzzleGraphics(
     puzzle: Puzzle, inset: Dp, boxGap: Dp, measurer: androidx.compose.ui.text.TextMeasurer,
     revealedMarks: List<PuzzleOverlay>? = null, hiddenOverlays: List<PuzzleOverlay> = emptyList(),
+    fadedOutsideClues: Set<PuzzleOverlay> = emptySet(),
 ) {
     Canvas(Modifier.matchParentSize()) {
         val padding = inset.toPx()
@@ -742,6 +766,7 @@ private fun BoxScope.PuzzleGraphics(
         val cell = x.cellSize
         fun at(point: GridPoint) = Offset(padding + x.at(point.column), padding + y.at(point.row))
         fun overlay(item: PuzzleOverlay) {
+            fun faded(color: Color) = if (item in fadedOutsideClues) color.copy(alpha = color.alpha * .25f) else color
             val center = at(item.center)
             val scale = if (item.isKropkiDot()) .75f else 1f
             val area = Size((item.width * cell * scale).toFloat(), (item.height * cell * scale).toFloat())
@@ -749,15 +774,15 @@ private fun BoxScope.PuzzleGraphics(
             // Zero-width XV boxes size the text; stroking them paints a line behind the glyph.
             if (area.width > 0f && area.height > 0f) {
                 item.backgroundColor?.toComposeColor()?.let { color ->
-                    if (item.rounded) drawOval(color, topLeft, area) else drawRect(color, topLeft, area)
+                    if (item.rounded) drawOval(faded(color), topLeft, area) else drawRect(faded(color), topLeft, area)
                 }
                 item.borderColor?.toComposeColor()?.let { color ->
-                    if (item.rounded) drawOval(color, topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
-                    else drawRect(color, topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
+                    if (item.rounded) drawOval(faded(color), topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
+                    else drawRect(faded(color), topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
                 }
             }
             item.text?.takeIf(String::isNotEmpty)?.let { text ->
-                val style = androidx.compose.ui.text.TextStyle(color = item.textColor?.toComposeColor() ?: Ink, fontSize = (max(8f, area.height * .48f) / density).sp, textAlign = TextAlign.Center)
+                val style = androidx.compose.ui.text.TextStyle(color = faded(item.textColor?.toComposeColor() ?: Ink), fontSize = (max(8f, area.height * .48f) / density).sp, textAlign = TextAlign.Center)
                 val measured = measurer.measure(text, style)
                 drawText(measured, topLeft = center - Offset(measured.size.width / 2f, measured.size.height / 2f))
             }

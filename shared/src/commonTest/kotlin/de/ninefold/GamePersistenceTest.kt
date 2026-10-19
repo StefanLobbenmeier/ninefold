@@ -7,6 +7,18 @@ import kotlin.test.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GamePersistenceTest {
+    @Test fun fadedOutsideCluesSurviveReopeningAndCanBeRestored() {
+        val clue = PuzzleOverlay(GridPoint(1.5, -.5), width = 0.0, text = "1 6")
+        val puzzle = SudokuFixtures.empty.copy(underlays = listOf(clue))
+        val storage = MemoryAppStorage()
+        val game = SavedGame(puzzle, puzzle.startingCells(), true, fadedOutsideClues = setOf(clue))
+        GameRepository(storage).saveGame(game)
+        val reopened = GameRepository(storage)
+        assertEquals(setOf(clue), reopened.game(puzzle)?.fadedOutsideClues)
+        reopened.saveGame(game.copy(fadedOutsideClues = emptySet()))
+        assertEquals(emptySet(), GameRepository(storage).game(puzzle)?.fadedOutsideClues)
+    }
+
     @Test fun eagerlyPreparesAllEntriesAndRetriesFailuresWithoutRefetchingReadyPuzzles() = runTest {
         var fail = true
         val requests = mutableListOf<String>()

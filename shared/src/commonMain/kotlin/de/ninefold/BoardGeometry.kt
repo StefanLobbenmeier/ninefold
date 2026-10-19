@@ -55,3 +55,7 @@ internal class BoardAxis(val extent: Float, boxGap: Float) {
         return (value - gaps * boxGap) / cellSize / 9f
     }
 }
+
+/** Outside text is actionable even when its rule is not understood by the importer. */
+internal fun PuzzleOverlay.isOutsideTextClue(): Boolean = !text.isNullOrBlank() &&
+    (center.row < 0 || center.row > 9 || center.column < 0 || center.column > 9)

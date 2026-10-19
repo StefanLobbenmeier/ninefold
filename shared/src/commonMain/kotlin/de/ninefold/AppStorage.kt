@@ -42,6 +42,7 @@ internal data class SavedGame(
     val puzzle: Puzzle, val cells: List<CellState>, val started: Boolean,
     val history: List<List<CellState>> = emptyList(), val redo: List<List<CellState>> = emptyList(),
     val automaticColours: Map<Int, AutomaticColourRule> = DefaultAutomaticColours,
+    val fadedOutsideClues: Set<PuzzleOverlay> = emptySet(),
 ) {
     val completed: Boolean get() = puzzle.isComplete(cells)
 }
