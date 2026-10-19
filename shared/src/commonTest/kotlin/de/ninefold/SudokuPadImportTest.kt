@@ -12,6 +12,40 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun importsLittleKillerDiagonalsWithoutRelyingOnRuleText() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"littlekillersum":[
+            {"cell":"R0C3","cells":["R1C4","R2C5","R3C6","R4C7","R5C8","R6C9"],"direction":"DR","value":"27"},
+            {"cell":"R10C7","direction":"UL","value":"30"},
+            {"cell":"R4C0","direction":"UR","value":"12"},
+            {"cell":"R6C10","direction":"DL","value":"15"}
+        ]"""))
+        assertEquals(listOf(27, 30, 12, 15), puzzle.outsideClues.map { it.value })
+        assertEquals(List(6) { CellPosition(it, it + 3) }, puzzle.outsideClues[0].cells)
+        assertEquals(List(6) { CellPosition(8 - it, 5 - it) }, puzzle.outsideClues[1].cells)
+        assertEquals(List(3) { CellPosition(2 - it, it) }, puzzle.outsideClues[2].cells)
+        assertEquals(List(3) { CellPosition(6 + it, 8 - it) }, puzzle.outsideClues[3].cells)
+        assertTrue(puzzle.outsideClues.all { it.type == OutsideClueType.DiagonalSum })
+        assertEquals(listOf("27", "30", "12", "15"), puzzle.overlays.map { it.text })
+        assertEquals(GridPoint(-.5, 2.5), puzzle.overlays[0].center)
+        assertEquals(4, puzzle.arrows.size)
+        assertEquals(-.15, puzzle.arrows[0].points.first().row, .0001)
+        assertEquals(3.35, puzzle.arrows[0].points.last().column, .0001)
+        assertTrue(puzzle.importOmissions.none { it.path.contains("littlekillersum") })
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+    }
+
+    @Test fun reportsUnusableLittleKillerClues() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"littlekillersum":[
+            {"cell":"R0C3","direction":"sideways","value":"12"},
+            {"cell":"R5C5","direction":"DR","value":"12"},
+            {"cell":"R0C3","direction":"DR","value":"?"}
+        ]"""))
+        assertTrue(puzzle.outsideClues.isEmpty())
+        assertTrue(puzzle.arrows.isEmpty())
+        assertTrue(puzzle.overlays.isEmpty())
+        assertEquals(3, puzzle.importOmissions.count { it.path.startsWith("$.littlekillersum[") })
+    }
+
     @Test fun textStrokeDoesNotBecomeAnOverlayBorder() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
             """"overlays":[

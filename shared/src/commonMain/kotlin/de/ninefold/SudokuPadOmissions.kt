@@ -21,15 +21,15 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
         obj.forEach { (key, value) -> if (key !in known && meaningful(value)) report("$path.$key", "Source property is not imported.") }
     }
     val metadata = "title author rules ruleset solution antiknight video videoUrl videos successMessage msgcorrect"
-    fields(root, "$", "$metadata id size cellSize cells grid metadata cages killercage lines line arrows arrow overlays underlays foglight triggereffect solution thermometer palindrome circle difference ratio xv even odd")
+    fields(root, "$", "$metadata id size cellSize cells grid metadata cages killercage lines line arrows arrow overlays underlays foglight triggereffect solution thermometer palindrome circle difference ratio xv even odd littlekillersum")
     (root["metadata"] as? JsonObject)?.let { fields(it, "$.metadata", metadata) }
-    val graphicalArrays = listOf("cages", "killercage", "lines", "line", "arrows", "arrow", "overlays", "underlays", "foglight", "triggereffect", "thermometer", "palindrome", "circle", "difference", "ratio", "xv", "even", "odd")
+    val graphicalArrays = listOf("cages", "killercage", "lines", "line", "arrows", "arrow", "overlays", "underlays", "foglight", "triggereffect", "thermometer", "palindrome", "circle", "difference", "ratio", "xv", "even", "odd", "littlekillersum")
     graphicalArrays.forEach { key ->
         root[key]?.takeIf { meaningful(it) && it !is JsonArray }?.let {
             report("$.$key", "Expected an array; source content is not parsed.")
         }
     }
-    if (!fpuzzles) for (key in listOf("thermometer", "palindrome", "circle", "difference", "ratio", "xv", "even", "odd")) {
+    if (!fpuzzles) for (key in listOf("thermometer", "palindrome", "circle", "difference", "ratio", "xv", "even", "odd", "littlekillersum")) {
         if (meaningful(root[key] ?: JsonNull)) report("$.$key", "This source feature is only parsed in f-puzzles format.")
     }
     val sourceMetadata = root["metadata"] as? JsonObject
@@ -109,6 +109,13 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
             fields(effect, "$path.effect", "type cells")
             if (trigger["cell"] == null || effect["cells"] == null) report(path, "Fog link is missing its trigger or reveal cells.", "partial")
         }
+    }
+    objects("littlekillersum", "cell cells direction value") { obj, path ->
+        val position = (obj["cell"] as? JsonPrimitive)?.contentOrNull?.let {
+            Regex("[rR](\\d+)[cC](\\d+)").matchEntire(it)
+        }?.let { GridPoint(it.groupValues[1].toInt() - .5, it.groupValues[2].toInt() - .5) }
+        if (fpuzzles && (position == null || puzzle.outsideClues.none { it.position == position }))
+            report(path, "Little killer clue has no usable outside cell, direction, or total and is dropped.")
     }
     for (key in listOf("circle", "difference", "ratio", "xv", "even", "odd")) objects(key, "cells cell value width height baseC outlineC fontC")
     if (puzzle.lines.any { it.rule == LineRule.Unspecified } || listOf("difference", "ratio", "xv", "even", "odd").any { meaningful(root[it] ?: JsonNull) })
