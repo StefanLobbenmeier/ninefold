@@ -80,6 +80,11 @@ There are no separate platform OCR implementations to add.
 
 ### SudokuPad URL import
 
+Square grids from 1×1 through 9×9 are supported, including 4×4 and 6×6. Imported regions
+are preserved for drawing and checking; puzzles without region data use regular boxes
+(for example, 2×3 boxes for a 6×6 grid). The board, number pad, selection, fog, saved games,
+and share links use the imported size.
+
 Import → Puzzle link accepts links such as `https://sudokupad.app/hDNMJqPmTh`. The app fetches the
 corresponding package through SudokuPad's own CORS-enabled
 `https://sudokupad.svencodes.com/ctclegacy/{encoded-id}` endpoint and decodes both SudokuPad's

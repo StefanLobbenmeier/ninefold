@@ -143,15 +143,16 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     val metadata = JsonObject(legacyMetadata + (root.obj("metadata") ?: root))
     val sourceCells = (root.array(if (fpuzzles) "grid" else "cells") ?: root.array("cells"))
         ?: throw IllegalArgumentException("The puzzle has no grid.")
-    require(sourceCells.size == 9 && sourceCells.all { it.jsonArray.size == 9 }) {
-        "Only 9×9 SudokuPad puzzles are currently supported."
+    val size = sourceCells.size
+    require(size in 1..9 && sourceCells.all { it is JsonArray && it.size == size }) {
+        "Only square SudokuPad grids from 1×1 to 9×9 are supported."
     }
     val initialValues = mutableMapOf<Int, Int>()
     val givens = sourceCells.flatMap { row -> row.jsonArray.map { cell ->
         cell.jsonObject.int("value")?.takeIf { it in 1..9 }?.digitToChar() ?: '.'
     } }.joinToString("")
     val fixedGivens = givens.mapIndexed { index, digit ->
-        val cell = sourceCells[index / 9].jsonArray[index % 9].jsonObject
+        val cell = sourceCells[index / size].jsonArray[index % size].jsonObject
         if (fpuzzles && cell.boolean("given") == false && digit in '1'..'9') {
             initialValues[index] = digit.digitToInt()
             '.'
@@ -176,7 +177,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         val effect = entry.obj("effect") ?: return@mapNotNull null
         if (effect.string("type") != "foglight") return@mapNotNull null
         val trigger = entry.obj("trigger") ?: return@mapNotNull null
-        FogLink(parseFogCells(trigger["cell"]), parseFogCells(effect["cells"]))
+        FogLink(parseFogCells(trigger["cell"], size), parseFogCells(effect["cells"], size))
     }
     // SCL cages are graphical unless uniqueness is explicit or stated in the rules.
     // f-puzzles killercage entries carry killer semantics by definition.
@@ -192,7 +193,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         val value = cage.int("value")
         if (cage.string("value")?.startsWith("foglight", ignoreCase = true) == true) {
             fog += cells
-            fog += parseFogCells(JsonPrimitive(cage.string("value")!!.substringAfter(':', "")))
+            fog += parseFogCells(JsonPrimitive(cage.string("value")!!.substringAfter(':', "")), size)
             null
         } else if (cells.isNotEmpty() && (value != null || cage.string("value").isNullOrBlank())) {
             KillerCage(value, cells, unique = cage.boolean("unique") ?: defaultUnique,
@@ -200,11 +201,11 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         } else null
     }
     val lines = parseLines(root, fpuzzles)
-    val littleKillers = if (fpuzzles) parseFpuzzlesLittleKillers(root) else emptyList()
+    val littleKillers = if (fpuzzles) parseFpuzzlesLittleKillers(root, size) else emptyList()
     val rawOverlays = littleKillers.map { PuzzleOverlay(it.position, .6, .6, text = it.value.toString()) } + root.array("overlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
-    val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText)
+    val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText, size)
     val underlays = cellShading + root.array("underlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
-    val arrows = parseArrows(root, fpuzzles, overlays) + littleKillers.map { clue ->
+    val arrows = parseArrows(root, fpuzzles, overlays, size) + littleKillers.map { clue ->
         val first = clue.cells.first()
         val dr = (first.row + .5 - clue.position.row).compareTo(0.0)
         val dc = (first.column + .5 - clue.position.column).compareTo(0.0)
@@ -213,7 +214,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
             GridPoint(clue.position.row + dr * .85, clue.position.column + dc * .85),
         ))
     }
-    val outsideClues = littleKillers + parseOutsideClues(rulesText, overlays, arrows)
+    val outsideClues = littleKillers + parseOutsideClues(rulesText, overlays, arrows, size)
         .filter { clue -> littleKillers.none { it.position == clue.position } }
     val hasFog = fogLinks != null || root.containsKey("foglight") || rawCages.any {
         it.jsonObject.string("value")?.startsWith("foglight", ignoreCase = true) == true
@@ -222,8 +223,10 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         title = metadata.string("title") ?: "Imported SudokuPad puzzle",
         author = metadata.string("author") ?: "Unknown setter",
         givens = fixedGivens,
+        size = size,
+        regions = parseRegions(root, sourceCells, fpuzzles, size),
         initialValues = initialValues,
-        solution = solution?.filter(Char::isDigit)?.takeIf { it.length == 81 },
+        solution = solution?.filter(Char::isDigit)?.takeIf { it.length == size * size },
         cages = cages,
         rules = rules,
         antiKnight = metadata.boolean("antiknight") ?: root.boolean("antiknight") ?: false,
@@ -251,7 +254,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
 }
 
 /** Some exporters split a quadruple into a circle and one tiny overlay per digit. */
-private fun importQuadruples(overlays: List<PuzzleOverlay>, rules: String): Pair<List<PuzzleOverlay>, List<QuadrupleClue>> {
+private fun importQuadruples(overlays: List<PuzzleOverlay>, rules: String, size: Int): Pair<List<PuzzleOverlay>, List<QuadrupleClue>> {
     if (!rules.contains("quadruple", ignoreCase = true)) return overlays to emptyList()
     val labels = mutableSetOf<PuzzleOverlay>()
     val replacements = mutableMapOf<PuzzleOverlay, PuzzleOverlay>()
@@ -259,7 +262,7 @@ private fun importQuadruples(overlays: List<PuzzleOverlay>, rules: String): Pair
         val row = circle.center.row.toInt()
         val column = circle.center.column.toInt()
         if (!circle.rounded || circle.width !in .3..1.0 || circle.height !in .3..1.0 ||
-            row !in 1..8 || column !in 1..8 ||
+            row !in 1 until size || column !in 1 until size ||
             abs(circle.center.row - row) > .001 || abs(circle.center.column - column) > .001) return@mapNotNull null
         val parts = overlays.filter { it != circle && it.width <= .2 && it.height <= .2 &&
             abs(it.center.row - circle.center.row) < circle.height / 2 &&
@@ -293,7 +296,7 @@ private fun importedSuccessMessage(root: JsonObject, metadata: JsonObject): Stri
 }
 
 /** The outside cell and direction define the diagonal, independently of rule wording. */
-private fun parseFpuzzlesLittleKillers(root: JsonObject): List<OutsideClue> =
+private fun parseFpuzzlesLittleKillers(root: JsonObject, size: Int): List<OutsideClue> =
     root.array("littlekillersum").orEmpty().mapNotNull { element ->
         val clue = element as? JsonObject ?: return@mapNotNull null
         val position = clue["cell"]?.let(::parsePoint) ?: return@mapNotNull null
@@ -303,18 +306,18 @@ private fun parseFpuzzlesLittleKillers(root: JsonObject): List<OutsideClue> =
             "UR" -> -1 to 1; "UL" -> -1 to -1
             else -> return@mapNotNull null
         }
-        if (position.row in 0.0..9.0 && position.column in 0.0..9.0) return@mapNotNull null
+        if (position.row in 0.0..size.toDouble() && position.column in 0.0..size.toDouble()) return@mapNotNull null
         val cells = diagonalCells(position, PuzzleArrow(listOf(position,
-            GridPoint(position.row + direction.first, position.column + direction.second))))
+            GridPoint(position.row + direction.first, position.column + direction.second))), size)
         if (cells.isEmpty()) return@mapNotNull null
         OutsideClue(value, position, cells, OutsideClueType.DiagonalSum)
     }
 
-private fun parseOutsideClues(rules: String, overlays: List<PuzzleOverlay>, arrows: List<PuzzleArrow>): List<OutsideClue> =
+private fun parseOutsideClues(rules: String, overlays: List<PuzzleOverlay>, arrows: List<PuzzleArrow>, size: Int): List<OutsideClue> =
     overlays.mapNotNull { overlay ->
         val value = overlay.text?.toIntOrNull() ?: return@mapNotNull null
         val point = overlay.center
-        if (point.row in 0.0..9.0 && point.column in 0.0..9.0) return@mapNotNull null
+        if (point.row in 0.0..size.toDouble() && point.column in 0.0..size.toDouble()) return@mapNotNull null
         val nearbyArrow = arrows.firstOrNull { arrow -> arrow.points.any {
             abs(it.row - point.row) < .75 && abs(it.column - point.column) < .75
         } }
@@ -324,29 +327,30 @@ private fun parseOutsideClues(rules: String, overlays: List<PuzzleOverlay>, arro
             else -> OutsideClueType.Unspecified
         }
         val cells = when (type) {
-            OutsideClueType.DiagonalSum -> diagonalCells(point, requireNotNull(nearbyArrow))
-            OutsideClueType.Skyscraper -> edgeCells(point)
+            OutsideClueType.DiagonalSum -> diagonalCells(point, requireNotNull(nearbyArrow), size)
+            OutsideClueType.Skyscraper -> edgeCells(point, size)
             OutsideClueType.Unspecified -> emptyList()
         }
         OutsideClue(value, point, cells, type)
     }
 
-private fun edgeCells(point: GridPoint): List<CellPosition> = when {
-    point.column < 0 -> List(9) { CellPosition(point.row.toInt().coerceIn(0, 8), it) }
-    point.column >= 9 -> List(9) { CellPosition(point.row.toInt().coerceIn(0, 8), 8 - it) }
-    point.row < 0 -> List(9) { CellPosition(it, point.column.toInt().coerceIn(0, 8)) }
-    point.row >= 9 -> List(9) { CellPosition(8 - it, point.column.toInt().coerceIn(0, 8)) }
+private fun edgeCells(point: GridPoint, size: Int): List<CellPosition> = when {
+    point.column < 0 -> List(size) { CellPosition(point.row.toInt().coerceIn(0, size - 1), it) }
+    point.column >= size -> List(size) { CellPosition(point.row.toInt().coerceIn(0, size - 1), size - 1 - it) }
+    point.row < 0 -> List(size) { CellPosition(it, point.column.toInt().coerceIn(0, size - 1)) }
+    point.row >= size -> List(size) { CellPosition(size - 1 - it, point.column.toInt().coerceIn(0, size - 1)) }
     else -> emptyList()
 }
 
-private fun diagonalCells(clue: GridPoint, arrow: PuzzleArrow): List<CellPosition> {
+private fun diagonalCells(clue: GridPoint, arrow: PuzzleArrow, size: Int): List<CellPosition> {
+    val gridSize = size
     val first = arrow.points.first(); val last = arrow.points.last()
     val rowStep = (last.row - first.row).compareTo(0.0)
     val columnStep = (last.column - first.column).compareTo(0.0)
-    var row = when { clue.row < 0 -> 0; clue.row >= 9 -> 8; else -> clue.row.toInt() + rowStep }
-    var column = when { clue.column < 0 -> 0; clue.column >= 9 -> 8; else -> clue.column.toInt() + columnStep }
+    var row = when { clue.row < 0 -> 0; clue.row >= size -> size - 1; else -> clue.row.toInt() + rowStep }
+    var column = when { clue.column < 0 -> 0; clue.column >= size -> size - 1; else -> clue.column.toInt() + columnStep }
     return buildList {
-        while (row in 0..8 && column in 0..8) { add(CellPosition(row, column)); row += rowStep; column += columnStep }
+        while (row in 0 until gridSize && column in 0 until gridSize) { add(CellPosition(row, column)); row += rowStep; column += columnStep }
     }
 }
 
@@ -422,7 +426,7 @@ private fun parseFpuzzlesCellShading(root: JsonObject): List<PuzzleOverlay> = bu
     } }
 }
 
-private fun parseArrows(root: JsonObject, fpuzzles: Boolean, overlays: List<PuzzleOverlay>): List<PuzzleArrow> {
+private fun parseArrows(root: JsonObject, fpuzzles: Boolean, overlays: List<PuzzleOverlay>, size: Int): List<PuzzleArrow> {
     val source = root.array("arrows") ?: root.array("arrow") ?: JsonArray(emptyList())
     return source.flatMap { element ->
         val arrow = element.jsonObject
@@ -431,7 +435,7 @@ private fun parseArrows(root: JsonObject, fpuzzles: Boolean, overlays: List<Puzz
             arrow.array("lines").orEmpty().mapNotNull { line ->
                 val points = line.jsonArray.mapNotNull(::parsePoint)
                 points.takeIf { it.size > 1 }?.let {
-                    PuzzleArrow(it, circle = circleCells.firstOrNull(), pathCells = points.mapNotNull(GridPoint::cellPositionOrNull).distinct())
+                    PuzzleArrow(it, circle = circleCells.firstOrNull(), pathCells = points.mapNotNull { it.cellPositionOrNull(size) }.distinct())
                 }
             }
         } else {
@@ -443,8 +447,8 @@ private fun parseArrows(root: JsonObject, fpuzzles: Boolean, overlays: List<Puzz
                     ?.takeIf { abs(it.center.row - start.row) <= .7 && abs(it.center.column - start.column) <= .7 }
                 listOf(PuzzleArrow(
                     points, arrow.string("color") ?: "#777777", arrow.double("thickness") ?: 3.0,
-                    arrow.double("headLength") ?: .3, bulb?.center?.cellPositionOrNull(),
-                    points.mapNotNull(GridPoint::cellPositionOrNull).distinct(),
+                    arrow.double("headLength") ?: .3, bulb?.center?.cellPositionOrNull(size),
+                    points.mapNotNull { it.cellPositionOrNull(size) }.distinct(),
                 ))
             }
         }
@@ -470,16 +474,17 @@ private fun parsePoint(element: JsonElement): GridPoint? {
 }
 
 /** SudokuPad cell lists concatenate rNcN coordinates and rectangular ranges. */
-private fun parseFogCells(element: JsonElement?): Set<CellPosition> {
-    if (element is JsonArray) return element.mapNotNull(::parseCell).filter { it.row in 0..8 && it.column in 0..8 }.toSet()
+private fun parseFogCells(element: JsonElement?, size: Int = 9): Set<CellPosition> {
+    val gridSize = size
+    if (element is JsonArray) return element.mapNotNull(::parseCell).filter { it.row in 0 until gridSize && it.column in 0 until gridSize }.toSet()
     val text = element?.asString()?.replace(Regex("[, ]+"), "") ?: return emptySet()
     return buildSet {
         Regex("r(\\d+)c(\\d+)(?:-r(\\d+)c(\\d+))?", RegexOption.IGNORE_CASE).findAll(text).forEach { match ->
             val (r1, c1, r2, c2) = match.destructured
-            val rows = r1.toInt().coerceAtLeast(1)..(r2.toIntOrNull() ?: r1.toInt()).coerceAtMost(9)
-            val columns = c1.toInt().coerceAtLeast(1)..(c2.toIntOrNull() ?: c1.toInt()).coerceAtMost(9)
+            val rows = r1.toInt().coerceAtLeast(1)..(r2.toIntOrNull() ?: r1.toInt()).coerceAtMost(gridSize)
+            val columns = c1.toInt().coerceAtLeast(1)..(c2.toIntOrNull() ?: c1.toInt()).coerceAtMost(gridSize)
             for (row in rows) for (column in columns) {
-                if (row in 1..9 && column in 1..9) add(CellPosition(row - 1, column - 1))
+                if (row in 1..gridSize && column in 1..gridSize) add(CellPosition(row - 1, column - 1))
             }
         }
     }
@@ -571,3 +576,19 @@ private fun lzDecompress(length: Int, resetValue: Int, nextValue: (Int) -> Int):
 /** Restrict authored shading to unambiguous CSS hex colors; other encodings remain reported. */
 internal fun isImportedCellColor(value: String): Boolean =
     Regex("#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})").matches(value)
+
+/** Preserve exported regions, including rectangular and irregular boxes. */
+private fun parseRegions(root: JsonObject, cells: JsonArray, fpuzzles: Boolean, size: Int): List<Set<CellPosition>>? {
+    val explicit = root.array("regions")?.map { region -> region.jsonArray.mapNotNull(::parseCell).toSet() }
+    val regions = explicit ?: if (fpuzzles) {
+        val entries = cells.flatMapIndexed { row, values -> values.jsonArray.mapIndexedNotNull { column, cell ->
+            cell.jsonObject.int("region")?.let { it to CellPosition(row, column) }
+        } }
+        if (entries.isEmpty()) return null
+        entries.groupBy({ it.first }, { it.second }).values.map { it.toSet() }
+    } else return null
+    require(regions.all { region -> region.all { it.row in 0 until size && it.column in 0 until size } }) {
+        "The puzzle has region cells outside its grid."
+    }
+    return regions
+}

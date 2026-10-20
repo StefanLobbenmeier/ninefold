@@ -13,11 +13,12 @@ internal object SudokuFixtures {
         """scl{"cells":${cellGrid(givens)}${if (properties.isBlank()) "" else ",$properties"}}"""
 
     fun fpuzzlesPayload(givens: String = empty.givens, properties: String = ""): String =
-        """fpuz{"size":9,"grid":${cellGrid(givens)}${if (properties.isBlank()) "" else ",$properties"}}"""
+        """fpuz{"size":${kotlin.math.sqrt(givens.length.toDouble()).toInt()},"grid":${cellGrid(givens)}${if (properties.isBlank()) "" else ",$properties"}}"""
 
     private fun cellGrid(givens: String): String {
-        require(givens.length == 81)
-        return givens.chunked(9).joinToString(prefix = "[", postfix = "]") { row ->
+        val size = kotlin.math.sqrt(givens.length.toDouble()).toInt()
+        require(size in 1..9 && size * size == givens.length)
+        return givens.chunked(size).joinToString(prefix = "[", postfix = "]") { row ->
             row.map { if (it in '1'..'9') """{"value":$it}""" else "{}" }
                 .joinToString(prefix = "[", postfix = "]")
         }

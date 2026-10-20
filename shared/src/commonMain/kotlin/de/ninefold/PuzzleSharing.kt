@@ -28,11 +28,12 @@ fun puzzleFromShareLink(link: String): Puzzle? {
     } catch (error: Exception) {
         throw IllegalArgumentException("This puzzle link is damaged or incomplete.", error)
     }
-    require(puzzle.givens.length == 81 && puzzle.givens.all { it == '.' || it in '0'..'9' }) { "This puzzle link has an invalid grid." }
-    require(puzzle.solution == null || (puzzle.solution.length == 81 && puzzle.solution.all { it in '1'..'9' })) { "This puzzle link has an invalid solution." }
-    fun CellPosition.valid() = row in 0..8 && column in 0..8
+    require(puzzle.givens.length == puzzle.cellCount && puzzle.givens.all { it == '.' || it in '0'..'9' }) { "This puzzle link has an invalid grid." }
+    require(puzzle.solution == null || (puzzle.solution.length == puzzle.cellCount && puzzle.solution.all { it in '1'..'9' })) { "This puzzle link has an invalid solution." }
+    fun CellPosition.valid() = row in 0 until puzzle.size && column in 0 until puzzle.size
     fun GridPoint.valid() = row.isFinite() && column.isFinite()
-    require(puzzle.cages.all { cage -> cage.cells.all { it.valid() } } &&
+    require(puzzle.regions.orEmpty().all { region -> region.all { it.valid() } } &&
+        puzzle.cages.all { cage -> cage.cells.all { it.valid() } } &&
         puzzle.fogLights.orEmpty().all { it.valid() } &&
         puzzle.fogLinks.orEmpty().all { link -> (link.triggers + link.cells).all { it.valid() } } &&
         puzzle.lines.all { line -> line.points.all { it.valid() } && line.thickness.isFinite() } &&

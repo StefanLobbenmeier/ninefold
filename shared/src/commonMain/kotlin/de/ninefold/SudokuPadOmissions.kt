@@ -21,7 +21,7 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
         obj.forEach { (key, value) -> if (key !in known && meaningful(value)) report("$path.$key", "Source property is not imported.") }
     }
     val metadata = "title author rules ruleset solution antiknight video videoUrl videos successMessage msgcorrect"
-    fields(root, "$", "$metadata id size cellSize cells grid metadata cages killercage lines line arrows arrow overlays underlays foglight triggereffect solution thermometer palindrome circle difference ratio xv even odd littlekillersum")
+    fields(root, "$", "$metadata id size regions cellSize cells grid metadata cages killercage lines line arrows arrow overlays underlays foglight triggereffect solution thermometer palindrome circle difference ratio xv even odd littlekillersum")
     (root["metadata"] as? JsonObject)?.let { fields(it, "$.metadata", metadata) }
     val graphicalArrays = listOf("cages", "killercage", "lines", "line", "arrows", "arrow", "overlays", "underlays", "foglight", "triggereffect", "thermometer", "palindrome", "circle", "difference", "ratio", "xv", "even", "odd", "littlekillersum")
     graphicalArrays.forEach { key ->
@@ -35,7 +35,7 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
     val sourceMetadata = root["metadata"] as? JsonObject
     val sourceSolution = sourceMetadata?.get("solution") ?: root["solution"]
     if (meaningful(sourceSolution ?: JsonNull) && puzzle.solution == null)
-        report("$.solution", "Solution is discarded because it does not produce 81 digits.")
+        report("$.solution", "Solution is discarded because it does not produce ${puzzle.cellCount} digits.")
     for (key in listOf("videos")) {
         val videos = ((root["metadata"] as? JsonObject)?.get(key) ?: root[key]) as? JsonArray
         (videos?.firstOrNull() as? JsonObject)?.let { fields(it, "$.videos[0]", "url") }
@@ -61,7 +61,7 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
     for (key in listOf("cells", "grid")) (root[key] as? JsonArray)?.forEachIndexed { r, row ->
         (row as? JsonArray)?.forEachIndexed { c, cell -> (cell as? JsonObject)?.let {
             val path = "$.${key}[$r][$c]"
-            fields(it, path, "value given color")
+            fields(it, path, if (fpuzzles) "value given color region" else "value given color")
             if (meaningful(it["given"] ?: JsonNull) && (it["given"] as? JsonPrimitive)?.booleanOrNull == null)
                 report("$path.given", "Unrecognized fixed-clue flag; only boolean flags are supported.")
             if (meaningful(it["color"] ?: JsonNull) &&

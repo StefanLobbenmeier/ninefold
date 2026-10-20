@@ -20,8 +20,8 @@ import kotlin.test.assertNotEquals
 class BoardSelectionInteractionTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun openPlayer(compact: Boolean = false) {
-        val puzzle = SudokuFixtures.empty.copy(title = "Selection test")
+    private fun openPlayer(compact: Boolean = false, size: Int = 9) {
+        val puzzle = SudokuFixtures.empty.copy(title = "Selection test", size = size, givens = ".".repeat(size * size))
         val repository = GameRepository(MemoryAppStorage())
         repository.saveGame(SavedGame(puzzle, puzzle.startingCells(), started = true))
         compose.setContent {
@@ -31,6 +31,18 @@ class BoardSelectionInteractionTest {
                 }
             }
         }
+    }
+
+    @Test fun smallGridSupportsLastCellInputDraggingAndKeyboardWrap() {
+        openPlayer(size = 6)
+        assertEquals(36, compose.onAllNodes(hasContentDescription("Row ", substring = true)).fetchSemanticsNodes().size)
+        clickCell(6, 6)
+        compose.onRoot().performKeyInput { pressKey(Key.Six) }
+        cell(6, 6).assertContentDescriptionContains("column 6, 6", substring = true)
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionRight) }
+        assertSelection(6 to 1)
+        drag(5, 1, 6)
+        assertSelection(5 to 1, 5 to 2, 5 to 3, 5 to 4, 5 to 5, 5 to 6)
     }
 
     @Test fun pauseOpensRulesAndResumeRestoresKeyboardInput() {

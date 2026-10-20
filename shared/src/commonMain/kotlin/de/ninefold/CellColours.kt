@@ -60,9 +60,9 @@ internal fun CellState.displayColours(rules: Map<Int, AutomaticColourRule>): Set
 
 /** Retain the last finalized content while selected cells are being edited. */
 internal fun finalizedCells(cells: List<CellState>, previous: List<CellState>, editing: Set<CellPosition>): List<CellState> =
-    cells.mapIndexed { index, cell -> if (CellPosition(index / 9, index % 9) in editing) previous[index] else cell }
+    cells.mapIndexed { index, cell -> if (CellPosition(index / gridSize(cells), index % gridSize(cells)) in editing) previous[index] else cell }
 
-internal fun PuzzleCheckResult.excluding(editing: Set<CellPosition>): PuzzleCheckResult {
-    val indices = editing.map { it.index }.toSet()
+internal fun PuzzleCheckResult.excluding(editing: Set<CellPosition>, size: Int = 9): PuzzleCheckResult {
+    val indices = editing.map { it.index(size) }.toSet()
     return copy(cells = cells - indices, pencilMarks = pencilMarks.filterKeys { it !in indices })
 }
