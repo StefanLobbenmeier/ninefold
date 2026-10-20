@@ -37,7 +37,7 @@ internal fun toolSensitiveSelection(
     position: CellPosition,
     mode: InputMode,
 ): Set<CellPosition> {
-    val source = cells[position.index]
+    val source = cells[position.index(gridSize(cells))]
     val selectors: List<(CellState) -> Boolean> = when (mode) {
         InputMode.Digit -> listOf(
             { it.value != null && it.value == source.value },
@@ -66,24 +66,25 @@ internal fun toolSensitiveSelection(
     }
     val selector = selectors.firstOrNull { it(source) } ?: return emptySet()
     return cells.indices.filterTo(linkedSetOf()) { selector(cells[it]) }.mapTo(linkedSetOf()) {
-        CellPosition(it / 9, it % 9)
+        CellPosition(it / gridSize(cells), it % gridSize(cells))
     }
 }
 
 /** Board coordinates are normalized to 0..1; outside clues never select a cell. */
-internal fun boardCellAt(x: Float, y: Float): CellPosition? {
+internal fun boardCellAt(x: Float, y: Float, size: Int = 9): CellPosition? {
     if (!x.isFinite() || !y.isFinite() || x < 0f || y < 0f || x >= 1f || y >= 1f) return null
-    return CellPosition((y * 9).toInt(), (x * 9).toInt())
+    return CellPosition((y * size).toInt(), (x * size).toInt())
 }
 
 /** Drag targets span 75% of each cell, or the full cell for additive selection. */
-internal fun boardCellsAlongSegment(startX: Float, startY: Float, endX: Float, endY: Float, additive: Boolean = false): Set<CellPosition> {
+internal fun boardCellsAlongSegment(startX: Float, startY: Float, endX: Float, endY: Float, additive: Boolean = false, size: Int = 9): Set<CellPosition> {
     if (!listOf(startX, startY, endX, endY).all { it.isFinite() }) return emptySet()
+    val gridSize = size
     val inset = if (additive) 0f else .125f
     val dx = endX - startX
     val dy = endY - startY
     return buildSet {
-        for (row in 0..8) for (column in 0..8) {
+        for (row in 0 until gridSize) for (column in 0 until gridSize) {
             var enter = 0f
             var exit = 1f
             fun intersectsAxis(start: Float, delta: Float, min: Float, max: Float): Boolean {
@@ -95,8 +96,8 @@ internal fun boardCellsAlongSegment(startX: Float, startY: Float, endX: Float, e
                 return enter <= exit
             }
             // Intersect the whole segment so fast drags still include every crossed target.
-            if (intersectsAxis(startX, dx, (column + inset) / 9f, (column + 1f - inset) / 9f) &&
-                intersectsAxis(startY, dy, (row + inset) / 9f, (row + 1f - inset) / 9f)) {
+            if (intersectsAxis(startX, dx, (column + inset) / gridSize, (column + 1f - inset) / gridSize) &&
+                intersectsAxis(startY, dy, (row + inset) / gridSize, (row + 1f - inset) / gridSize)) {
                 add(CellPosition(row, column))
             }
         }

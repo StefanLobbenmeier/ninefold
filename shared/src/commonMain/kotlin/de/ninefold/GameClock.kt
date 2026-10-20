@@ -42,6 +42,6 @@ internal fun Puzzle.isComplete(cells: List<CellState>): Boolean {
 
 /** A completion attempt is checked independently of the player's feedback preferences. */
 internal fun Puzzle.completionCheck(cells: List<CellState>): PuzzleCheckResult? {
-    if (cells.size != 81 || cells.any { it.value !in 1..9 }) return null
+    if (cells.size != cellCount || cells.any { it.value !in 1..size }) return null
     return checkSudokuRules(this, cells, includeSpecialRules = true) + checkAgainstSolution(this, cells)
 }

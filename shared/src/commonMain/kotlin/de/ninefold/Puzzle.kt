@@ -7,7 +7,11 @@ internal fun Int.symbolText(): String = if (this in 10..35) ('A' + (this - 10)).
 private fun Int.isDigitSymbol(): Boolean = this in 1..9
 
 @Serializable
-data class CellPosition(val row: Int, val column: Int) { val index: Int get() = row * 9 + column }
+data class CellPosition(val row: Int, val column: Int) {
+    /** Classic-grid convenience for image recognition and existing callers. */
+    val index: Int get() = index(9)
+    fun index(size: Int): Int = row * size + column
+}
 @Serializable
 data class CellState(val value: Int? = null, val given: Boolean = false, val cornerNotes: Set<Int> = emptySet(), val centreNotes: Set<Int> = emptySet(), val colours: Set<Int> = emptySet())
 /** A null total preserves an unlabelled cage; its sum may be specified only in the rules. */
@@ -81,44 +85,57 @@ data class Puzzle(
     val antiKnight: Boolean = false, val successMessage: String? = null,
     /** Editable digits supplied by an importer, separate from fixed clues. */
     val initialValues: Map<Int, Int> = emptyMap(),
+    val size: Int = 9,
+    /** Null uses regular boxes; an empty list explicitly disables region constraints. */
+    val regions: List<Set<CellPosition>>? = null,
     val importOmissions: List<ImportOmission> = emptyList(),
 ) {
+    init { require(size in 1..9) { "Grid size must be between 1 and 9." } }
+    val cellCount: Int get() = size * size
+    val boxHeight: Int get() = (1..kotlin.math.sqrt(size.toDouble()).toInt()).last { size % it == 0 }
+    val boxWidth: Int get() = size / boxHeight
+    fun regionCells(): List<Set<CellPosition>> = regions ?: (0 until size step boxHeight).flatMap { row ->
+        (0 until size step boxWidth).map { column ->
+            (row until row + boxHeight).flatMap { r -> (column until column + boxWidth).map { c -> CellPosition(r, c) } }.toSet()
+        }
+    }
+    fun regionIndex(position: CellPosition): Int = regionCells().indexOfFirst { position in it }
     fun startingCells(): List<CellState> = givens.mapIndexed { index, char ->
         val value = char.digitToIntOrNull()?.takeIf { it in 1..9 }
         CellState(value = value ?: initialValues[index]?.takeIf { it in 1..9 }, given = value != null)
-    }.let { it + List((81 - it.size).coerceAtLeast(0)) { CellState() } }.take(81)
+    }.let { it + List((cellCount - it.size).coerceAtLeast(0)) { CellState() } }.take(cellCount)
 }
 
 fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules: Boolean = true): PuzzleCheckResult {
+    val size = puzzle.size
     val conflicts = mutableSetOf<Int>()
     val pencilMarks = mutableMapOf<Int, MutableSet<Int>>()
     fun markDuplicates(indices: List<Int>) {
         indices.mapNotNull { index -> cells[index].value?.let { it to index } }
             .groupBy({ it.first }, { it.second }).values.filter { it.size > 1 }.forEach(conflicts::addAll)
     }
-    repeat(9) { unit -> markDuplicates(List(9) { unit * 9 + it }); markDuplicates(List(9) { it * 9 + unit }) }
-    repeat(3) { br -> repeat(3) { bc -> markDuplicates(List(9) { (br * 3 + it / 3) * 9 + bc * 3 + it % 3 }) } }
+    repeat(size) { unit -> markDuplicates(List(size) { unit * size + it }); markDuplicates(List(size) { it * size + unit }) }
+    val regions = puzzle.regionCells()
+    regions.forEach { region -> markDuplicates(region.map { it.index(size) }) }
 
     cells.forEachIndexed { index, cell ->
-        val position = CellPosition(index / 9, index % 9)
+        val position = CellPosition(index / size, index % size)
         val fixedPeerDigits = buildSet {
-            repeat(9) { offset ->
-                if (offset != position.column) cells[position.row * 9 + offset].value?.let(::add)
-                if (offset != position.row) cells[offset * 9 + position.column].value?.let(::add)
+            repeat(size) { offset ->
+                if (offset != position.column) cells[position.row * size + offset].value?.let(::add)
+                if (offset != position.row) cells[offset * size + position.column].value?.let(::add)
             }
-            val boxRow = position.row / 3 * 3
-            val boxColumn = position.column / 3 * 3
-            repeat(3) { row -> repeat(3) { column ->
-                val peer = (boxRow + row) * 9 + boxColumn + column
+            regions.filter { position in it }.flatten().forEach { peerPosition ->
+                val peer = peerPosition.index(size)
                 if (peer != index) cells[peer].value?.let(::add)
-            } }
+            }
             if (includeSpecialRules && puzzle.antiKnight) {
                 for (rowOffset in -2..2) for (columnOffset in -2..2) {
                     if (kotlin.math.abs(rowOffset) * kotlin.math.abs(columnOffset) != 2) continue
                     val row = position.row + rowOffset
                     val column = position.column + columnOffset
-                    if (row !in 0..8 || column !in 0..8) continue
-                    val peer = row * 9 + column
+                    if (row !in 0 until size || column !in 0 until size) continue
+                    val peer = row * size + column
                     cells[peer].value?.let { value ->
                         add(value)
                         if (cell.value == value) {
@@ -134,7 +151,7 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
     }
 
     if (includeSpecialRules) puzzle.cages.forEach { cage ->
-        val indices = cage.cells.map(CellPosition::index)
+        val indices = cage.cells.map { it.index(size) }
         if (cage.unique) markDuplicates(indices)
         val values = indices.mapNotNull { cells[it].value?.takeIf(Int::isDigitSymbol) }
         val total = cage.total ?: cage.ruleTotal
@@ -162,11 +179,12 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
 }
 
 private fun checkNumericSpecialRules(puzzle: Puzzle, cells: List<CellState>): PuzzleCheckResult {
+    val size = puzzle.size
     val conflicts = mutableSetOf<Int>()
     val pencilMarks = mutableMapOf<Int, MutableSet<Int>>()
     val includeSpecialRules = true
     if (includeSpecialRules) puzzle.quadruples.forEach { clue ->
-        val indices = clue.cells.map(CellPosition::index)
+        val indices = clue.cells.map { it.index(size) }
         fun possible(candidateIndex: Int? = null, candidate: Int? = null): Boolean {
             val values = indices.mapNotNull { if (it == candidateIndex) candidate else cells[it].value }
             val missing = clue.digits.groupingBy { it }.eachCount().entries.sumOf { (digit, count) ->
@@ -185,15 +203,15 @@ private fun checkNumericSpecialRules(puzzle: Puzzle, cells: List<CellState>): Pu
         val circle = arrow.circle ?: return@forEach
         val path = arrow.pathCells.filter { it != circle }.distinct()
         if (path.isEmpty()) return@forEach
-        val circleValue = cells.getOrNull(circle.index)?.value
-        val pathValues = path.mapNotNull { cells.getOrNull(it.index)?.value }
+        val circleValue = cells.getOrNull(circle.index(size))?.value
+        val pathValues = path.mapNotNull { cells.getOrNull(it.index(size))?.value }
         if (circleValue != null && pathValues.size == path.size && pathValues.sum() != circleValue) {
-            conflicts += circle.index
-            conflicts += path.map(CellPosition::index)
+            conflicts += circle.index(size)
+            conflicts += path.map { it.index(size) }
         }
     }
     if (includeSpecialRules) puzzle.lines.forEach { line ->
-        val indices = line.points.mapNotNull(GridPoint::cellPositionOrNull).map(CellPosition::index).distinct()
+        val indices = line.points.mapNotNull { it.cellPositionOrNull(size) }.map { it.index(size) }.distinct()
         val values = indices.mapNotNull { index -> cells.getOrNull(index)?.value?.let { index to it } }
         fun markPairs(isInvalid: (Int, Int) -> Boolean) {
             values.zipWithNext().filter { isInvalid(it.first.second, it.second.second) }
@@ -205,7 +223,7 @@ private fun checkNumericSpecialRules(puzzle: Puzzle, cells: List<CellState>): Pu
             LineRule.Thermometer -> {
                 // Each blank cell still needs a distinct digit between its neighbours.
                 fun withinBounds(offset: Int, value: Int): Boolean =
-                    value >= offset + 1 && value <= 9 - (indices.lastIndex - offset)
+                    value >= offset + 1 && value <= size - (indices.lastIndex - offset)
                 fun compatible(offset: Int, value: Int, otherOffset: Int, otherValue: Int): Boolean =
                     if (offset < otherOffset) otherValue - value >= otherOffset - offset
                     else value - otherValue >= offset - otherOffset
@@ -247,7 +265,7 @@ private fun checkNumericSpecialRules(puzzle: Puzzle, cells: List<CellState>): Pu
         }
     }
     if (includeSpecialRules) puzzle.outsideClues.forEach { clue ->
-        val values = clue.cells.mapNotNull { cells.getOrNull(it.index)?.value }
+        val values = clue.cells.mapNotNull { cells.getOrNull(it.index(size))?.value }
         if (values.size != clue.cells.size) return@forEach
         val invalid = when (clue.type) {
             OutsideClueType.DiagonalSum -> values.sum() != clue.value
@@ -258,22 +276,23 @@ private fun checkNumericSpecialRules(puzzle: Puzzle, cells: List<CellState>): Pu
             }
             OutsideClueType.Unspecified -> false
         }
-        if (invalid) conflicts += clue.cells.map(CellPosition::index)
+        if (invalid) conflicts += clue.cells.map { it.index(size) }
     }
     return PuzzleCheckResult(conflicts, pencilMarks.mapValues { it.value.toSet() })
 }
 
-fun GridPoint.cellPositionOrNull(): CellPosition? {
+fun GridPoint.cellPositionOrNull(size: Int = 9): CellPosition? {
     val rowIndex = kotlin.math.floor(row).toInt()
     val columnIndex = kotlin.math.floor(column).toInt()
-    return CellPosition(rowIndex, columnIndex).takeIf { rowIndex in 0..8 && columnIndex in 0..8 }
+    return CellPosition(rowIndex, columnIndex).takeIf { rowIndex in 0 until size && columnIndex in 0 until size }
 }
 
 fun checkAgainstSolution(puzzle: Puzzle, cells: List<CellState>): PuzzleCheckResult {
     val solution = puzzle.solution ?: return PuzzleCheckResult()
+    val size = puzzle.size
     val conflicts = mutableSetOf<Int>()
     val pencilMarks = mutableMapOf<Int, Set<Int>>()
-    fun block(index: Int): Int = index / 27 * 3 + index % 9 / 3
+    fun block(index: Int): Int = puzzle.regionIndex(CellPosition(index / size, index % size))
     // Corner marks describe possible positions for a digit within a block.
     // Accept the whole group when it includes the answer, without revealing its position.
     val validCornerDigits = cells.indices.groupBy(::block).mapValues { (_, indices) ->
@@ -315,3 +334,5 @@ val DemoPuzzle = Puzzle(
     ),
     rules = listOf("Place 1–9 once in every row, column, and 3×3 box.", "Digits in a dotted cage sum to the small clue and cannot repeat."),
 )
+
+internal fun gridSize(cells: List<CellState>): Int = kotlin.math.sqrt(cells.size.toDouble()).toInt()

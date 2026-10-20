@@ -70,7 +70,7 @@ internal class GameRepository(
     var settings by mutableStateOf(read<CheckingSettings>("settings") ?: CheckingSettings())
         private set
     var games by mutableStateOf(read<List<String>>("games").orEmpty().mapNotNull { id ->
-        read<SavedGame>("game.$id")?.takeIf { it.cells.size == 81 }?.let { id to it.copy(automaticColours = DefaultAutomaticColours + it.automaticColours) }
+        read<SavedGame>("game.$id")?.takeIf { it.cells.size == it.puzzle.cellCount }?.let { id to it.copy(automaticColours = DefaultAutomaticColours + it.automaticColours) }
     }.toMap())
         private set
     private val puzzles = mutableMapOf<String, Puzzle>()

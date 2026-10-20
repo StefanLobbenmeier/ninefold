@@ -2,19 +2,20 @@ package de.ninefold
 
 /** Toggle shared notes or colours consistently across the selection. */
 internal fun applyInput(cells: List<CellState>, selected: Set<CellPosition>, mode: InputMode, number: Int?): List<CellState> {
+    if (mode != InputMode.Colour && number != null && number in 1..9 && number > gridSize(cells)) return cells
     if (mode == InputMode.Colour) {
         if (number != null && CellColour.fromNumber(number) == null) return cells
-        val addColour = selected.any { number !in cells[it.index].colours }
+        val addColour = selected.any { number !in cells[it.index(gridSize(cells))].colours }
         return cells.toMutableList().also { next -> selected.forEach { position ->
-            val old = cells[position.index]
-            next[position.index] = old.copy(colours = when {
+            val old = cells[position.index(gridSize(cells))]
+            next[position.index(gridSize(cells))] = old.copy(colours = when {
                 number == null -> emptySet()
                 addColour -> old.colours + number
                 else -> old.colours - number
             })
         } }
     }
-    val editable = selected.map { it.index }.filter { !cells[it].given }
+    val editable = selected.map { it.index(gridSize(cells)) }.filter { !cells[it].given }
     val addNote = editable.any { index ->
         val cell = cells[index]
         cell.value == null && number !in (if (mode == InputMode.Corner) cell.cornerNotes else cell.centreNotes)
