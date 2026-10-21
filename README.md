@@ -257,5 +257,7 @@ configured. Pasting inside the installed app or PWA imports into that app’s ow
 Catalog metadata supports optional `thumbnailUrl` (HTTPS) and `durationSeconds` (positive integer).
 The YouTube exporter includes thumbnails automatically. Set the optional `YOUTUBE_API_KEY`
 repository secret (or environment variable when running the exporter locally) to enrich videos with
-running times from the YouTube Data API. Without it, thumbnails still work and no duration is invented.
+running times from the YouTube Data API. The key also enables a fallback to the channel’s latest
+50 uploads when its RSS feed fails. If both requests fail, the existing index is preserved and the
+refresh fails visibly. Without a key, RSS is required; thumbnails still work and no duration is invented.
 Older indexes with `youtubeVideoId` also receive thumbnails. Missing images use a grid placeholder.

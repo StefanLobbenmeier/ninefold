@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import logging
 import os
+import urllib.error
 import urllib.parse
 import pathlib
 import re
@@ -33,30 +34,78 @@ def youtube_entries(source: dict, payload: bytes) -> list[dict]:
             continue
         published = utc_timestamp(video.findtext(f"{{{ATOM}}}published", ""))
         title = video.findtext(f"{{{ATOM}}}title", "")
-        puzzle_ids = []
-        for url in re.findall(r"https?://(?:www\.)?sudokupad\.app/[^\s<>\"']+", description, re.I):
-            puzzle_id = re.split(r"[?#]", re.sub(r"^https?://(?:www\.)?sudokupad\.app/", "", url, flags=re.I))[0]
-            puzzle_id = puzzle_id.rstrip(".,;)]!").strip("/").removeprefix("api/puzzle/")
-            if re.fullmatch(r"[A-Za-z0-9_./-]+", puzzle_id) and ".." not in puzzle_id:
-                puzzle_ids.append(puzzle_id)
-        for puzzle_id in dict.fromkeys(puzzle_ids):
-            entries.append({
-                "id": f"{source['id']}:{video_id}:{puzzle_id}",
-                "sourceId": source["id"],
-                "title": title,
-                "publishedAt": published,
-                "puzzleUrl": f"https://sudokupad.app/{puzzle_id}",
-                "links": [{"role": "walkthrough", "mediaType": "video", "url": f"https://www.youtube.com/watch?v={video_id}"}],
-                "metadata": {"youtubeVideoId": video_id, "thumbnailUrl": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"},
-            })
+        entries.extend(video_entries(source, video_id, title, description, published))
     return entries
+
+
+def video_entries(source: dict, video_id: str, title: str, description: str, published: str) -> list[dict]:
+    entries = []
+    puzzle_ids = []
+    for url in re.findall(r"https?://(?:www\.)?sudokupad\.app/[^\s<>\"']+", description, re.I):
+        puzzle_id = re.split(r"[?#]", re.sub(r"^https?://(?:www\.)?sudokupad\.app/", "", url, flags=re.I))[0]
+        puzzle_id = puzzle_id.rstrip(".,;)]!").strip("/").removeprefix("api/puzzle/")
+        if re.fullmatch(r"[A-Za-z0-9_./-]+", puzzle_id) and ".." not in puzzle_id:
+            puzzle_ids.append(puzzle_id)
+    for puzzle_id in dict.fromkeys(puzzle_ids):
+        entries.append({
+            "id": f"{source['id']}:{video_id}:{puzzle_id}",
+            "sourceId": source["id"],
+            "title": title,
+            "publishedAt": published,
+            "puzzleUrl": f"https://sudokupad.app/{puzzle_id}",
+            "links": [{"role": "walkthrough", "mediaType": "video", "url": f"https://www.youtube.com/watch?v={video_id}"}],
+            "metadata": {"youtubeVideoId": video_id, "thumbnailUrl": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"},
+        })
+    return entries
+
+
+def request_json(url):
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        # API URLs contain the secret key; do not include them in tracebacks.
+        raise RuntimeError(f"YouTube Data API returned HTTP {error.code}") from None
+
+
+def youtube_api_entries(source: dict, api_key: str, fetch=None) -> list[dict]:
+    """Read recent uploads when the public RSS endpoint is unavailable."""
+    fetch = fetch or request_json
+    channel_id = urllib.parse.parse_qs(urllib.parse.urlsplit(source["feedUrl"]).query)["channel_id"][0]
+
+    def request(resource, **params):
+        query = urllib.parse.urlencode({**params, "key": api_key})
+        return fetch("https://www.googleapis.com/youtube/v3/" + resource + "?" + query)
+
+    channels = request("channels", part="contentDetails", id=channel_id)
+    uploads = channels["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    payload = request("playlistItems", part="snippet,contentDetails", playlistId=uploads, maxResults=50)
+    entries = []
+    for item in payload["items"]:
+        details = item["contentDetails"]
+        video_id = details["videoId"]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+            continue
+        snippet = item["snippet"]
+        entries.extend(video_entries(source, video_id, snippet["title"], snippet["description"],
+                                     utc_timestamp(details["videoPublishedAt"])))
+    return entries
+
+
+def fetch_source(source: dict, api_key: str = None) -> list[dict]:
+    request = urllib.request.Request(source["feedUrl"], headers={"User-Agent": "SudokuPad puzzle index"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return ADAPTERS[source["type"]](source, response.read())
+    except (urllib.error.URLError, TimeoutError):
+        if source["type"] != "youtube" or not api_key:
+            raise
+        LOGGER.warning("Feed unavailable for source %s; falling back to YouTube Data API", source["id"])
+        return youtube_api_entries(source, api_key)
 
 
 def enrich_video_metadata(entries: list[dict], api_key: str, fetch=None) -> None:
     """Optional YouTube Data API enrichment. RSS itself does not include running time."""
-    def request_json(url):
-        with urllib.request.urlopen(url, timeout=30) as response:
-            return json.load(response)
     fetch = fetch or request_json
     ids = list(dict.fromkeys(entry.get("metadata", {}).get("youtubeVideoId") for entry in entries))
     ids = [video_id for video_id in ids if video_id]
@@ -118,20 +167,17 @@ def main() -> None:
     previous = json.loads(previous_file.read_text()) if previous_file.exists() else {}
     sources = json.loads(args.sources.read_text())
     updates = []
+    api_key = os.environ.get("YOUTUBE_API_KEY")
     for source in sources:
-        adapter = ADAPTERS[source["type"]]
-        request = urllib.request.Request(source["feedUrl"], headers={"User-Agent": "SudokuPad puzzle index"})
         LOGGER.info("Fetching source %s from %s", source["id"], source["feedUrl"])
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                entries = adapter(source, response.read())
+            entries = fetch_source(source, api_key)
         except Exception as error:
             LOGGER.error("Failed to refresh source %s from %s: %s: %s",
                          source["id"], source["feedUrl"], type(error).__name__, error)
             raise
         LOGGER.info("Fetched %d entries from source %s", len(entries), source["id"])
         updates.extend(entries)
-    api_key = os.environ.get("YOUTUBE_API_KEY")
     if api_key:
         enrich_video_metadata(updates, api_key)
     # Fetch/parse every source before writing anything; failed refreshes preserve the old index.

@@ -34,6 +34,7 @@ class SudokuIndexTest(unittest.TestCase):
             sources_file = output / "sources.json"
             sources_file.write_text(json.dumps([source]))
             with mock.patch("sys.argv", ["publisher", "--output", directory, "--sources", str(sources_file)]), \
+                    mock.patch.dict(publisher.os.environ, {}, clear=True), \
                     mock.patch.object(publisher.urllib.request, "urlopen", side_effect=error), \
                     self.assertLogs(publisher.LOGGER, level="INFO") as logs:
                 with self.assertRaises(urllib.error.HTTPError) as raised:
@@ -43,6 +44,51 @@ class SudokuIndexTest(unittest.TestCase):
             self.assertIn("Failed to refresh source synthetic-channel from https://example.test/feed: HTTPError: HTTP Error 404: Not Found", logs.output[1])
             self.assertEqual(previous, (output / "index.json").read_text())
             self.assertFalse((output / "index.js").exists())
+
+    def test_rss_404_falls_back_to_api_with_equivalent_entries(self):
+        source = {**SOURCE, "feedUrl": "https://example.test/feed?channel_id=synthetic-channel"}
+        responses = [
+            {"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "synthetic-uploads"}}}]},
+            {"items": [{"snippet": {"title": "A & B 🧩", "description": "https://sudokupad.app/one"},
+                        "contentDetails": {"videoId": "aaaaaaaaaaa", "videoPublishedAt": "2026-10-01T12:00:00Z"}}]},
+        ]
+        error = urllib.error.HTTPError(source["feedUrl"], 404, "Not Found", {}, None)
+        with mock.patch.object(publisher.urllib.request, "urlopen", side_effect=error), \
+                mock.patch.object(publisher, "request_json", side_effect=responses) as fetch, \
+                self.assertLogs(publisher.LOGGER, level="WARNING"):
+            entries = publisher.fetch_source(source, "synthetic-key")
+        self.assertEqual(publisher.youtube_entries(source, feed(video("aaaaaaaaaaa", "https://sudokupad.app/one"))), entries)
+        queries = [publisher.urllib.parse.parse_qs(publisher.urllib.parse.urlsplit(call.args[0]).query)
+                   for call in fetch.call_args_list]
+        self.assertEqual(["synthetic-channel"], queries[0]["id"])
+        self.assertEqual(["synthetic-uploads"], queries[1]["playlistId"])
+        self.assertEqual(["50"], queries[1]["maxResults"])
+
+    def test_failed_api_fallback_preserves_existing_resources(self):
+        source = {**SOURCE, "feedUrl": "https://example.test/feed?channel_id=synthetic-channel"}
+        error = urllib.error.HTTPError(source["feedUrl"], 404, "Not Found", {}, None)
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory)
+            publisher.write_resources({"schemaVersion": 1, "entries": []}, output)
+            before = {p.name: p.read_bytes() for p in output.iterdir()}
+            sources_file = output / "sources.json"
+            sources_file.write_text(json.dumps([source]))
+            with mock.patch("sys.argv", ["publisher", "--output", directory, "--sources", str(sources_file)]), \
+                    mock.patch.dict(publisher.os.environ, {"YOUTUBE_API_KEY": "synthetic-key"}), \
+                    mock.patch.object(publisher.urllib.request, "urlopen", side_effect=error), \
+                    self.assertLogs(publisher.LOGGER, level="WARNING"):
+                with self.assertRaisesRegex(RuntimeError, "YouTube Data API returned HTTP 404"):
+                    publisher.main()
+            for name, data in before.items():
+                self.assertEqual(data, (output / name).read_bytes())
+
+    def test_successful_rss_does_not_call_api(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = feed()
+        with mock.patch.object(publisher.urllib.request, "urlopen", return_value=response), \
+                mock.patch.object(publisher, "youtube_api_entries") as fallback:
+            self.assertEqual([], publisher.fetch_source({**SOURCE, "feedUrl": "https://example.test/feed"}, "synthetic-key"))
+        fallback.assert_not_called()
 
     def test_youtube_links_and_xml_entities(self):
         payload = feed(video("aaaaaaaaaaa", "<![CDATA[https://sudokupad.app/one) https://www.sudokupad.app/two?setting=1 https://sudokupad.app/one]]>"))
