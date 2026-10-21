@@ -48,6 +48,7 @@ data class PuzzleOverlay(
     val center: GridPoint, val width: Double = .3, val height: Double = .3,
     val backgroundColor: String? = null, val borderColor: String? = null, val textColor: String? = null,
     val text: String? = null, val rounded: Boolean = false, val thickness: Double = 1.0,
+    val fontSize: Double? = null, // Cell units, independent of the backing shape.
 )
 @Serializable
 data class QuadrupleClue(val digits: List<Int>, val cells: List<CellPosition>)

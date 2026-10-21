@@ -785,7 +785,7 @@ private fun BoxScope.PuzzleGraphics(
                 }
             }
             item.text?.takeIf(String::isNotEmpty)?.let { text ->
-                val style = androidx.compose.ui.text.TextStyle(color = faded(item.textColor?.toComposeColor() ?: Ink), fontSize = (max(8f, area.height * .48f) / density).sp, textAlign = TextAlign.Center)
+                val style = androidx.compose.ui.text.TextStyle(color = faded(item.textColor?.toComposeColor() ?: Ink), fontSize = (max(8f, item.fontSize?.let { (it * cell).toFloat() } ?: (area.height * .48f)) / density).sp, textAlign = TextAlign.Center)
                 val measured = measurer.measure(text, style)
                 drawText(measured, topLeft = center - Offset(measured.size.width / 2f, measured.size.height / 2f))
             }

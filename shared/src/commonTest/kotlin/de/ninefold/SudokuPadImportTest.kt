@@ -12,6 +12,21 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun importsOutsideLabelsWithZeroSizeBoxesAndExplicitFontSize() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties = """"cellSize":60,
+            "overlays":[{"center":[-0.4,1.5],"width":0,"height":0,"text":12,
+                "fontSize":24,"dominant-baseline":"alphabetic"}]"""))
+        val label = puzzle.overlays.single()
+        assertEquals("12", label.text)
+        assertEquals(0.4, label.fontSize)
+        assertEquals(-0.52, label.center.row, 0.0001)
+        assertEquals(0.0, label.width)
+        assertEquals(0.0, label.height)
+        assertEquals(12, puzzle.outsideClues.single().value)
+        assertTrue(label.isOutsideTextClue(puzzle.size))
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+    }
+
     @Test fun importsLittleKillerDiagonalsWithoutRelyingOnRuleText() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"littlekillersum":[
             {"cell":"R0C3","cells":["R1C4","R2C5","R3C6","R4C7","R5C8","R6C9"],"direction":"DR","value":"27"},
