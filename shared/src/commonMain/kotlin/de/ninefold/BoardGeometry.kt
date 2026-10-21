@@ -22,7 +22,11 @@ internal fun Puzzle.boardPaddingCells(): Float {
             include(arrow.points.last(), arrow.headLength + arrow.thickness / 100.0)
         }
     }
-    (overlays + underlays).forEach { include(it.center, it.width / 2, it.height / 2) }
+    (overlays + underlays).forEach {
+        val textHeight = if (it.text.isNullOrBlank()) 0.0 else it.fontSize ?: 0.0
+        include(it.center, maxOf(it.width / 2, textHeight * it.text.orEmpty().length / 2),
+            maxOf(it.height / 2, textHeight / 2))
+    }
     return if (outside > 0) maxOf(1.0, outside).toFloat() else 0f
 }
 

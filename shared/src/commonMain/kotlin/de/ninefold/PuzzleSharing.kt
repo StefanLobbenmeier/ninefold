@@ -39,7 +39,7 @@ fun puzzleFromShareLink(link: String): Puzzle? {
         puzzle.lines.all { line -> line.points.all { it.valid() } && line.thickness.isFinite() } &&
         puzzle.arrows.all { arrow -> arrow.points.all { it.valid() } && arrow.pathCells.all { it.valid() } &&
             (arrow.circle?.valid() != false) && arrow.thickness.isFinite() && arrow.headLength.isFinite() } &&
-        (puzzle.overlays + puzzle.underlays).all { it.center.valid() && it.width.isFinite() && it.height.isFinite() && it.thickness.isFinite() } &&
+        (puzzle.overlays + puzzle.underlays).all { it.center.valid() && it.width.isFinite() && it.height.isFinite() && it.thickness.isFinite() && (it.fontSize == null || (it.fontSize.isFinite() && it.fontSize > 0)) } &&
         puzzle.quadruples.all { clue -> clue.cells.size == 4 && clue.cells.distinct().size == 4 &&
             clue.cells.all { it.valid() } && clue.digits.size in 1..4 && clue.digits.all { it in 1..9 } } &&
         puzzle.outsideClues.all { clue -> clue.position.valid() && clue.cells.all { it.valid() } }

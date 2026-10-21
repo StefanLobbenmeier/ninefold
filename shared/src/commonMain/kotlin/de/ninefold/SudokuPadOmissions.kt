@@ -71,7 +71,7 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
             if (meaningful(it["value"] ?: JsonNull) && digit !in 1..9) report("$.${key}[$r][$c].value", "Value is not imported as a digit.")
         } }
     }
-    for (key in listOf("overlays", "underlays")) objects(key, "center width height backgroundColor borderColor stroke color textColor text rounded thickness") { obj, path ->
+    for (key in listOf("overlays", "underlays")) objects(key, "center width height backgroundColor borderColor stroke color textColor text rounded thickness fontSize") { obj, path ->
         if (obj["center"]?.let(::point) != true) report(path, "Overlay has no usable center and is dropped.")
     }
     for (key in listOf("lines", "line", "arrows", "arrow", "thermometer", "palindrome")) objects(key,

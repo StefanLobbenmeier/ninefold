@@ -202,9 +202,9 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     }
     val lines = parseLines(root, fpuzzles)
     val littleKillers = if (fpuzzles) parseFpuzzlesLittleKillers(root, size) else emptyList()
-    val rawOverlays = littleKillers.map { PuzzleOverlay(it.position, .6, .6, text = it.value.toString()) } + root.array("overlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
+    val rawOverlays = littleKillers.map { PuzzleOverlay(it.position, .6, .6, text = it.value.toString()) } + root.array("overlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
     val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText, size)
-    val underlays = cellShading + root.array("underlays").orEmpty().mapNotNull(::parseOverlay) + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
+    val underlays = cellShading + root.array("underlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
     val arrows = parseArrows(root, fpuzzles, overlays, size) + littleKillers.map { clue ->
         val first = clue.cells.first()
         val dr = (first.row + .5 - clue.position.row).compareTo(0.0)
@@ -455,15 +455,19 @@ private fun parseArrows(root: JsonObject, fpuzzles: Boolean, overlays: List<Puzz
     }
 }
 
-private fun parseOverlay(element: JsonElement): PuzzleOverlay? {
+private fun parseOverlay(element: JsonElement, cellSize: Double): PuzzleOverlay? {
     val value = element.jsonObject
-    val center = value["center"]?.let(::parsePoint) ?: return null
+    val sourceCenter = value["center"]?.let(::parsePoint) ?: return null
+    val fontSize = value.double("fontSize")?.takeIf { it > 0 && cellSize > 0 }?.div(cellSize)
+    val center = if (value.string("dominant-baseline") == "alphabetic" && fontSize != null)
+        sourceCenter.copy(row = sourceCenter.row - fontSize * .3) else sourceCenter
     return PuzzleOverlay(
         center, value.double("width") ?: .3, value.double("height") ?: .3,
         // SVG stroke styles the label; only borderColor outlines the backing shape.
         value.string("backgroundColor"), value.string("borderColor"),
         value.string("color") ?: value.string("textColor"), value["text"]?.asString(),
         value.boolean("rounded") ?: (value.int("rounded") == 1), value.double("thickness") ?: 1.0,
+        fontSize = fontSize,
     )
 }
 
