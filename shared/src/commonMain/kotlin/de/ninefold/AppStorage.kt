@@ -36,6 +36,7 @@ expect fun platformAppStorage(): AppStorage
 
 @Serializable
 internal data class CheckingSettings(
+    val catalogProgress: String = "All", val catalogDifficulty: String = "All",
     val letters: Boolean = false, val inputMode: String = "Digit", val multiSelect: Boolean = false,
     val rules: Boolean = true, val automaticRules: Boolean = true,
     val specialRules: Boolean = true, val solution: Boolean = true, val automaticSolution: Boolean = true,
