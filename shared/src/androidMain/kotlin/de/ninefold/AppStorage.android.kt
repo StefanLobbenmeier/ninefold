@@ -7,6 +7,7 @@ fun initializeAppStorage(context: Context) { appContext = context.applicationCon
 private object AndroidAppStorage : AppStorage {
     private fun preferences() = checkNotNull(appContext) { "App storage is not initialized." }
         .getSharedPreferences("ninefold", Context.MODE_PRIVATE)
+    override fun entries(): Map<String, String> = preferences().all.mapNotNull { (key, value) -> (value as? String)?.let { key to it } }.toMap()
     override fun read(key: String) = preferences().getString(key, null)
     override fun write(key: String, payload: String) { check(preferences().edit().putString(key, payload).commit()) { "Could not save preferences." } }
 }
