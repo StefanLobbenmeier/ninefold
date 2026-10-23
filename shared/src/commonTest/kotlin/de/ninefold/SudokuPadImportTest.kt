@@ -12,6 +12,31 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SudokuPadImportTest {
+    @Test fun shadesUnlabelledFpuzzlesRegionsAndChecksTheirUniqueness() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"ruleset":
+            "Each shaded region contains the digits 1-9 exactly once each.",
+            "killercage":[{"cells":["R1C1","R4C4"]},{"cells":["R7C7"],"value":5}]"""))
+        assertEquals(listOf(GridPoint(.5, .5), GridPoint(3.5, 3.5)), puzzle.underlays.map { it.center })
+        assertTrue(puzzle.underlays.all { it.backgroundColor == "#E0E0E0" && it.width == 1.0 && it.height == 1.0 })
+        assertTrue(puzzle.cages.first().unique)
+        val cells = puzzle.startingCells().toMutableList().apply {
+            this[0] = CellState(value = 2)
+            this[30] = CellState(value = 2)
+        }
+        assertEquals(setOf(0, 30), checkSudokuRules(puzzle, cells).cells)
+        assertTrue(checkSudokuRules(puzzle, cells, includeSpecialRules = false).cells.isEmpty())
+        cells[30] = CellState(centreNotes = setOf(2, 3))
+        assertEquals(setOf(2), checkSudokuRules(puzzle, cells).pencilMarks[30])
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+    }
+
+    @Test fun doesNotInventShadingForSclGraphicalCages() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"cages":[{"cells":["R1C1","R4C4"]}]"""))
+        assertTrue(puzzle.underlays.isEmpty())
+        assertEquals(false, puzzle.cages.single().unique)
+    }
+
     @Test fun importsOutsideLabelsWithZeroSizeBoxesAndExplicitFontSize() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties = """"cellSize":60,
             "overlays":[{"center":[-0.4,1.5],"width":0,"height":0,"text":12,
