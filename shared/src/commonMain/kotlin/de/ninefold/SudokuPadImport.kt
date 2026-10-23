@@ -204,7 +204,12 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     val littleKillers = if (fpuzzles) parseFpuzzlesLittleKillers(root, size) else emptyList()
     val rawOverlays = littleKillers.map { PuzzleOverlay(it.position, .6, .6, text = it.value.toString()) } + root.array("overlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
     val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText, size)
-    val underlays = cellShading + root.array("underlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
+    // f-puzzles renders cages without totals as shaded regions. Keep their
+    // killer uniqueness semantics while preserving that visual distinction.
+    val shadedCages = if (fpuzzles) cages.filter { it.total == null }.flatMap { it.cells }.distinct().map {
+        PuzzleOverlay(GridPoint(it.row + .5, it.column + .5), 1.0, 1.0, backgroundColor = "#E0E0E0")
+    } else emptyList()
+    val underlays = shadedCages + cellShading + root.array("underlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
     val arrows = parseArrows(root, fpuzzles, overlays, size) + littleKillers.map { clue ->
         val first = clue.cells.first()
         val dr = (first.row + .5 - clue.position.row).compareTo(0.0)
