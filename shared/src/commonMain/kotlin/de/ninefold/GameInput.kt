@@ -16,6 +16,27 @@ internal fun applyInput(cells: List<CellState>, selected: Set<CellPosition>, mod
         } }
     }
     val editable = selected.map { it.index(gridSize(cells)) }.filter { !cells[it].given }
+    if (number == null) {
+        val eraseMode = listOf(mode, InputMode.Corner, InputMode.Centre, InputMode.Colour, InputMode.Digit).distinct()
+            .firstOrNull { category -> editable.any { index ->
+                val cell = cells[index]
+                when (category) {
+                    InputMode.Digit -> cell.value != null
+                    InputMode.Corner -> cell.cornerNotes.isNotEmpty()
+                    InputMode.Centre -> cell.centreNotes.isNotEmpty()
+                    InputMode.Colour -> cell.colours.isNotEmpty()
+                }
+            } } ?: return cells
+        return cells.toMutableList().also { next -> editable.forEach { index ->
+            val old = cells[index]
+            next[index] = when (eraseMode) {
+                InputMode.Digit -> old.copy(value = null)
+                InputMode.Corner -> old.copy(cornerNotes = emptySet())
+                InputMode.Centre -> old.copy(centreNotes = emptySet())
+                InputMode.Colour -> old.copy(colours = emptySet())
+            }
+        } }
+    }
     val addNote = editable.any { index ->
         val cell = cells[index]
         cell.value == null && number !in (if (mode == InputMode.Corner) cell.cornerNotes else cell.centreNotes)
@@ -23,14 +44,6 @@ internal fun applyInput(cells: List<CellState>, selected: Set<CellPosition>, mod
     return cells.toMutableList().also { next -> editable.forEach { index ->
         val old = cells[index]
         next[index] = when {
-            number == null -> when {
-                mode == InputMode.Digit && old.value != null -> old.copy(value = null)
-                mode == InputMode.Corner && old.cornerNotes.isNotEmpty() -> old.copy(cornerNotes = emptySet())
-                mode == InputMode.Centre && old.centreNotes.isNotEmpty() -> old.copy(centreNotes = emptySet())
-                old.value != null || old.cornerNotes.isNotEmpty() || old.centreNotes.isNotEmpty() ->
-                    old.copy(value = null, cornerNotes = emptySet(), centreNotes = emptySet())
-                else -> old.copy(colours = emptySet())
-            }
             mode == InputMode.Digit -> old.copy(value = number, cornerNotes = emptySet(), centreNotes = emptySet())
             old.value != null -> old
             mode == InputMode.Corner -> old.copy(cornerNotes = if (addNote) old.cornerNotes + number else old.cornerNotes - number)
