@@ -42,7 +42,7 @@ class GamePersistenceTest {
         storage.write("ninefold.recent-games.v1", kotlinx.serialization.json.Json.encodeToString(puzzles.map { it.storageId() }.reversed()))
         puzzles.forEach { puzzle ->
             val saved = SavedGame(puzzle, solved, true, listOf(puzzle.startingCells()), listOf(solved))
-            storage.write("ninefold.game.${puzzle.storageId()}.v1", kotlinx.serialization.json.Json.encodeToString(saved))
+            storage.write("ninefold.game.${puzzle.storageId()}.v1", legacyGamePayload(saved))
         }
         val before = inspectStorage(storage).bytes
         val repository = GameRepository(storage)

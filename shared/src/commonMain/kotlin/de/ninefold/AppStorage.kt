@@ -16,6 +16,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 interface AppStorage {
     fun entries(): Map<String, String>? = null
@@ -40,7 +41,7 @@ internal data class CheckingSettings(
     val specialRules: Boolean = true, val solution: Boolean = true, val automaticSolution: Boolean = true,
 )
 
-@Serializable
+@Serializable(with = SavedGameSerializer::class)
 internal data class SavedGame(
     val puzzle: Puzzle, val cells: List<CellState>, val started: Boolean,
     val history: List<List<CellState>> = emptyList(), val redo: List<List<CellState>> = emptyList(),
@@ -59,6 +60,13 @@ internal class GameRepository(
     private val fetchPuzzleData: suspend (String) -> Puzzle = ::importSudokuPadPuzzle,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val legacyGames = mutableSetOf<String>()
+    private fun readGame(id: String): SavedGame? = runCatching {
+        val payload = storage.read("ninefold.game.$id.v1") ?: return@runCatching null
+        val game = json.decodeFromString<SavedGame>(payload)
+        if (json.parseToJsonElement(payload).jsonObject["historyEncoding"] == null) legacyGames += id
+        game
+    }.getOrNull()
     var storageError by mutableStateOf<String?>(null)
         private set
     private inline fun <reified T> read(key: String): T? = runCatching {
@@ -73,7 +81,7 @@ internal class GameRepository(
     var settings by mutableStateOf(read<CheckingSettings>("settings") ?: CheckingSettings())
         private set
     var games by mutableStateOf(read<List<String>>("games").orEmpty().mapNotNull { id ->
-        read<SavedGame>("game.$id")?.takeIf { it.cells.size == it.puzzle.cellCount }?.let { id to it.copy(automaticColours = DefaultAutomaticColours + it.automaticColours) }
+        readGame(id)?.takeIf { it.cells.size == it.puzzle.cellCount }?.let { id to it.copy(automaticColours = DefaultAutomaticColours + it.automaticColours) }
     }.toMap())
         private set
     private val puzzles = mutableMapOf<String, Puzzle>()
@@ -119,6 +127,7 @@ internal class GameRepository(
     init {
         completedGames = completedGames.filter { games[it]?.completed == true }.take(2)
         pruneHistory()
+        legacyGames.forEach { id -> games[id]?.let { write("game.$id", it) } }
         write("completed-games", completedGames)
     }
 
