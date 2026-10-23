@@ -18,12 +18,15 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 interface AppStorage {
+    fun entries(): Map<String, String>? = null
+    val browserStorage: Boolean get() = false
     fun read(key: String): String?
     fun write(key: String, payload: String)
 }
 
 class MemoryAppStorage : AppStorage {
     private val records = mutableMapOf<String, String>()
+    override fun entries() = records.toMap()
     override fun read(key: String) = records[key]
     override fun write(key: String, payload: String) { records[key] = payload }
 }
@@ -103,6 +106,8 @@ internal class GameRepository(
             }
         }
     }
+
+    fun storageUsage(): StorageUsage = inspectStorage(storage)
 
     fun saveSettings(value: CheckingSettings) { settings = value; write("settings", settings) }
     var recentGames by mutableStateOf(read<List<String>>("recent-games") ?: games.keys.reversed())

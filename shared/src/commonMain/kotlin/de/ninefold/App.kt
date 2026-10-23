@@ -116,15 +116,25 @@ fun App(
         val repository = remember(localIndexCache, indexRepository) { indexRepository ?: SudokuIndexRepository(localIndexCache) }
         val screenState = rememberSaveableStateHolder()
         val current = activePuzzle
-        Box(Modifier.fillMaxSize()) {
-            if (current == null) screenState.SaveableStateProvider("catalog") { SudokuCatalog(repository, games, downloadScope, appUpdateState, onApplyUpdate, browseTab, { browseTab = it }) { activePuzzle = it } }
-            else key(current) { SudokuApp(current, games, shareBaseUrl) { activePuzzle = null } }
+        var showStorage by remember { mutableStateOf(false) }
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                if (current == null) screenState.SaveableStateProvider("catalog") { SudokuCatalog(repository, games, downloadScope, appUpdateState, onApplyUpdate, browseTab, { browseTab = it }) { activePuzzle = it } }
+                else key(current) { SudokuApp(current, games, shareBaseUrl) { activePuzzle = null } }
+            }
             shareError?.let { message -> AlertDialog(
                 onDismissRequest = { shareError = null },
                 title = { Text("Could not open shared puzzle") }, text = { Text(message) },
                 confirmButton = { TextButton({ shareError = null }) { Text("Okay") } },
             ) }
-            games.storageError?.let { message -> Snackbar(Modifier.align(Alignment.BottomCenter)) { Text(message) } }
+            games.storageError?.let { message ->
+                Snackbar(
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding()
+                        .clickable(onClickLabel = "Open storage settings") { showStorage = true },
+                    action = { TextButton({ showStorage = true }) { Text("Storage settings") } },
+                ) { Text(message) }
+            }
+            if (showStorage) StorageSettingsDialog(games) { showStorage = false }
         }
     }
 }

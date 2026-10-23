@@ -54,6 +54,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     var indexError by remember { mutableStateOf<String?>(null) }
     var opening by remember { mutableStateOf<String?>(null) }
     var openError by remember { mutableStateOf<String?>(null) }
+    var showStorage by remember { mutableStateOf(false) }
     var showImport by remember { mutableStateOf(false) }
     var reimporting by remember { mutableStateOf<String?>(null) }
     var reimportResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
@@ -119,6 +120,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 Image(painterResource(Res.drawable.ninefold_icon), contentDescription = null, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(10.dp))
                 Text("NINEFOLD", fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                IconButton({ showStorage = true }, modifier = Modifier.semantics { contentDescription = "Storage settings" }) { AppIcon(Glyph.Settings) }
                 IconButton({ refreshRequest++ }, enabled = !refreshing, modifier = Modifier.semantics { contentDescription = "Refresh" }) { AppIcon(Glyph.Refresh) }
                 FilledTonalButton({ showImport = true }) { AppIcon(Glyph.Add); Spacer(Modifier.width(6.dp)); Text("Import") }
             }
@@ -197,7 +199,6 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                     Text(if (index == null) "Loading puzzles…" else "Refreshing puzzles…")
                 }
                 indexError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                games.storageError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 index?.let { current ->
                     if (current.entries.isEmpty()) Text("No puzzles have been published yet.")
                 }
@@ -300,6 +301,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
         confirmButton = { TextButton({ reimportResult = null }) { Text("OK") } },
     ) }
     openError?.let { message -> AlertDialog(onDismissRequest = { openError = null }, confirmButton = { TextButton({ openError = null }) { Text("OK") } }, title = { Text("Puzzle unavailable") }, text = { Text(message) }) }
+    if (showStorage) StorageSettingsDialog(games) { showStorage = false }
     if (showImport) ImportDialog({ showImport = false }) { showImport = false; onOpen(it) }
 }
 
