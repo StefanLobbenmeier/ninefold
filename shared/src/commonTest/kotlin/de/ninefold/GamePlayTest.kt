@@ -133,50 +133,45 @@ class GamePlayTest {
         }
     }
 
-    @Test fun eraseClearsActiveCategoryThenOtherNumbersThenColours() {
-        val selected = setOf(CellPosition(0, 0))
-        val original = CellState(value = 5, cornerNotes = setOf(1, 2), centreNotes = setOf(3, 4), colours = setOf(7, 9))
-        for (mode in listOf(InputMode.Digit, InputMode.Corner, InputMode.Centre)) {
-            val cells = List(81) { if (it == 0) original else CellState() }
-            val first = applyInput(cells, selected, mode, null)
-            assertEquals(when (mode) {
-                InputMode.Digit -> original.copy(value = null)
-                InputMode.Corner -> original.copy(cornerNotes = emptySet())
-                else -> original.copy(centreNotes = emptySet())
-            }, first[0])
-            val second = applyInput(first, selected, mode, null)
-            assertEquals(CellState(colours = original.colours), second[0])
-            val third = applyInput(second, selected, mode, null)
-            assertEquals(CellState(), third[0])
-            assertEquals(third, applyInput(third, selected, mode, null))
+    @Test fun eraseClearsOneCategoryAcrossTheWholeSelection() {
+        val selected = (0..4).map { CellPosition(0, it) }.toSet()
+        val original = List(81) { index -> when (index) {
+            0 -> CellState(cornerNotes = setOf(1, 2))
+            1 -> CellState(centreNotes = setOf(3, 4))
+            2 -> CellState(colours = setOf(7, 9))
+            3 -> CellState(value = 5)
+            4 -> CellState(value = 3, given = true, colours = setOf(8))
+            else -> CellState(value = 6)
+        } }
+        for ((mode, order) in listOf(
+            InputMode.Corner to listOf(0, 1, 2, 3),
+            InputMode.Centre to listOf(1, 0, 2, 3),
+            InputMode.Digit to listOf(3, 0, 1, 2),
+        )) {
+            var cells = original
+            val expected = original.toMutableList()
+            for (index in order) {
+                expected[index] = CellState()
+                cells = applyInput(cells, selected, mode, null)
+                assertEquals(expected, cells, "Erase $mode category at cell $index")
+            }
+            assertEquals(cells, applyInput(cells, selected, mode, null))
+            assertEquals(original, applyInput(original, emptySet(), mode, null))
         }
     }
 
-    @Test fun eraseFallsBackPerCellAndPreservesGivensAndUnselectedCells() {
-        for (mode in listOf(InputMode.Digit, InputMode.Corner, InputMode.Centre)) {
-            val active = when (mode) {
-                InputMode.Digit -> CellState(value = 5)
-                InputMode.Corner -> CellState(cornerNotes = setOf(1))
-                else -> CellState(centreNotes = setOf(2))
-            }.copy(colours = setOf(4))
-            val other = when (mode) {
-                InputMode.Digit -> CellState(cornerNotes = setOf(1), centreNotes = setOf(2))
-                else -> CellState(value = 5)
-            }.copy(colours = setOf(7))
-            val cells = List(81) { index -> when (index) {
-                0 -> active
-                1 -> other
-                2 -> CellState(colours = setOf(9))
-                3 -> CellState(value = 3, given = true, colours = setOf(8))
-                else -> active
-            } }
-            val erased = applyInput(cells, (0..3).map { CellPosition(0, it) }.toSet(), mode, null)
-            assertEquals(CellState(colours = setOf(4)), erased[0])
-            assertEquals(CellState(colours = setOf(7)), erased[1])
-            assertEquals(CellState(), erased[2])
-            assertEquals(cells[3], erased[3])
-            assertEquals(cells.drop(4), erased.drop(4))
-            assertEquals(cells, applyInput(cells, emptySet(), mode, null))
+    @Test fun erasePreservesOtherCategoriesInTheSameCell() {
+        val original = CellState(value = 5, cornerNotes = setOf(1), centreNotes = setOf(2), colours = setOf(7))
+        var cells = List(81) { if (it == 0) original else CellState() }
+        val selected = setOf(CellPosition(0, 0))
+        for (expected in listOf(
+            original.copy(cornerNotes = emptySet()),
+            CellState(value = 5, colours = setOf(7)),
+            CellState(value = 5),
+            CellState(),
+        )) {
+            cells = applyInput(cells, selected, InputMode.Corner, null)
+            assertEquals(expected, cells[0])
         }
     }
 
