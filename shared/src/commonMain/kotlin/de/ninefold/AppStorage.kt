@@ -112,6 +112,27 @@ internal class GameRepository(
     fun saveSettings(value: CheckingSettings) { settings = value; write("settings", settings) }
     var recentGames by mutableStateOf(read<List<String>>("recent-games") ?: games.keys.reversed())
         private set
+    // Older saves have play order, but no completion order. Use that order once when migrating.
+    private var completedGames = read<List<String>>("completed-games")
+        ?: (recentGames + games.keys).distinct().filter { games[it]?.completed == true }
+
+    init {
+        completedGames = completedGames.filter { games[it]?.completed == true }.take(2)
+        pruneHistory()
+        write("completed-games", completedGames)
+    }
+
+    private fun pruneHistory() {
+        val retained = completedGames.filter { games[it]?.completed == true }.take(2).toSet()
+        games = games.mapValues { (id, game) ->
+            if ((game.started && !game.completed) || id in retained || (game.history.isEmpty() && game.redo.isEmpty())) game
+            else {
+                val trimmed = game.copy(history = emptyList(), redo = emptyList())
+                if (write("game.$id", trimmed)) trimmed else game
+            }
+        }
+    }
+
     fun markPlayed(puzzle: Puzzle) {
         recentGames = listOf(puzzle.storageId()) + recentGames.filter { it != puzzle.storageId() }
         write("recent-games", recentGames)
@@ -119,9 +140,18 @@ internal class GameRepository(
     fun game(puzzle: Puzzle) = games[puzzle.storageId()]
     fun saveGame(game: SavedGame) {
         val id = game.puzzle.storageId()
+        val newlyCompleted = game.completed && games[id]?.completed != true
+        val previousCompletions = completedGames
         games = games + (id to game)
-        write("game.$id", game)
+        completedGames = when {
+            newlyCompleted -> listOf(id) + completedGames.filter { it != id }
+            !game.completed -> completedGames.filter { it != id }
+            else -> completedGames
+        }.take(2)
+        pruneHistory()
+        write("game.$id", games.getValue(id))
         write("games", games.keys.toList())
+        if (completedGames != previousCompletions) write("completed-games", completedGames)
     }
     fun elapsed(puzzle: Puzzle): Long = (read<Long>("timer.${puzzle.storageId()}") ?: 0L).coerceAtLeast(0)
     fun saveElapsed(puzzle: Puzzle, seconds: Long) { write("timer.${puzzle.storageId()}", seconds) }

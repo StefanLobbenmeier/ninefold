@@ -3,10 +3,59 @@ package de.ninefold
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.serialization.encodeToString
 import kotlin.test.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GamePersistenceTest {
+    @Test fun keepsAllInProgressHistoryAndOnlyTheLastTwoCompletedHistories() {
+        val storage = MemoryAppStorage()
+        val repository = GameRepository(storage)
+        val puzzles = (1..4).map { SudokuFixtures.classic.copy(sourceUrl = "https://sudokupad.app/synthetic-$it") }
+        fun saved(puzzle: Puzzle, complete: Boolean) = SavedGame(puzzle,
+            if (complete) puzzle.solution!!.map { CellState(value = it.digitToInt()) } else puzzle.startingCells(),
+            true, listOf(puzzle.startingCells()), listOf(puzzle.startingCells()))
+        puzzles.forEach { repository.saveGame(saved(it, false)) }
+        puzzles.take(3).forEach { repository.saveGame(saved(it, true)) }
+        repository.markPlayed(puzzles[0])
+        val reopened = GameRepository(storage)
+        val trimmed = reopened.game(puzzles[0])!!
+        assertTrue(trimmed.completed)
+        assertEquals(saved(puzzles[0], true).cells, trimmed.cells)
+        assertTrue(trimmed.history.isEmpty())
+        assertTrue(trimmed.redo.isEmpty())
+        puzzles.drop(1).forEach { assertEquals(saved(it, it != puzzles.last()), reopened.game(it)) }
+
+        // Undoing and completing again makes this the latest completion.
+        reopened.saveGame(saved(puzzles[1], false))
+        reopened.saveGame(saved(puzzles[1], true))
+        reopened.saveGame(saved(puzzles[3], true))
+        assertTrue(GameRepository(storage).game(puzzles[2])!!.history.isEmpty())
+        assertTrue(reopened.game(puzzles[1])!!.history.isNotEmpty())
+    }
+
+    @Test fun existingHistoryIsPrunedOnStartupWithoutLosingProgressOrTimers() {
+        val storage = MemoryAppStorage()
+        val puzzles = (1..3).map { SudokuFixtures.classic.copy(sourceUrl = "https://sudokupad.app/legacy-$it") }
+        val solved = SudokuFixtures.classic.solution!!.map { CellState(value = it.digitToInt()) }
+        storage.write("ninefold.games.v1", kotlinx.serialization.json.Json.encodeToString(puzzles.map { it.storageId() }))
+        storage.write("ninefold.recent-games.v1", kotlinx.serialization.json.Json.encodeToString(puzzles.map { it.storageId() }.reversed()))
+        puzzles.forEach { puzzle ->
+            val saved = SavedGame(puzzle, solved, true, listOf(puzzle.startingCells()), listOf(solved))
+            storage.write("ninefold.game.${puzzle.storageId()}.v1", kotlinx.serialization.json.Json.encodeToString(saved))
+        }
+        val before = inspectStorage(storage).bytes
+        val repository = GameRepository(storage)
+        assertTrue(inspectStorage(storage).bytes < before)
+        repository.saveElapsed(puzzles[0], 123)
+        repository.markPlayed(puzzles[0])
+        val reopened = GameRepository(storage)
+        assertEquals(solved, reopened.game(puzzles[0])!!.cells)
+        assertTrue(reopened.game(puzzles[0])!!.history.isEmpty())
+        assertEquals(123, reopened.elapsed(puzzles[0]))
+        puzzles.drop(1).forEach { assertTrue(reopened.game(it)!!.history.isNotEmpty()) }
+    }
+
     @Test fun fadedOutsideCluesSurviveReopeningAndCanBeRestored() {
         val clue = PuzzleOverlay(GridPoint(1.5, -.5), width = 0.0, text = "1 6")
         val puzzle = SudokuFixtures.empty.copy(underlays = listOf(clue))
