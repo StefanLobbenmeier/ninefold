@@ -89,6 +89,33 @@ class GamePersistenceTest {
         assertTrue(repository.statuses.values.all { it == DownloadStatus.Ready })
     }
 
+    @Test fun browseFiltersSurviveReopeningAndClearing() {
+        val storage = MemoryAppStorage()
+        val repository = GameRepository(storage)
+        assertEquals("All", repository.settings.catalogProgress)
+        assertEquals("All", repository.settings.catalogDifficulty)
+        repository.saveSettings(repository.settings.copy(catalogProgress = "Unsolved", catalogDifficulty = "Hard"))
+
+        val reopened = GameRepository(storage)
+        assertEquals("Unsolved", reopened.settings.catalogProgress)
+        assertEquals("Hard", reopened.settings.catalogDifficulty)
+        reopened.saveSettings(reopened.settings.copy(letters = true))
+        assertEquals("Hard", GameRepository(storage).settings.catalogDifficulty)
+        reopened.saveSettings(reopened.settings.copy(catalogProgress = "All", catalogDifficulty = "All"))
+        assertEquals("All", GameRepository(storage).settings.catalogProgress)
+        assertEquals("All", GameRepository(storage).settings.catalogDifficulty)
+        assertTrue(GameRepository(storage).settings.letters)
+    }
+
+    @Test fun existingSettingsDefaultToUnfilteredBrowse() {
+        val storage = MemoryAppStorage()
+        storage.write("ninefold.settings.v1", """{"letters":true}""")
+        val settings = GameRepository(storage).settings
+        assertTrue(settings.letters)
+        assertEquals("All", settings.catalogProgress)
+        assertEquals("All", settings.catalogDifficulty)
+    }
+
     @Test fun movesNotesHistorySettingsAndTimerSurviveReopening() {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)

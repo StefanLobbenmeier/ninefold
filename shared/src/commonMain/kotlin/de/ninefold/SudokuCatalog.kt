@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -62,8 +61,8 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     val scope = rememberCoroutineScope()
     val playScroll = rememberLazyListState()
     val browseScroll = rememberLazyListState()
-    var progressFilter by rememberSaveable { mutableStateOf(CatalogProgress.All) }
-    var difficultyFilter by rememberSaveable { mutableStateOf(CatalogDifficulty.All) }
+    val progressFilter = CatalogProgress.entries.firstOrNull { it.name == games.settings.catalogProgress } ?: CatalogProgress.All
+    val difficultyFilter = CatalogDifficulty.entries.firstOrNull { it.name == games.settings.catalogDifficulty } ?: CatalogDifficulty.All
     val completedUrls = remember(games.games) {
         games.games.values.filter { it.completed }.mapNotNull { it.puzzle.sourceUrl }.toSet()
     }
@@ -73,8 +72,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     }
     fun scrollToFilters() { scope.launch { browseScroll.scrollToItem(0) } }
     fun resetFilters() {
-        progressFilter = CatalogProgress.All
-        difficultyFilter = CatalogDifficulty.All
+        games.saveSettings(games.settings.copy(catalogProgress = CatalogProgress.All.name, catalogDifficulty = CatalogDifficulty.All.name))
         scrollToFilters()
     }
 
@@ -205,8 +203,8 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
             }
             if (entries.isNotEmpty()) item {
                 CatalogFilters(filteredEntries.size, entries.size, progressFilter, difficultyFilter,
-                    onProgress = { progressFilter = it; scrollToFilters() },
-                    onDifficulty = { difficultyFilter = it; scrollToFilters() }, onReset = ::resetFilters,
+                    onProgress = { games.saveSettings(games.settings.copy(catalogProgress = it.name)); scrollToFilters() },
+                    onDifficulty = { games.saveSettings(games.settings.copy(catalogDifficulty = it.name)); scrollToFilters() }, onReset = ::resetFilters,
                     summary = index?.let { current ->
                         val ready = current.entries.count { statuses[it.id] == DownloadStatus.Ready }
                         "$ready offline · ${if (cached) "Saved index" else "Updated"} ${deviceDate(current.generatedAt.take(10))}"
