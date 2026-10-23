@@ -33,7 +33,7 @@ internal fun inspectStorage(storage: AppStorage): StorageUsage = try {
                 prefix == "timer" -> "Timers"
                 key == "ninefold.sudoku-index.v1" -> "Puzzle catalog"
                 key == "ninefold.settings.v1" -> "Settings"
-                key == "ninefold.games.v1" || key == "ninefold.recent-games.v1" -> "Game lists"
+                key in setOf("ninefold.games.v1", "ninefold.recent-games.v1", "ninefold.completed-games.v1") -> "Game lists"
                 key.startsWith("ninefold.") -> "Other app data"
                 else -> "Other site data"
             }
@@ -80,6 +80,7 @@ internal fun StorageSettingsDialog(repository: GameRepository, onDismiss: () -> 
                     usage.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
                 item {
+                    Text("Undo and redo history is kept for in-progress sudokus and your two most recently completed sudokus.")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(!byPuzzle, { byPuzzle = false }, label = { Text("By category") })
                         FilterChip(byPuzzle, { byPuzzle = true }, label = { Text("By sudoku") })

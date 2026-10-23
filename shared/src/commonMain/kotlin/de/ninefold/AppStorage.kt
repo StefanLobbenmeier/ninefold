@@ -16,6 +16,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 interface AppStorage {
     fun entries(): Map<String, String>? = null
@@ -40,7 +41,7 @@ internal data class CheckingSettings(
     val specialRules: Boolean = true, val solution: Boolean = true, val automaticSolution: Boolean = true,
 )
 
-@Serializable
+@Serializable(with = SavedGameSerializer::class)
 internal data class SavedGame(
     val puzzle: Puzzle, val cells: List<CellState>, val started: Boolean,
     val history: List<List<CellState>> = emptyList(), val redo: List<List<CellState>> = emptyList(),
@@ -59,6 +60,13 @@ internal class GameRepository(
     private val fetchPuzzleData: suspend (String) -> Puzzle = ::importSudokuPadPuzzle,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val legacyGames = mutableSetOf<String>()
+    private fun readGame(id: String): SavedGame? = runCatching {
+        val payload = storage.read("ninefold.game.$id.v1") ?: return@runCatching null
+        val game = json.decodeFromString<SavedGame>(payload)
+        if (json.parseToJsonElement(payload).jsonObject["historyEncoding"] == null) legacyGames += id
+        game
+    }.getOrNull()
     var storageError by mutableStateOf<String?>(null)
         private set
     private inline fun <reified T> read(key: String): T? = runCatching {
@@ -73,7 +81,7 @@ internal class GameRepository(
     var settings by mutableStateOf(read<CheckingSettings>("settings") ?: CheckingSettings())
         private set
     var games by mutableStateOf(read<List<String>>("games").orEmpty().mapNotNull { id ->
-        read<SavedGame>("game.$id")?.takeIf { it.cells.size == it.puzzle.cellCount }?.let { id to it.copy(automaticColours = DefaultAutomaticColours + it.automaticColours) }
+        readGame(id)?.takeIf { it.cells.size == it.puzzle.cellCount }?.let { id to it.copy(automaticColours = DefaultAutomaticColours + it.automaticColours) }
     }.toMap())
         private set
     private val puzzles = mutableMapOf<String, Puzzle>()
@@ -112,6 +120,28 @@ internal class GameRepository(
     fun saveSettings(value: CheckingSettings) { settings = value; write("settings", settings) }
     var recentGames by mutableStateOf(read<List<String>>("recent-games") ?: games.keys.reversed())
         private set
+    // Older saves have play order, but no completion order. Use that order once when migrating.
+    private var completedGames = read<List<String>>("completed-games")
+        ?: (recentGames + games.keys).distinct().filter { games[it]?.completed == true }
+
+    init {
+        completedGames = completedGames.filter { games[it]?.completed == true }.take(2)
+        pruneHistory()
+        legacyGames.forEach { id -> games[id]?.let { write("game.$id", it) } }
+        write("completed-games", completedGames)
+    }
+
+    private fun pruneHistory() {
+        val retained = completedGames.filter { games[it]?.completed == true }.take(2).toSet()
+        games = games.mapValues { (id, game) ->
+            if ((game.started && !game.completed) || id in retained || (game.history.isEmpty() && game.redo.isEmpty())) game
+            else {
+                val trimmed = game.copy(history = emptyList(), redo = emptyList())
+                if (write("game.$id", trimmed)) trimmed else game
+            }
+        }
+    }
+
     fun markPlayed(puzzle: Puzzle) {
         recentGames = listOf(puzzle.storageId()) + recentGames.filter { it != puzzle.storageId() }
         write("recent-games", recentGames)
@@ -119,9 +149,18 @@ internal class GameRepository(
     fun game(puzzle: Puzzle) = games[puzzle.storageId()]
     fun saveGame(game: SavedGame) {
         val id = game.puzzle.storageId()
+        val newlyCompleted = game.completed && games[id]?.completed != true
+        val previousCompletions = completedGames
         games = games + (id to game)
-        write("game.$id", game)
+        completedGames = when {
+            newlyCompleted -> listOf(id) + completedGames.filter { it != id }
+            !game.completed -> completedGames.filter { it != id }
+            else -> completedGames
+        }.take(2)
+        pruneHistory()
+        write("game.$id", games.getValue(id))
         write("games", games.keys.toList())
+        if (completedGames != previousCompletions) write("completed-games", completedGames)
     }
     fun elapsed(puzzle: Puzzle): Long = (read<Long>("timer.${puzzle.storageId()}") ?: 0L).coerceAtLeast(0)
     fun saveElapsed(puzzle: Puzzle, seconds: Long) { write("timer.${puzzle.storageId()}", seconds) }
