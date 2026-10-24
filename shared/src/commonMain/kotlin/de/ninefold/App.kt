@@ -1,5 +1,6 @@
 package de.ninefold
 
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 import androidx.compose.foundation.Canvas
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -784,13 +786,14 @@ private fun BoxScope.PuzzleGraphics(
             val scale = if (item.isKropkiDot()) .75f else 1f
             val area = Size((item.width * cell * scale).toFloat(), (item.height * cell * scale).toFloat())
             val topLeft = center - Offset(area.width / 2, area.height / 2)
+            val cornerRadius = CornerRadius(min(area.width, area.height) / 2f)
             // Zero-width XV boxes size the text; stroking them paints a line behind the glyph.
             if (area.width > 0f && area.height > 0f) {
                 item.backgroundColor?.toComposeColor()?.let { color ->
-                    if (item.rounded) drawOval(faded(color), topLeft, area) else drawRect(faded(color), topLeft, area)
+                    if (item.rounded) drawRoundRect(faded(color), topLeft, area, cornerRadius) else drawRect(faded(color), topLeft, area)
                 }
                 item.borderColor?.toComposeColor()?.let { color ->
-                    if (item.rounded) drawOval(faded(color), topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
+                    if (item.rounded) drawRoundRect(faded(color), topLeft, area, cornerRadius, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
                     else drawRect(faded(color), topLeft, area, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
                 }
             }
