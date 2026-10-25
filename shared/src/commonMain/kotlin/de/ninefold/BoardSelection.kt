@@ -31,7 +31,7 @@ internal fun selectionBorders(position: CellPosition, selected: Set<CellPosition
     }
 }
 
-/** Sven's tool-sensitive matching order, excluding cosmetic clues that are not cell state. */
+/** Filled values take priority; empty cells use the active tool's matching order. */
 internal fun toolSensitiveSelection(
     cells: List<CellState>,
     position: CellPosition,
@@ -58,8 +58,8 @@ internal fun toolSensitiveSelection(
             { it.colours.intersect(source.colours).isNotEmpty() },
         )
         InputMode.Colour -> listOf(
-            { it.colours.intersect(source.colours).isNotEmpty() },
             { it.value != null && it.value == source.value },
+            { it.colours.intersect(source.colours).isNotEmpty() },
             { source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
             { it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
         )
