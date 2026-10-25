@@ -13,18 +13,47 @@ class AutomaticColourTest {
             "Digits separated by a ‘V’ sum to 5." to setOf(CellColour.Green),
             "An X indicates a sum of 10." to setOf(CellColour.Green, CellColour.Red),
             "Standard XV rules apply." to setOf(CellColour.Green, CellColour.Red),
-            "German whisper lines have differences of at least five." to setOf(CellColour.Green, CellColour.Red),
-            "GERMAN-WHISPERS lines." to setOf(CellColour.Green, CellColour.Red),
+            "German whisper lines have differences of at least five." to setOf(CellColour.Green, CellColour.Yellow, CellColour.Red),
+            "GERMAN-WHISPERS lines." to setOf(CellColour.Green, CellColour.Yellow, CellColour.Red),
             "Even circles and V clues." to setOf(CellColour.Blue, CellColour.Orange, CellColour.Green),
             "Normal sudoku rules apply. Values on arrows sum to the circle. Extra dots." to emptySet(),
             "Dutch whisper lines." to emptySet(),
+            "Entropic lines." to setOf(CellColour.Green, CellColour.Yellow, CellColour.Red),
+            "Renban, palindrome, thermometer and region sum lines." to emptySet(),
         )
         cases.forEach { (text, expected) ->
             val puzzle = SudokuFixtures.empty.copy(rules = listOf(text))
             val actual = puzzle.initialAutomaticColours(null)
             assertEquals(expected.map { it.number }.toSet(), actual.filterValues { it.enabled }.keys, text)
-            assertEquals(DefaultAutomaticColours.mapValues { it.value.numbers }, actual.mapValues { it.value.numbers })
         }
+    }
+
+    @Test fun whisperAndSumCluesUseTheirRelevantDigitGroups() {
+        for (text in listOf("German whispers", "X clues", "V clues", "XV clues", "German whispers and entropic lines")) {
+            val colours = SudokuFixtures.empty.copy(rules = listOf(text)).initialAutomaticColours(null)
+            assertEquals((1..4).toSet(), colours[CellColour.Green.number]?.numbers, text)
+            assertEquals(setOf(5), colours[CellColour.Yellow.number]?.numbers, text)
+            assertEquals((6..9).toSet(), colours[CellColour.Red.number]?.numbers, text)
+        }
+        val puzzle = SudokuFixtures.empty.copy(lines = listOf(PuzzleLine(
+            listOf(GridPoint(.5, .5), GridPoint(.5, 1.5)), rule = LineRule.GermanWhisper,
+        )))
+        val colours = puzzle.initialAutomaticColours(null)
+        for (digit in 1..9) {
+            val expected = when (digit) {
+                in 1..4 -> CellColour.Green
+                5 -> CellColour.Yellow
+                else -> CellColour.Red
+            }
+            assertEquals(setOf(expected.number), CellState(value = digit).displayColours(colours))
+        }
+    }
+
+    @Test fun entropicLinesUseThirds() {
+        val colours = SudokuFixtures.empty.copy(rules = listOf("Entropic lines")).initialAutomaticColours(null)
+        assertEquals(setOf(1, 2, 3), colours[CellColour.Green.number]?.numbers)
+        assertEquals(setOf(4, 5, 6), colours[CellColour.Yellow.number]?.numbers)
+        assertEquals(setOf(7, 8, 9), colours[CellColour.Red.number]?.numbers)
     }
 
     @Test fun inferredDefaultsPersistAndUserDisablingThemSurvivesReopening() {
