@@ -259,6 +259,29 @@ class BoardSelectionInteractionTest {
         assertSelection(1 to 1, 3 to 3)
     }
 
+    @Test fun doubleTapColouredLettersSelectsOnlyMatchingValuesForReplacement() {
+        val puzzle = SudokuFixtures.empty
+        val cells = puzzle.startingCells().toMutableList().also {
+            it[0] = CellState(value = 10, colours = setOf(7))
+            it[1] = CellState(value = 10)
+            it[2] = CellState(value = 2, colours = setOf(7))
+            it[3] = CellState(colours = setOf(7))
+        }
+        val repository = GameRepository(MemoryAppStorage())
+        repository.saveGame(SavedGame(puzzle, cells, started = true))
+        compose.setContent { MaterialTheme { SudokuApp(puzzle, repository, "https://example.com/", {}) } }
+
+        compose.onNodeWithText("Colour").performClick()
+        cell(1, 1).performTouchInput { doubleClick() }
+        assertSelection(1 to 1, 1 to 2)
+        compose.onNodeWithText("Digit").performClick()
+        compose.onRoot().performKeyInput { pressKey(Key.One) }
+        cell(1, 1).assertContentDescriptionContains("column 1, 1, selected", substring = true)
+        cell(1, 2).assertContentDescriptionContains("column 2, 1, selected", substring = true)
+        cell(1, 3).assertContentDescriptionContains("column 3, 2", substring = true)
+        cell(1, 4).assertContentDescriptionContains("empty", substring = true)
+    }
+
     @Test fun adjacentSelectedCellsRenderOnlyExposedBoldEdges() {
         val puzzle = SudokuFixtures.empty
         val selected = setOf(CellPosition(0, 0), CellPosition(0, 1), CellPosition(1, 0), CellPosition(1, 1))

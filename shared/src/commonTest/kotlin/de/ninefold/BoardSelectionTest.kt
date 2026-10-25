@@ -39,6 +39,25 @@ class BoardSelectionTest {
         assertEquals(setOf(CellPosition(3, 0), CellPosition(3, 1)), toolSensitiveSelection(cells, CellPosition(3, 0), InputMode.Colour))
     }
 
+    @Test fun colouredDigitsAndLettersMatchValuesInEveryMode() {
+        for (value in listOf(1, 10)) {
+            val cells = SudokuFixtures.empty.startingCells().toMutableList().also {
+                it[0] = CellState(value = value, colours = setOf(7))
+                it[1] = CellState(value = value, colours = setOf(8))
+                it[2] = CellState(value = value)
+                it[3] = CellState(value = 2, colours = setOf(7))
+                it[4] = CellState(colours = setOf(7))
+            }
+            for (mode in InputMode.entries) {
+                assertEquals(
+                    setOf(CellPosition(0, 0), CellPosition(0, 1), CellPosition(0, 2)),
+                    toolSensitiveSelection(cells, CellPosition(0, 0), mode),
+                    "Value $value in $mode mode",
+                )
+            }
+        }
+    }
+
     @Test fun toolSensitiveSelectionFallsBackWhenThePreferredPropertyIsEmpty() {
         val cells = List(81) { CellState() }.toMutableList().also {
             it[0] = CellState(cornerNotes = setOf(6))
