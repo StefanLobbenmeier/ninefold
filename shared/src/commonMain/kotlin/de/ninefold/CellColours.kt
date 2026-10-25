@@ -40,13 +40,25 @@ internal fun Puzzle.initialAutomaticColours(saved: SavedGame?): Map<Int, Automat
     val xv = mentions("\\bXV\\b")
     val v = xv || mentions("\\bV\\b")
     val x = xv || mentions("\\bX\\b")
-    val whispers = mentions("\\bgerman[\\s-]+whispers?\\b")
+    val whispers = mentions("\\bgerman[\\s-]+whispers?\\b") ||
+        lines.any { it.rule == LineRule.GermanWhisper }
+    val entropic = mentions("\\bentropic\\b")
     val enabled = buildSet {
         if (parity) addAll(listOf(CellColour.Blue, CellColour.Orange))
-        if (v || x || whispers) add(CellColour.Green)
-        if (x || whispers) add(CellColour.Red)
+        if (v || x || whispers || entropic) add(CellColour.Green)
+        if (x || whispers || entropic) add(CellColour.Red)
+        if (whispers || entropic) add(CellColour.Yellow)
     }.map { it.number }.toSet()
-    return DefaultAutomaticColours.mapValues { (colour, rule) -> rule.copy(enabled = colour in enabled) }
+    // Sum-5 clues use 1–4; sum-10 clues and German whispers separate around 5.
+    // Prefer these bounds when a puzzle also mentions entropic lines.
+    val numbers = if (v || x || whispers) mapOf(
+        CellColour.Green.number to (1..4).toSet(),
+        CellColour.Yellow.number to setOf(5),
+        CellColour.Red.number to (6..9).toSet(),
+    ) else emptyMap()
+    return DefaultAutomaticColours.mapValues { (colour, rule) ->
+        rule.copy(enabled = colour in enabled, numbers = numbers[colour] ?: rule.numbers)
+    }
 }
 
 /** Display colours are derived from live content; only manual colours belong to cell state. */
