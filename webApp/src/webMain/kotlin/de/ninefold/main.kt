@@ -24,6 +24,7 @@ fun main() {
                 App(
                     BrowserIndexCache, initialShareLink = pageUrl, shareBaseUrl = pageUrl,
                     appUpdateState = updateState, onApplyUpdate = ::applyAppUpdate,
+                    onPlayingChange = ::setAppUpdatePaused,
                 )
             }
         }
@@ -35,3 +36,5 @@ internal expect fun openBrowserExternalLink(uri: String)
 
 internal expect fun observeAppUpdate(onChange: (String) -> Unit): () -> Unit
 internal expect fun applyAppUpdate()
+
+internal expect fun setAppUpdatePaused(paused: Boolean)

@@ -95,11 +95,14 @@ internal class GameRepository(
 
     fun prepare(entries: List<SudokuIndexEntry>, scope: CoroutineScope, downloadMissing: Boolean = true) {
         entries.forEach { entry ->
+            // Resume downloads cancelled when the catalog left composition.
+            val shouldDownload = downloadMissing || statuses[entry.id] == DownloadStatus.Waiting ||
+                statuses[entry.id] == DownloadStatus.Downloading
             if (cachedPuzzle(entry) != null) statuses[entry.id] = DownloadStatus.Ready
-            else if (!downloadMissing && downloads[entry.id]?.isActive != true) {
+            else if (!shouldDownload && downloads[entry.id]?.isActive != true) {
                 statuses[entry.id] = DownloadStatus.Failed
                 downloadErrors[entry.id] = "This puzzle has not been saved offline. Connect to the internet and retry."
-            } else if (downloadMissing && downloads[entry.id]?.isActive != true) {
+            } else if (shouldDownload && downloads[entry.id]?.isActive != true) {
                 statuses[entry.id] = DownloadStatus.Waiting
                 downloadErrors.remove(entry.id)
                 downloads[entry.id] = scope.launch {

@@ -15,3 +15,6 @@ internal actual fun observeAppUpdate(onChange: (String) -> Unit): () -> Unit {
 
 @JsFun("() => window.ninefoldUpdate.apply()")
 internal actual external fun applyAppUpdate()
+
+@JsFun("(paused) => window.ninefoldUpdate.setPaused(paused)")
+internal actual external fun setAppUpdatePaused(paused: Boolean)

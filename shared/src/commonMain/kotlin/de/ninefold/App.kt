@@ -100,13 +100,13 @@ fun App(
     shareBaseUrl: String = DEFAULT_SHARE_BASE_URL,
     appUpdateState: AppUpdateState = AppUpdateState.None,
     onApplyUpdate: () -> Unit = {},
+    onPlayingChange: (Boolean) -> Unit = {},
 ) {
     val localIndexCache = remember(storage, indexCache) { indexCache ?: object : SudokuIndexCache {
         override fun read() = storage.read("ninefold.sudoku-index.v1")
         override fun write(payload: String) = storage.write("ninefold.sudoku-index.v1", payload)
     } }
     val games = remember(storage) { GameRepository(storage) }
-    val downloadScope = rememberCoroutineScope()
     MaterialTheme(
         colorScheme = lightColorScheme(primary = Moss, onPrimary = Color.White, primaryContainer = Sage, onPrimaryContainer = Moss, secondary = Moss, secondaryContainer = Sage, onSecondaryContainer = Moss, background = Paper, surface = Color.White, onSurface = Ink, onSurfaceVariant = Color(0xFF68756D), outline = Color(0xFFC6CEC5), error = ErrorRed),
         typography = Typography(),
@@ -118,10 +118,11 @@ fun App(
         val repository = remember(localIndexCache, indexRepository) { indexRepository ?: SudokuIndexRepository(localIndexCache) }
         val screenState = rememberSaveableStateHolder()
         val current = activePuzzle
+        SideEffect { onPlayingChange(current != null) }
         var showStorage by remember { mutableStateOf(false) }
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (current == null) screenState.SaveableStateProvider("catalog") { SudokuCatalog(repository, games, downloadScope, appUpdateState, onApplyUpdate, browseTab, { browseTab = it }) { activePuzzle = it } }
+                if (current == null) screenState.SaveableStateProvider("catalog") { SudokuCatalog(repository, games, rememberCoroutineScope(), appUpdateState, onApplyUpdate, browseTab, { browseTab = it }) { activePuzzle = it } }
                 else key(current) { SudokuApp(current, games, shareBaseUrl) { activePuzzle = null } }
             }
             shareError?.let { message -> AlertDialog(

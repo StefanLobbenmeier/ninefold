@@ -396,3 +396,22 @@ test('repair checks the network before unregistering and never clears stored dat
         }
     }
 });
+
+test('playing pauses update checks and defers cross-tab reload until browsing', async () => {
+    const page = await browserUpdates();
+    page.window.ninefoldUpdate.setPaused(true);
+    await page.intervals[0].callback();
+    for (const event of ['focus', 'pageshow']) page.window.dispatchEvent(new Event(event));
+    page.document.dispatchEvent(new Event('visibilitychange'));
+    await settle();
+    assert.equal(page.checks, 1);
+    page.window.ninefoldUpdate.setPaused(false);
+    await settle();
+    assert.equal(page.checks, 2);
+    page.window.ninefoldUpdate.setPaused(true);
+    page.serviceWorker.dispatchEvent(new Event('controllerchange'));
+    page.serviceWorker.dispatchEvent(new Event('controllerchange'));
+    assert.equal(page.reloads, 0);
+    page.window.ninefoldUpdate.setPaused(false);
+    assert.equal(page.reloads, 1);
+});
