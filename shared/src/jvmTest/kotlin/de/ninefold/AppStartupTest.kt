@@ -133,6 +133,37 @@ class AppStartupTest {
     }
 
     @Test
+    fun savedCatalogOpensOfflineWithoutRefreshing() {
+        val storage = MemoryAppStorage()
+        val url = "https://sudokupad.app/synthetic-offline"
+        val puzzle = SudokuFixtures.empty.copy(title = "Offline puzzle", sourceUrl = url)
+        storage.write("ninefold.puzzle.$url.v1", Json.encodeToString(puzzle))
+        val cache = MemorySudokuIndexCache().also {
+            it.write("""{"schemaVersion":1,"generatedAt":"2026-10-12","sources":[],"entries":[
+                {"id":"offline","sourceId":"test","title":"Offline puzzle","publishedAt":"2026-10-12",
+                "puzzleUrl":"$url","metadata":{"thumbnailUrl":"https://example.com/synthetic.jpg"}}
+            ]}""")
+        }
+        var refreshes = 0
+        val repository = SudokuIndexRepository(cache) {
+            refreshes++
+            error("No connection")
+        }
+        compose.setContent { App(storage = storage, indexRepository = repository) }
+        compose.onNodeWithText("Browse").performClick()
+        compose.onNodeWithText("Refreshing puzzles…").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Play Offline puzzle").assertIsEnabled().performClick()
+        compose.onNodeWithText("Okay, start puzzle").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, refreshes) }
+        compose.onNodeWithText("Okay, start puzzle").performClick()
+        compose.onNodeWithContentDescription("Back to puzzles").performClick()
+        compose.onNodeWithContentDescription("Refresh").performClick()
+        compose.onNodeWithText("Could not refresh. Showing the saved sudoku index.").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Play Offline puzzle").assertIsEnabled()
+        compose.runOnIdle { assertEquals(1, refreshes) }
+    }
+
+    @Test
     fun applicationStartsAndLoadsCatalog() {
         // Use the real JVM HTTP engine against a local server so startup exercises
         // Ktor, coroutines, JSON parsing, Compose, Skiko, and Material without internet access.

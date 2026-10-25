@@ -47,7 +47,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     fun switchTab(value: Boolean) { if (onTab == null) localTab = value else onTab(value) }
     val inProgress = games.games.values.filter { it.started && !it.completed }.sortedBy { games.recentGames.indexOf(it.puzzle.storageId()).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
     var index by remember(repository) { mutableStateOf(repository.cached()) }
-    var refreshing by remember { mutableStateOf(true) }
+    var refreshing by remember { mutableStateOf(index == null) }
     var cached by remember { mutableStateOf(index != null) }
     var refreshRequest by remember { mutableStateOf(0) }
     var indexError by remember { mutableStateOf<String?>(null) }
@@ -94,7 +94,10 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
         }
     }
 
+    // A saved catalog is immediately usable offline. Network work is explicit
+    // on subsequent visits; only the first catalog load needs a connection.
     LaunchedEffect(repository, refreshRequest) {
+        if (index != null && refreshRequest == 0) return@LaunchedEffect
         refreshing = true
         indexError = null
         try {
@@ -108,8 +111,8 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
         } finally { refreshing = false }
     }
 
-    LaunchedEffect(index, refreshRequest) {
-        games.prepare(index?.entries.orEmpty(), downloadScope)
+    LaunchedEffect(index, refreshRequest, cached) {
+        games.prepare(index?.entries.orEmpty(), downloadScope, downloadMissing = !cached)
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()) {
@@ -249,7 +252,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                         val wide = maxWidth >= 600.dp
                         val details: @Composable () -> Unit = {
                             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                if (entry.thumbnailUrl == null && status == DownloadStatus.Ready) games.cachedPuzzle(entry)?.let { puzzle ->
+                                if ((cached || entry.thumbnailUrl == null) && status == DownloadStatus.Ready) games.cachedPuzzle(entry)?.let { puzzle ->
                                     val saved = games.game(puzzle)
                                     PuzzlePreview(puzzle, saved?.cells ?: remember(puzzle) { puzzle.startingCells() },
                                         Modifier.size(80.dp), saved?.automaticColours ?: emptyMap())
@@ -271,14 +274,14 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                         }
                         if (wide) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                entry.thumbnailUrl?.let {
+                                entry.thumbnailUrl?.takeUnless { cached }?.let {
                                     VideoThumbnail(it, entry.durationSeconds, Modifier.width(240.dp))
                                 }
                                 Box(Modifier.weight(1f)) { details() }
                             }
                         } else {
                             Column {
-                                entry.thumbnailUrl?.let { VideoThumbnail(it, entry.durationSeconds) }
+                                entry.thumbnailUrl?.takeUnless { cached }?.let { VideoThumbnail(it, entry.durationSeconds) }
                                 details()
                             }
                         }

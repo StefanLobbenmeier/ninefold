@@ -89,6 +89,30 @@ class GamePersistenceTest {
         assertTrue(repository.statuses.values.all { it == DownloadStatus.Ready })
     }
 
+    @Test fun savedCatalogPreparationDoesNotFetchMissingPuzzles() = runTest {
+        val storage = MemoryAppStorage()
+        val entries = (1..2).map { SudokuIndexEntry("$it", "Saved puzzle", "Test", "2026-10-12", "https://sudokupad.app/synthetic-$it") }
+        val puzzle = SudokuFixtures.empty.copy(sourceUrl = entries.first().puzzleUrl)
+        GameRepository(storage).fetchPuzzle(entries.first()) { puzzle }
+        val reopened = GameRepository(storage, fetchPuzzleData = { error("Offline startup must not fetch") })
+        reopened.prepare(entries, this, downloadMissing = false)
+        advanceUntilIdle()
+        assertEquals(DownloadStatus.Ready, reopened.statuses["1"])
+        assertEquals(DownloadStatus.Failed, reopened.statuses["2"])
+        assertEquals(puzzle, reopened.fetchPuzzle(entries.first()))
+    }
+
+    @Test fun savedGameCanOpenFromCatalogWithoutSeparateDownloadRecord() = runTest {
+        val storage = MemoryAppStorage()
+        val entry = SudokuIndexEntry("saved", "Saved puzzle", "Test", "2026-10-12", "https://sudokupad.app/synthetic-saved")
+        val puzzle = SudokuFixtures.empty.copy(sourceUrl = entry.puzzleUrl)
+        GameRepository(storage).saveGame(SavedGame(puzzle, puzzle.startingCells(), true))
+        val reopened = GameRepository(storage, fetchPuzzleData = { error("Saved game must open offline") })
+        reopened.prepare(listOf(entry), this, downloadMissing = false)
+        assertEquals(DownloadStatus.Ready, reopened.statuses[entry.id])
+        assertEquals(puzzle, reopened.fetchPuzzle(entry))
+    }
+
     @Test fun browseFiltersSurviveReopeningAndClearing() {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)

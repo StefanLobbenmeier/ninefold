@@ -93,10 +93,13 @@ internal class GameRepository(
     private val downloads = mutableMapOf<String, Job>()
     private val slots = Semaphore(4)
 
-    fun prepare(entries: List<SudokuIndexEntry>, scope: CoroutineScope) {
+    fun prepare(entries: List<SudokuIndexEntry>, scope: CoroutineScope, downloadMissing: Boolean = true) {
         entries.forEach { entry ->
             if (cachedPuzzle(entry) != null) statuses[entry.id] = DownloadStatus.Ready
-            else if (downloads[entry.id]?.isActive != true) {
+            else if (!downloadMissing && downloads[entry.id]?.isActive != true) {
+                statuses[entry.id] = DownloadStatus.Failed
+                downloadErrors[entry.id] = "This puzzle has not been saved offline. Connect to the internet and retry."
+            } else if (downloadMissing && downloads[entry.id]?.isActive != true) {
                 statuses[entry.id] = DownloadStatus.Waiting
                 downloadErrors.remove(entry.id)
                 downloads[entry.id] = scope.launch {
@@ -166,7 +169,8 @@ internal class GameRepository(
     fun elapsed(puzzle: Puzzle): Long = (read<Long>("timer.${puzzle.storageId()}") ?: 0L).coerceAtLeast(0)
     fun saveElapsed(puzzle: Puzzle, seconds: Long) { write("timer.${puzzle.storageId()}", seconds) }
     fun cachedPuzzle(entry: SudokuIndexEntry): Puzzle? = puzzles[entry.puzzleUrl]
-        ?: read<Puzzle>("puzzle.${entry.puzzleUrl}")?.also { puzzles[entry.puzzleUrl] = it }
+        ?: (read<Puzzle>("puzzle.${entry.puzzleUrl}") ?: games[entry.puzzleUrl]?.puzzle)
+            ?.also { puzzles[entry.puzzleUrl] = it }
 
     suspend fun reimportPuzzle(
         sourceUrl: String,
