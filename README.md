@@ -124,10 +124,11 @@ The Browse tab shows the newest puzzles from
 player. The back arrow, a swipe from the left edge, or system/browser Back returns to the previous tab. Import is available from the main menu. The Play tab features the last played unfinished puzzle, with smaller cards for other ongoing and solved puzzles. Unavailable puzzles are muted until ready; failed downloads have a Retry action.
 
 The app saves the last valid index locally and displays it immediately on subsequent
-visits while refreshing. Failed requests or invalid index responses preserve the saved list. Refresh
+visits; use Refresh to request a new index. Failed requests or invalid index responses preserve the saved list. Refresh
 retries the request; first visits without a connection show an error until a download succeeds.
 All catalog puzzles are eagerly fetched, converted, and saved with up to four downloads at once,
-including while playing. Each entry shows waiting, fetching/converting, ready offline, or failed status.
+while browsing. Opening a puzzle cancels unfinished catalog requests; pending puzzle downloads resume
+when returning to the catalog. Each entry shows waiting, fetching/converting, ready offline, or failed status.
 Ready offline means the converted puzzle was successfully stored; opening it makes no puzzle request.
 Refresh or an entry's Retry button retries failures. Long-press a saved SudokuPad puzzle in Continue,
 Solved, or a ready offline catalog entry to fetch and convert it again with the current importer.
@@ -141,7 +142,9 @@ a loading indicator until the bundled heading font is decoded, so headings appea
 on the first frame, including offline. Updates download
 into a separate cache; failed or interrupted downloads preserve the working release. A complete update
 shows a “New version ready” banner at the top of Home. Select Reload to activate it and reload
-all open app tabs. Checks run on launch, every five minutes, and when returning to the app;
+all open app tabs (tabs playing a puzzle defer the reload until returning to the catalog).
+Checks run on launch, every five minutes, and when returning to the app, but pause while a puzzle
+is open or the app is hidden. Returning to the catalog resumes checks;
 updates also activate naturally after all app tabs close. Fetched puzzles and fallback fonts have a separate cache that
 survives app updates. The first visit needs a connection until the app download completes.
 Browser storage must be available for persistent

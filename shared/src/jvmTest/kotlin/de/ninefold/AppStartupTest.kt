@@ -43,6 +43,31 @@ class AppStartupTest {
     }
 
     @Test
+    fun playingPausesBackgroundWorkUntilReturningToCatalog() {
+        val playing = mutableListOf<Boolean>()
+        var refreshes = 0
+        val index = SudokuIndexRepository(MemorySudokuIndexCache()) {
+            refreshes++
+            """{"schemaVersion":1,"generatedAt":"2026-10-15","sources":[],"entries":[]}"""
+        }
+        val storage = MemoryAppStorage()
+        compose.setContent {
+            App(storage = storage, indexRepository = index,
+                initialShareLink = puzzleShareLink(SudokuFixtures.classic),
+                onPlayingChange = { playing.add(it) })
+        }
+        compose.onNodeWithText("Okay, start puzzle").performClick()
+        compose.runOnIdle {
+            assertTrue(playing.last())
+            assertEquals(0, refreshes)
+        }
+        compose.onNodeWithContentDescription("Back to puzzles").performClick()
+        compose.runOnIdle { assertEquals(false, playing.last()) }
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(1, refreshes) }
+    }
+
+    @Test
     fun puzzleStartsAfterRotatingToShortLandscape() {
         val landscape = androidx.compose.runtime.mutableStateOf(false)
         val storage = MemoryAppStorage()

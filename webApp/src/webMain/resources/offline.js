@@ -3,6 +3,13 @@ window.ninefoldUpdate = (() => {
     let registration;
     let state = 'None';
     let activationTimeout;
+    let paused = false;
+    let checkForUpdate = () => {};
+    let pendingReload = false;
+    const reload = () => {
+        pendingReload = false;
+        window.location.reload();
+    };
     const listeners = new Set();
     const publish = value => {
         state = value;
@@ -17,9 +24,17 @@ window.ninefoldUpdate = (() => {
             listener(state);
             return () => listeners.delete(listener);
         },
+        setPaused(value) {
+            if (paused === value) return;
+            paused = value;
+            if (!paused) {
+                if (pendingReload) reload();
+                else checkForUpdate();
+            }
+        },
         apply() {
             const waiting = registration?.waiting;
-            if (!waiting || state === 'Applying') return;
+            if (paused || !waiting || state === 'Applying') return;
             publish('Applying');
             // Keep the action retryable if activation fails or the worker disappears.
             activationTimeout = setTimeout(() => publish('Failed'), 15000);
@@ -38,7 +53,8 @@ window.ninefoldUpdate = (() => {
             if (controlled && !reloading) {
                 reloading = true;
                 clearTimeout(activationTimeout);
-                window.location.reload();
+                if (paused) pendingReload = true;
+                else reload();
             }
             controlled = true;
         });
@@ -56,12 +72,13 @@ window.ninefoldUpdate = (() => {
 
             let checking = false;
             const check = async () => {
-                if (checking) return;
+                if (paused || checking || document.visibilityState !== 'visible') return;
                 checking = true;
                 try { await registration.update(); }
                 catch (error) { console.warn('Update check unavailable', error); }
                 finally { checking = false; ready(); }
             };
+            checkForUpdate = check;
             check();
             setInterval(check, 5 * 60 * 1000);
             const resume = () => { if (document.visibilityState === 'visible') check(); };
