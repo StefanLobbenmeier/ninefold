@@ -4,6 +4,21 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class BoardGeometryTest {
+    @Test fun outsideArrowsIncludeEveryEdgeAndDiagonalButExcludeGridConstraints() {
+        val arrows = listOf(
+            listOf(GridPoint(.5, -.5), GridPoint(.5, -.1)),
+            listOf(GridPoint(.5, 6.5), GridPoint(.5, 6.1)),
+            listOf(GridPoint(-.5, .5), GridPoint(-.1, .5)),
+            listOf(GridPoint(6.5, .5), GridPoint(6.1, .5)),
+            listOf(GridPoint(-.5, -.5), GridPoint(0.0, 0.0)),
+            listOf(GridPoint(6.5, 6.5), GridPoint(6.0, 6.0)),
+        )
+        arrows.forEach { kotlin.test.assertTrue(PuzzleArrow(it).isOutsideClue(6)) }
+        kotlin.test.assertFalse(PuzzleArrow(listOf(GridPoint(.5, .5), GridPoint(1.5, 1.5))).isOutsideClue(6))
+        kotlin.test.assertFalse(PuzzleArrow(listOf(GridPoint(-.5, -.5), GridPoint(.5, .5))).isOutsideClue(6))
+        kotlin.test.assertFalse(PuzzleArrow(emptyList()).isOutsideClue(6))
+    }
+
     @Test fun onlyOutsideTextCanBeFaded() {
         val clue = PuzzleOverlay(GridPoint(1.5, -.5), width = 0.0, text = "1 6")
         kotlin.test.assertTrue(clue.isOutsideTextClue())

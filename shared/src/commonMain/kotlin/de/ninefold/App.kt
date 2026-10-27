@@ -149,6 +149,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val digitCounts = remember(cells) { cells.mapNotNull { it.value }.groupingBy { it }.eachCount() }
     var automaticColours by remember(puzzle) { mutableStateOf(puzzle.initialAutomaticColours(saved)) }
     var fadedOutsideClues by remember(puzzle) { mutableStateOf(saved?.fadedOutsideClues.orEmpty()) }
+    var fadedOutsideArrows by remember(puzzle) { mutableStateOf(saved?.fadedOutsideArrows.orEmpty()) }
     var finalized by remember(puzzle) { mutableStateOf(cells) }
     var colourSettings by remember { mutableStateOf<CellColour?>(null) }
     var selected by remember(puzzle) { mutableStateOf(setOf(CellPosition(0, minOf(2, puzzle.size - 1)))) }
@@ -192,7 +193,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     }
 
     fun save() {
-        repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack, automaticColours, fadedOutsideClues))
+        repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack, automaticColours, fadedOutsideClues, fadedOutsideArrows))
         repository.saveElapsed(puzzle, clock.elapsedSeconds())
     }
     DisposableEffect(puzzle) {
@@ -201,6 +202,11 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
 
     fun toggleOutsideClue(clue: PuzzleOverlay) {
         fadedOutsideClues = if (clue in fadedOutsideClues) fadedOutsideClues - clue else fadedOutsideClues + clue
+        save()
+    }
+
+    fun toggleOutsideArrow(arrow: PuzzleArrow) {
+        fadedOutsideArrows = if (arrow in fadedOutsideArrows) fadedOutsideArrows - arrow else fadedOutsideArrows + arrow
         save()
     }
 
@@ -317,7 +323,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                 PortraitPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
                     board = {
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     },
                 ) {
                     Controls(puzzle.size, effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
@@ -326,7 +332,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                 DesktopPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
                     board = {
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     },
                 ) {
                     DesktopPlayerSidebar(
@@ -534,7 +540,7 @@ private fun CompletionDialog(puzzle: Puzzle, elapsed: Long, onViewPuzzle: () -> 
 }
 
 @Composable
-internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), interactive: Boolean = true, fadedOutsideClues: Set<PuzzleOverlay> = emptySet(), onToggleOutsideClue: ((PuzzleOverlay) -> Unit)? = null, onSelect: (CellPosition) -> Unit) {
+internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), interactive: Boolean = true, fadedOutsideClues: Set<PuzzleOverlay> = emptySet(), onToggleOutsideClue: ((PuzzleOverlay) -> Unit)? = null, fadedOutsideArrows: Set<PuzzleArrow> = emptySet(), onToggleOutsideArrow: ((PuzzleArrow) -> Unit)? = null, onSelect: (CellPosition) -> Unit) {
     val currentSelection by rememberUpdatedState(selected)
     val currentDragSelection by rememberUpdatedState(onDragSelection)
     val currentToolSelect by rememberUpdatedState(onToolSelect)
@@ -571,7 +577,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     }
                 }
             }
-            PuzzleGraphics(puzzle, inset, boxGap, measurer, hiddenOverlays = revealedMarks, fadedOutsideClues = fadedOutsideClues)
+            PuzzleGraphics(puzzle, inset, boxGap, measurer, hiddenOverlays = revealedMarks, fadedOutsideClues = fadedOutsideClues, fadedOutsideArrows = fadedOutsideArrows)
             Box(Modifier.fillMaxSize().padding(inset).then(
                 if (!interactive || onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
                     var lastTapPosition: CellPosition? = null
@@ -718,6 +724,22 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                         .clickable(onClickLabel = if (clue in fadedOutsideClues) "Restore clue" else "Gray out clue") { onToggleOutsideClue(clue) })
                 }
             }
+            if (interactive && onToggleOutsideArrow != null) {
+                val axis = BoardAxis(with(density) { (boardWidth - inset * 2).toPx() }, with(density) { boxGap.toPx() }, puzzle.size)
+                puzzle.arrows.filter { it.isOutsideClue(puzzle.size) }.distinct().forEach { arrow ->
+                    val minX = arrow.points.minOf { axis.at(it.column) }
+                    val maxX = arrow.points.maxOf { axis.at(it.column) }
+                    val minY = arrow.points.minOf { axis.at(it.row) }
+                    val maxY = arrow.points.maxOf { axis.at(it.row) }
+                    val width = with(density) { max(axis.cellSize * .6f, maxX - minX + axis.cellSize * .3f).toDp() }
+                    val height = with(density) { max(axis.cellSize * .6f, maxY - minY + axis.cellSize * .3f).toDp() }
+                    val left = inset + with(density) { ((minX + maxX) / 2).toDp() } - width / 2
+                    val top = inset + with(density) { ((minY + maxY) / 2).toDp() } - height / 2
+                    Box(Modifier.offset(left, top).size(width, height)
+                        .semantics { contentDescription = "Outside arrow ${puzzle.arrows.indexOf(arrow) + 1}"; this.selected = arrow in fadedOutsideArrows }
+                        .clickable(onClickLabel = if (arrow in fadedOutsideArrows) "Restore arrow" else "Gray out arrow") { onToggleOutsideArrow(arrow) })
+                }
+            }
             // Edge clues and fully revealed quadruples cover the grid with their backing shapes.
             if (revealedMarks.isNotEmpty()) PuzzleGraphics(puzzle, inset, boxGap, measurer, revealedMarks)
             Canvas(Modifier.fillMaxSize().padding(inset)) {
@@ -774,6 +796,7 @@ private fun BoxScope.PuzzleGraphics(
     puzzle: Puzzle, inset: Dp, boxGap: Dp, measurer: androidx.compose.ui.text.TextMeasurer,
     revealedMarks: List<PuzzleOverlay>? = null, hiddenOverlays: List<PuzzleOverlay> = emptyList(),
     fadedOutsideClues: Set<PuzzleOverlay> = emptySet(),
+    fadedOutsideArrows: Set<PuzzleArrow> = emptySet(),
 ) {
     Canvas(Modifier.matchParentSize()) {
         val padding = inset.toPx()
@@ -818,7 +841,8 @@ private fun BoxScope.PuzzleGraphics(
             }
         }
         puzzle.arrows.forEach { arrow ->
-            val color = arrow.color.toComposeColor() ?: Color.Gray
+            val baseColor = arrow.color.toComposeColor() ?: Color.Gray
+            val color = if (arrow in fadedOutsideArrows) baseColor.copy(alpha = baseColor.alpha * .25f) else baseColor
             val width = (arrow.thickness / 50.0 * cell).toFloat().coerceAtLeast(1.5f)
             drawConstraintLine(arrow.points.map(::at), color, width)
             val tip = arrow.points.lastOrNull()?.let(::at); val previous = arrow.points.dropLast(1).lastOrNull()?.let(::at)
