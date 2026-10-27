@@ -63,3 +63,11 @@ internal class BoardAxis(val extent: Float, boxGap: Float, val size: Int = 9) {
 /** Outside text is actionable even when its rule is not understood by the importer. */
 internal fun PuzzleOverlay.isOutsideTextClue(size: Int = 9): Boolean = !text.isNullOrBlank() &&
     (center.row < 0 || center.row > size || center.column < 0 || center.column > size)
+
+/** All shaft points must stay outside the grid, including diagonal arrows ending on its edge. */
+internal fun PuzzleArrow.isOutsideClue(size: Int): Boolean = points.size >= 2 &&
+    circle == null && pathCells.isEmpty() && points.all {
+        it.row <= 0 || it.row >= size || it.column <= 0 || it.column >= size
+    } && points.any {
+        it.row < 0 || it.row > size || it.column < 0 || it.column > size
+    }
