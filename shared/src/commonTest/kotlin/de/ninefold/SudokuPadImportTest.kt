@@ -97,10 +97,18 @@ class SudokuPadImportTest {
         assertEquals("#FF0000", puzzle.overlays[1].borderColor)
     }
 
+    @Test fun ignoresUnmarkedFpuzzlesSolutionValues() {
+        val payload = SudokuFixtures.fpuzzlesPayload(givens = "12" + ".".repeat(79))
+            .replace("{\"value\":2,\"given\":true}", "{\"value\":2}")
+        val puzzle = parseSudokuPadPayload(payload)
+        assertEquals("1" + ".".repeat(80), puzzle.givens)
+        assertEquals(CellState(), puzzle.startingCells()[1])
+        assertTrue(puzzle.initialValues.isEmpty())
+    }
+
     @Test fun importsFixedAndEditableCellValuesWithoutChangingSclSemantics() {
         val payload = SudokuFixtures.fpuzzlesPayload(givens = "12" + ".".repeat(79))
-            .replace("{\"value\":1}", "{\"value\":1,\"given\":true}")
-            .replace("{\"value\":2}", "{\"value\":2,\"given\":false}")
+            .replace("{\"value\":2,\"given\":true}", "{\"value\":2,\"given\":false}")
         val puzzle = parseSudokuPadPayload(payload)
         assertEquals("1." + ".".repeat(79), puzzle.givens)
         assertEquals(CellState(1, given = true), puzzle.startingCells()[0])
