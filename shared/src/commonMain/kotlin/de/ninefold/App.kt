@@ -341,6 +341,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                         rules = {
                             SideCard("PUZZLE NOTES") {
                                 RulesText(puzzle.rules)
+            if (puzzle.solution == null) Text("Note: This puzzle does not have solution checking.", Modifier.padding(top = 8.dp))
                             }
                         },
                         input = {
@@ -551,7 +552,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
     val hasOutside = padCells > 0f
     val litCells = remember(puzzle, cells) { puzzle.litCells(cells) }
     val revealedMarks = remember(puzzle, litCells) {
-        (puzzle.underlays + puzzle.overlays).filter {
+        if (puzzle.fogLights == null) emptyList() else (puzzle.underlays + puzzle.overlays).filter {
             it.isRevealedEdgeMark(litCells) || it.isRevealedQuadruple(puzzle.quadruples, litCells)
         }
     }
@@ -579,6 +580,8 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     }
                 }
             }
+            // Grid is the background for all constraint artwork, regardless of clue type.
+            GridLines(puzzle, inset, boxGap)
             PuzzleGraphics(puzzle, inset, boxGap, measurer, hiddenOverlays = revealedMarks, fadedOutsideClues = fadedOutsideClues, fadedOutsideArrows = fadedOutsideArrows)
             Box(Modifier.fillMaxSize().padding(inset).then(
                 if (!interactive || onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
@@ -693,24 +696,8 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     }
                 } } }
             }
-            // Keep cell boundaries above the opaque fog layer.
-            Canvas(Modifier.fillMaxSize().padding(inset)) {
-                val thin = .55.dp.toPx()
-                val thick = 1.5.dp.toPx()
-                val color = Ink.copy(alpha = .65f)
-                val horizontal = BoardAxis(size.width, boxGap.toPx(), puzzle.size)
-                val vertical = BoardAxis(size.height, boxGap.toPx(), puzzle.size)
-                val regions = puzzle.regionCells()
-                fun region(row: Int, column: Int) = regions.indexOfFirst { CellPosition(row, column) in it }
-                for (line in 1 until puzzle.size) for (offset in 0 until puzzle.size) {
-                    val x = horizontal.divider(line)
-                    val y = vertical.divider(line)
-                    drawLine(color, Offset(x, vertical.at(offset.toDouble())), Offset(x, vertical.at(offset + 1.0)),
-                        if (region(offset, line - 1) != region(offset, line)) thick else thin)
-                    drawLine(color, Offset(horizontal.at(offset.toDouble()), y), Offset(horizontal.at(offset + 1.0), y),
-                        if (region(line - 1, offset) != region(line, offset)) thick else thin)
-                }
-            }
+            // Fog covers artwork, but its hidden cells still need visible boundaries.
+            if (puzzle.fogLights != null) GridLines(puzzle, inset, boxGap, litCells)
             // Text clues can have zero-width artwork; include the glyphs in their tap targets.
             if (interactive && onToggleOutsideClue != null) {
                 val extent = with(density) { (boardWidth - inset * 2).toPx() }
@@ -743,7 +730,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                         .clickable(onClickLabel = if (arrow in fadedOutsideArrows) "Restore arrow" else "Gray out arrow") { onToggleOutsideArrow(arrow) })
                 }
             }
-            // Edge clues and fully revealed quadruples cover the grid with their backing shapes.
+            // Fog edge clues can be revealed whole even while adjacent cells remain hidden.
             if (revealedMarks.isNotEmpty()) PuzzleGraphics(puzzle, inset, boxGap, measurer, revealedMarks)
             Canvas(Modifier.fillMaxSize().padding(inset)) {
                 val width = 2.dp.toPx()
@@ -752,6 +739,40 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                     Size(size.width + width, size.height + width), style = Stroke(width))
             }
         }
+    }
+}
+
+@Composable
+private fun GridLines(puzzle: Puzzle, inset: Dp, boxGap: Dp, litCells: Set<CellPosition>? = null) {
+    Canvas(Modifier.fillMaxSize().padding(inset)) {
+        val thin = .55.dp.toPx()
+        val thick = 1.5.dp.toPx()
+        val color = Ink.copy(alpha = .65f)
+        val horizontal = BoardAxis(size.width, boxGap.toPx(), puzzle.size)
+        val vertical = BoardAxis(size.height, boxGap.toPx(), puzzle.size)
+        val regions = puzzle.regionCells()
+        fun region(row: Int, column: Int) = regions.indexOfFirst { CellPosition(row, column) in it }
+        val fogMask = Path().apply {
+            if (litCells != null) repeat(puzzle.size) { row -> repeat(puzzle.size) { column ->
+                if (CellPosition(row, column) !in litCells) addRect(androidx.compose.ui.geometry.Rect(
+                    if (column == 0) 0f else horizontal.divider(column),
+                    if (row == 0) 0f else vertical.divider(row),
+                    if (column == puzzle.size - 1) size.width else horizontal.divider(column + 1),
+                    if (row == puzzle.size - 1) size.height else vertical.divider(row + 1),
+                ))
+            } }
+        }
+        fun drawLines() {
+            for (line in 1 until puzzle.size) for (offset in 0 until puzzle.size) {
+                val x = horizontal.divider(line)
+                val y = vertical.divider(line)
+                drawLine(color, Offset(x, vertical.at(offset.toDouble())), Offset(x, vertical.at(offset + 1.0)),
+                    if (region(offset, line - 1) != region(offset, line)) thick else thin)
+                drawLine(color, Offset(horizontal.at(offset.toDouble()), y), Offset(horizontal.at(offset + 1.0), y),
+                    if (region(line - 1, offset) != region(line, offset)) thick else thin)
+            }
+        }
+        if (litCells == null) drawLines() else clipPath(fogMask) { drawLines() }
     }
 }
 
@@ -1100,8 +1121,9 @@ private fun RulesDialog(puzzle: Puzzle, starting: Boolean, paused: Boolean = fal
         text = { Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
             Text("RULES", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
             RulesText(puzzle.rules)
+            if (puzzle.solution == null) Text("Note: This puzzle does not have solution checking.", Modifier.padding(top = 8.dp))
             if (puzzle.videoUrl != null || puzzle.sourceUrl != null) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Watch source video") } }
+            puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text(puzzle.videoTitle?.let { "Featured in video: \"$it\"" } ?: "Watch source video") } }
             puzzle.sourceUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad") } }
             if (paused) Text("Game paused. Your timer resumes when you close the rules.", color = Color.Gray, fontSize = 12.sp)
             if (starting) Text("Your timer starts when you tap Okay.", color = Color.Gray, fontSize = 12.sp)

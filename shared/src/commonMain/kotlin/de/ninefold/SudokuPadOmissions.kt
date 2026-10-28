@@ -38,7 +38,7 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
         report("$.solution", "Solution is discarded because it does not produce ${puzzle.cellCount} digits.")
     for (key in listOf("videos")) {
         val videos = ((root["metadata"] as? JsonObject)?.get(key) ?: root[key]) as? JsonArray
-        (videos?.firstOrNull() as? JsonObject)?.let { fields(it, "$.videos[0]", "url") }
+        (videos?.firstOrNull() as? JsonObject)?.let { fields(it, "$.videos[0]", "url id title") }
         if (videos != null && videos.size > 1) report("$.$key", "Only the first video is considered.", "partial")
     }
     fun objects(key: String, supported: String, inspect: (JsonObject, String) -> Unit = { _, _ -> }) {
@@ -120,7 +120,7 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
     for (key in listOf("circle", "difference", "ratio", "xv", "even", "odd")) objects(key, "cells cell value width height baseC outlineC fontC")
     if (puzzle.lines.any { it.rule == LineRule.Unspecified } || listOf("difference", "ratio", "xv", "even", "odd").any { meaningful(root[it] ?: JsonNull) })
         report("$.rules", "Some graphical clues have no automatic validation; original rule text is preserved in special rules.", "validation")
-    if (puzzle.rules.any { it.isNotBlank() && it != "Normal sudoku rules apply." })
+    if (puzzle.rules.any { it.isNotBlank() && it != "Normal sudoku rules apply." && it != SUDOKUPAD_DEFAULT_RULES })
         report("$.rules", "Original rule text is preserved for manual review in special rules; only modeled constraints are automatically checked.", "validation")
     return result
 }
