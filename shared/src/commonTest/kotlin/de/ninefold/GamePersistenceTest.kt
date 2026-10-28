@@ -8,6 +8,36 @@ import kotlin.test.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GamePersistenceTest {
+    @Test fun markingDonePersistsWithoutChangingTheBoard() {
+        val storage = MemoryAppStorage()
+        val repository = GameRepository(storage)
+        val puzzle = SudokuFixtures.classic
+        val game = SavedGame(puzzle, puzzle.startingCells(), true, history = listOf(puzzle.startingCells()))
+        repository.saveGame(game)
+        repository.saveElapsed(puzzle, 123)
+        repository.markDone(puzzle)
+
+        val reopened = GameRepository(storage)
+        assertEquals(game.copy(markedDone = true), reopened.game(puzzle))
+        assertTrue(reopened.game(puzzle)!!.completed)
+        assertEquals(123, reopened.elapsed(puzzle))
+    }
+
+    @Test fun resettingClearsProgressCompletionHistoryAndTimer() {
+        val storage = MemoryAppStorage()
+        val repository = GameRepository(storage)
+        val puzzle = SudokuFixtures.classic
+        val cells = puzzle.startingCells().toMutableList().also { it[2] = CellState(value = 4) }
+        repository.saveGame(SavedGame(puzzle, cells, true, history = listOf(puzzle.startingCells()), markedDone = true))
+        repository.saveElapsed(puzzle, 123)
+        repository.resetGame(puzzle)
+
+        val reopened = GameRepository(storage)
+        assertEquals(SavedGame(puzzle, puzzle.startingCells(), true), reopened.game(puzzle))
+        assertFalse(reopened.game(puzzle)!!.completed)
+        assertEquals(0, reopened.elapsed(puzzle))
+    }
+
     @Test fun keepsAllInProgressHistoryAndOnlyTheLastTwoCompletedHistories() {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)

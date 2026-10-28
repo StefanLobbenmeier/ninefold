@@ -49,8 +49,9 @@ internal data class SavedGame(
     val automaticColours: Map<Int, AutomaticColourRule> = DefaultAutomaticColours,
     val fadedOutsideClues: Set<PuzzleOverlay> = emptySet(),
     val fadedOutsideArrows: Set<PuzzleArrow> = emptySet(),
+    val markedDone: Boolean = false,
 ) {
-    val completed: Boolean get() = puzzle.isComplete(cells)
+    val completed: Boolean get() = markedDone || puzzle.isComplete(cells)
 }
 
 internal fun Puzzle.storageId(): String = sourceUrl ?: Json.encodeToString(copy(videoUrl = null))
@@ -169,6 +170,14 @@ internal class GameRepository(
         write("game.$id", games.getValue(id))
         write("games", games.keys.toList())
         if (completedGames != previousCompletions) write("completed-games", completedGames)
+    }
+    fun resetGame(puzzle: Puzzle) {
+        saveGame(SavedGame(puzzle, puzzle.startingCells(), started = true))
+        saveElapsed(puzzle, 0)
+    }
+    fun markDone(puzzle: Puzzle) {
+        val game = game(puzzle) ?: return
+        saveGame(game.copy(started = true, markedDone = true))
     }
     fun elapsed(puzzle: Puzzle): Long = (read<Long>("timer.${puzzle.storageId()}") ?: 0L).coerceAtLeast(0)
     fun saveElapsed(puzzle: Puzzle, seconds: Long) { write("timer.${puzzle.storageId()}", seconds) }

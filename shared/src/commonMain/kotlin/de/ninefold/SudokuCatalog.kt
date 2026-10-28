@@ -53,6 +53,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     var indexError by remember { mutableStateOf<String?>(null) }
     var opening by remember { mutableStateOf<String?>(null) }
     var openError by remember { mutableStateOf<String?>(null) }
+    var resetPuzzle by remember { mutableStateOf<Puzzle?>(null) }
     var showStorage by remember { mutableStateOf(false) }
     var showImport by remember { mutableStateOf(false) }
     var reimporting by remember { mutableStateOf<String?>(null) }
@@ -166,6 +167,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 if (latest != null) item {
                     FeaturedGameCard(latest, games.elapsed(latest.puzzle), enabled = opening == null && reimporting == null,
                         onReimport = latest.puzzle.sourceUrl?.let { url -> { reimport(url, latest.puzzle.title, latest.puzzle.videoUrl) } },
+                        onReset = { resetPuzzle = latest.puzzle }, onMarkDone = { games.markDone(latest.puzzle) },
                         onOpen = { onOpen(latest.puzzle) })
                 } else item {
                     Card(colors = CardDefaults.cardColors(containerColor = Moss), shape = RoundedCornerShape(24.dp)) {
@@ -180,6 +182,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 items(inProgress.drop(1), key = { "continue.${it.puzzle.storageId()}" }) { game ->
                     SavedGameCard(game, games.elapsed(game.puzzle), "Continue", enabled = opening == null && reimporting == null,
                         onReimport = game.puzzle.sourceUrl?.let { url -> { reimport(url, game.puzzle.title, game.puzzle.videoUrl) } },
+                        onReset = { resetPuzzle = game.puzzle }, onMarkDone = { games.markDone(game.puzzle) },
                         onOpen = { onOpen(game.puzzle) })
                 }
                 val solved = games.games.values.filter { it.completed }.reversed()
@@ -187,6 +190,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 items(solved, key = { "solved.${it.puzzle.storageId()}" }) { game ->
                     SavedGameCard(game, games.elapsed(game.puzzle), "View", enabled = opening == null && reimporting == null,
                         onReimport = game.puzzle.sourceUrl?.let { url -> { reimport(url, game.puzzle.title, game.puzzle.videoUrl) } },
+                        onReset = { resetPuzzle = game.puzzle }, onMarkDone = { games.markDone(game.puzzle) },
                         onOpen = { onOpen(game.puzzle) })
                 }
                 item {
@@ -302,12 +306,19 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
         confirmButton = { TextButton({ reimportResult = null }) { Text("OK") } },
     ) }
     openError?.let { message -> AlertDialog(onDismissRequest = { openError = null }, confirmButton = { TextButton({ openError = null }) { Text("OK") } }, title = { Text("Puzzle unavailable") }, text = { Text(message) }) }
+    resetPuzzle?.let { puzzle -> AlertDialog(
+        onDismissRequest = { resetPuzzle = null },
+        title = { Text("Reset game?") },
+        text = { Text("Reset ${puzzle.title}? All entries, notes, colours, undo history and elapsed time will be cleared.") },
+        confirmButton = { TextButton({ games.resetGame(puzzle); resetPuzzle = null }) { Text("Reset") } },
+        dismissButton = { TextButton({ resetPuzzle = null }) { Text("Cancel") } },
+    ) }
     if (showStorage) StorageSettingsDialog(games) { showStorage = false }
     if (showImport) ImportDialog({ showImport = false }) { showImport = false; onOpen(it) }
 }
 
 @Composable
-private fun SavedGameCard(game: SavedGame, elapsed: Long, action: String, enabled: Boolean = true, onReimport: (() -> Unit)? = null, onOpen: () -> Unit) {
+private fun SavedGameCard(game: SavedGame, elapsed: Long, action: String, enabled: Boolean = true, onReimport: (() -> Unit)? = null, onReset: () -> Unit, onMarkDone: () -> Unit, onOpen: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().combinedClickable(
         enabled = enabled, onClick = onOpen, onLongClickLabel = "Reimport puzzle", onLongClick = onReimport,
     ), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
@@ -319,7 +330,24 @@ private fun SavedGameCard(game: SavedGame, elapsed: Long, action: String, enable
                 Text("by ${game.puzzle.author} · ${formatElapsed(elapsed)}", style = MaterialTheme.typography.bodySmall)
             }
             Spacer(Modifier.width(8.dp))
+            GameActions(game, enabled, onReset, onMarkDone, onReimport)
             PuzzleOpenButton(action, game.puzzle.title, enabled = enabled, onOpen = onOpen)
+        }
+    }
+}
+
+@Composable
+private fun GameActions(game: SavedGame, enabled: Boolean, onReset: () -> Unit, onMarkDone: () -> Unit, onReimport: (() -> Unit)?) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton({ expanded = true }, enabled = enabled,
+            modifier = Modifier.semantics { contentDescription = "Actions for ${game.puzzle.title}" }) {
+            Text("⋮", fontSize = 24.sp)
+        }
+        DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
+            if (!game.completed) DropdownMenuItem(text = { Text("Mark as done") }, onClick = { expanded = false; onMarkDone() })
+            DropdownMenuItem(text = { Text("Reset game…") }, onClick = { expanded = false; onReset() })
+            if (onReimport != null) DropdownMenuItem(text = { Text("Reimport puzzle") }, onClick = { expanded = false; onReimport() })
         }
     }
 }
@@ -361,7 +389,7 @@ private fun SectionLabel(title: String, detail: String) {
 }
 
 @Composable
-private fun FeaturedGameCard(game: SavedGame, elapsed: Long, enabled: Boolean, onReimport: (() -> Unit)?, onOpen: () -> Unit) {
+private fun FeaturedGameCard(game: SavedGame, elapsed: Long, enabled: Boolean, onReimport: (() -> Unit)?, onReset: () -> Unit, onMarkDone: () -> Unit, onOpen: () -> Unit) {
     val filled = game.cells.count { it.value != null && !it.given }
     val total = game.cells.count { !it.given }.coerceAtLeast(1)
     Card(Modifier.fillMaxWidth().combinedClickable(enabled = enabled, onClick = onOpen, onLongClickLabel = "Reimport puzzle", onLongClick = onReimport),
@@ -392,6 +420,7 @@ private fun FeaturedGameCard(game: SavedGame, elapsed: Long, enabled: Boolean, o
             LinearProgressIndicator(progress = { filled.toFloat() / total }, modifier = Modifier.fillMaxWidth().height(4.dp), color = Color(0xFFDAD7AA), trackColor = Color.White.copy(alpha = .16f))
             Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${formatElapsed(elapsed)} · ${filled * 100 / total}% filled", color = Sage, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                GameActions(game, enabled, onReset, onMarkDone, onReimport)
                 FilledTonalButton(onOpen, enabled = enabled, modifier = Modifier.semantics { contentDescription = "Continue ${game.puzzle.title}" }) {
                     Text("Continue"); Spacer(Modifier.width(8.dp)); AppIcon(Glyph.Play)
                 }
