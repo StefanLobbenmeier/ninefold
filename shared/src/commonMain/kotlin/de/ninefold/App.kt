@@ -164,7 +164,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val multiSelect = repository.settings.multiSelect
     val clock = remember(puzzle) { GameClock().also { it.restore(repository.elapsed(puzzle)) } }
     val completionResult = remember(puzzle, cells) { puzzle.completionCheck(cells) }
-    val completed = completionResult?.cells?.isEmpty() == true
+    var markedDone by remember(puzzle) { mutableStateOf(saved?.markedDone == true) }
+    val completed = (markedDone && cells == saved?.cells) || completionResult?.cells?.isEmpty() == true
     val elapsed = rememberGameElapsed(puzzle, repository, clock, started, completed, paused = paused)
     var completionAcknowledged by remember(puzzle) { mutableStateOf(completed) }
     var showSuccess by remember(puzzle) { mutableStateOf(false) }
@@ -193,7 +194,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     }
 
     fun save() {
-        repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack, automaticColours, fadedOutsideClues, fadedOutsideArrows))
+        if (cells != saved?.cells) markedDone = false
+        repository.saveGame(SavedGame(puzzle, cells, started, history, redoStack, automaticColours, fadedOutsideClues, fadedOutsideArrows, markedDone))
         repository.saveElapsed(puzzle, clock.elapsedSeconds())
     }
     DisposableEffect(puzzle) {

@@ -13,7 +13,7 @@ internal object SavedGameSerializer : KSerializer<SavedGame> {
         encoder.encodeSerializableValue(StoredGame.serializer(), StoredGame(
             puzzle = value.puzzle, cells = value.cells, started = value.started,
             automaticColours = value.automaticColours, fadedOutsideClues = value.fadedOutsideClues, fadedOutsideArrows = value.fadedOutsideArrows,
-            historyEncoding = 2,
+            historyEncoding = 2, markedDone = value.markedDone,
             undoChanges = changes(value.cells, value.history.asReversed()),
             redoChanges = changes(value.cells, value.redo),
         ))
@@ -25,7 +25,7 @@ internal object SavedGameSerializer : KSerializer<SavedGame> {
         return SavedGame(stored.puzzle, stored.cells, stored.started,
             if (stored.historyEncoding == 1) stored.history else restore(stored.cells, stored.undoChanges).asReversed(),
             if (stored.historyEncoding == 1) stored.redo else restore(stored.cells, stored.redoChanges),
-            stored.automaticColours, stored.fadedOutsideClues, stored.fadedOutsideArrows)
+            stored.automaticColours, stored.fadedOutsideClues, stored.fadedOutsideArrows, stored.markedDone)
     }
 
     // Each patch transforms the preceding board into the next board along this stack.
@@ -59,6 +59,7 @@ private data class StoredGame(
     val automaticColours: Map<Int, AutomaticColourRule> = DefaultAutomaticColours,
     val fadedOutsideClues: Set<PuzzleOverlay> = emptySet(),
     val fadedOutsideArrows: Set<PuzzleArrow> = emptySet(),
+    val markedDone: Boolean = false,
     val historyEncoding: Int = 1,
     val undoChanges: List<Map<Int, CellState>> = emptyList(),
     val redoChanges: List<Map<Int, CellState>> = emptyList(),
