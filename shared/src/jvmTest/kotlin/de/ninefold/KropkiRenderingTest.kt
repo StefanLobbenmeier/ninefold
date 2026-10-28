@@ -18,6 +18,31 @@ import kotlin.test.assertNotEquals
 class KropkiRenderingTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun arbitraryArtworkCoversThinAndBoxGridLines() {
+        // Larger circles and square artwork must not depend on Kropki/quadruple recognition.
+        val marks = listOf(
+            PuzzleOverlay(GridPoint(2.0, 2.5), .8, .8, "#FF0000", rounded = true),
+            PuzzleOverlay(GridPoint(3.0, 4.5), .8, .8, "#FF0000", rounded = true),
+            PuzzleOverlay(GridPoint(5.5, 3.0), .8, .8, "#FF0000", rounded = false),
+        )
+        val puzzle = SudokuFixtures.empty.copy(overlays = marks.take(2), underlays = marks.drop(2))
+        compose.setContent {
+            MaterialTheme {
+                SudokuBoard(puzzle, puzzle.startingCells(), emptySet(), emptySet(),
+                    modifier = Modifier.width(450.dp).testTag("board"), onSelect = {})
+            }
+        }
+        val pixels = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+        // The board reserves a two-dp inset on each side.
+        val inset = pixels.width * 2f / 450
+        val axis = BoardAxis(pixels.width - inset * 2, pixels.width / 450f)
+        marks.forEach { mark ->
+            val x = (inset + axis.at(mark.center.column)).toInt()
+            val y = (inset + axis.at(mark.center.row)).toInt()
+            assertEquals(Color.Red, pixels[x, y], "Artwork must cover every grid line")
+        }
+    }
+
     @Test fun dotsCoverGridLinesAndRenderAtThreeQuartersSize() {
         val marks = listOf(2.0, 3.0).flatMap { edge ->
             listOf(GridPoint(edge, 2.5), GridPoint(5.5, edge)).map { center ->
