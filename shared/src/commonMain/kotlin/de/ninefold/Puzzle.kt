@@ -82,7 +82,7 @@ data class Puzzle(
     /** Present (even when empty) when this is a fog puzzle. */
     val fogLights: Set<CellPosition>? = null,
     /** Null uses regular 3×3 fog; a present list uses only the specified reveals. */
-    val fogLinks: List<FogLink>? = null, val sourceUrl: String? = null, val videoUrl: String? = null,
+    val fogLinks: List<FogLink>? = null, val sourceUrl: String? = null, val videoUrl: String? = null, val videoTitle: String? = null,
     val antiKnight: Boolean = false, val successMessage: String? = null,
     /** Editable digits supplied by an importer, separate from fixed clues. */
     val initialValues: Map<Int, Int> = emptyMap(),

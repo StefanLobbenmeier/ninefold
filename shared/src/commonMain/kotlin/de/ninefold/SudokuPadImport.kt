@@ -10,6 +10,8 @@ import kotlinx.serialization.json.*
 import kotlin.math.abs
 import kotlin.math.pow
 
+internal const val SUDOKUPAD_DEFAULT_RULES = "No rules provided for this puzzle. Please check with the associated CTC video, or enquire with the source of the puzzle."
+
 private val sudokuPadClient by lazy { HttpClient() }
 private val sudokuPadLink = Regex("^https?://(?:www\\.)?sudokupad\\.app/(?:api/puzzle/)?([^?#]+)", RegexOption.IGNORE_CASE)
 private val safePuzzleId = Regex("[A-Za-z0-9_./-]+")
@@ -166,9 +168,9 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         }
     } }
     val solution = metadata.string("solution") ?: root.array("solution")?.mapNotNull(JsonElement::asInt)?.joinToString("")
-    val rulesText = metadata.string("rules") ?: metadata.string("ruleset") ?: "Normal sudoku rules apply."
+    val rulesText = metadata.string("rules") ?: metadata.string("ruleset") ?: SUDOKUPAD_DEFAULT_RULES
     val rules = rulesText.trim().takeIf(String::isNotEmpty)?.lines()?.map(String::trim)
-        ?: listOf("Normal sudoku rules apply.")
+        ?: listOf(SUDOKUPAD_DEFAULT_RULES)
     val successMessage = importedSuccessMessage(root, metadata)
 
     val rawCages = root.array(if (fpuzzles) "killercage" else "cages") ?: root.array("cages") ?: JsonArray(emptyList())
@@ -226,6 +228,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     val hasFog = fogLinks != null || root.containsKey("foglight") || rawCages.any {
         it.jsonObject.string("value")?.startsWith("foglight", ignoreCase = true) == true
     }
+    val video = (metadata.array("videos") ?: root.array("videos"))?.firstOrNull()
     return Puzzle(
         title = metadata.string("title") ?: "Imported SudokuPad puzzle",
         author = metadata.string("author") ?: "Unknown setter",
@@ -247,15 +250,15 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         fogLinks = fogLinks,
         sourceUrl = sourceUrl,
         videoUrl = (metadata.string("video") ?: metadata.string("videoUrl")
-            ?: (metadata.array("videos") ?: root.array("videos"))?.firstOrNull()?.let { video ->
-                (video as? JsonPrimitive)?.contentOrNull ?: (video as? JsonObject)?.string("url")
-            })?.let { video ->
+            ?: (video as? JsonPrimitive)?.contentOrNull
+            ?: (video as? JsonObject)?.let { it.string("url") ?: it.string("id") })?.let { video ->
                 when {
                     video.startsWith("https://") -> video
                     Regex("[A-Za-z0-9_-]{11}").matches(video) -> "https://www.youtube.com/watch?v=$video"
                     else -> null
                 }
             },
+        videoTitle = (video as? JsonObject)?.string("title"),
         successMessage = successMessage,
     )
 }

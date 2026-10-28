@@ -341,6 +341,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                         rules = {
                             SideCard("PUZZLE NOTES") {
                                 RulesText(puzzle.rules)
+            if (puzzle.solution == null) Text("Note: This puzzle does not have solution checking.", Modifier.padding(top = 8.dp))
                             }
                         },
                         input = {
@@ -1100,8 +1101,9 @@ private fun RulesDialog(puzzle: Puzzle, starting: Boolean, paused: Boolean = fal
         text = { Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
             Text("RULES", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
             RulesText(puzzle.rules)
+            if (puzzle.solution == null) Text("Note: This puzzle does not have solution checking.", Modifier.padding(top = 8.dp))
             if (puzzle.videoUrl != null || puzzle.sourceUrl != null) HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Watch source video") } }
+            puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text(puzzle.videoTitle?.let { "Featured in video: \"$it\"" } ?: "Watch source video") } }
             puzzle.sourceUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad") } }
             if (paused) Text("Game paused. Your timer resumes when you close the rules.", color = Color.Gray, fontSize = 12.sp)
             if (starting) Text("Your timer starts when you tap Okay.", color = Color.Gray, fontSize = 12.sp)

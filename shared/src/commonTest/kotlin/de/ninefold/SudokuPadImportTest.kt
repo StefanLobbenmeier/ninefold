@@ -244,6 +244,21 @@ class SudokuPadImportTest {
         assertEquals("https://www.youtube.com/watch?v=aaaaaaaaaaa", puzzle.videoUrl)
     }
 
+    @Test fun retainsSudokuPadVideoIdAndTitle() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"videos":[{"id":"aaaaaaaaaaa","title":"Synthetic video"}]"""))
+        assertEquals("https://www.youtube.com/watch?v=aaaaaaaaaaa", puzzle.videoUrl)
+        assertEquals("Synthetic video", puzzle.videoTitle)
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+    }
+
+    @Test fun missingOrBlankRulesUseSudokuPadWording() {
+        for (properties in listOf("", "\"metadata\":{\"rules\":\"  \"}")) {
+            val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties = properties))
+            assertEquals(listOf("No rules provided for this puzzle. Please check with the associated CTC video, or enquire with the source of the puzzle."), puzzle.rules)
+        }
+    }
+
     @Test fun retainsExplicitAndLegacySuccessMessages() {
         val explicit = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
             """"metadata":{"successMessage":"A custom finish!"}"""))
