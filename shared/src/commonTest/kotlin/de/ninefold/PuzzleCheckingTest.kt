@@ -6,6 +6,35 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PuzzleCheckingTest {
+    @Test fun antiKingChecksDiagonalsAcrossRegionsAndRespectsSpecialRuleSetting() {
+        val puzzle = SudokuFixtures.empty.copy(antiKing = true)
+        for ((origin, peer) in listOf(20 to 30, 21 to 29, 29 to 21, 30 to 20)) {
+            val cells = puzzle.startingCells().toMutableList().also {
+                it[origin] = CellState(value = 5)
+                it[peer] = CellState(value = 5)
+            }
+            assertEquals(setOf(origin, peer), checkSudokuRules(puzzle, cells).cells)
+            assertTrue(checkSudokuRules(puzzle, cells, includeSpecialRules = false).cells.isEmpty())
+            assertTrue(checkSudokuRules(SudokuFixtures.empty, cells).cells.isEmpty())
+            cells[peer] = CellState(cornerNotes = setOf(5, 6), centreNotes = setOf(5, 7))
+            assertEquals(mapOf(peer to setOf(5)), checkSudokuRules(puzzle, cells).pencilMarks)
+            assertTrue(checkSudokuRules(puzzle, cells, includeSpecialRules = false).pencilMarks.isEmpty())
+            cells[peer] = CellState(value = 6)
+            assertTrue(checkSudokuRules(puzzle, cells).cells.isEmpty())
+        }
+    }
+
+    @Test fun antiKingDoesNotWrapEdgesOrCheckKnightMoves() {
+        val puzzle = SudokuFixtures.empty.copy(antiKing = true)
+        for ((origin, peer) in listOf(8 to 18, 62 to 72, 40 to 21)) {
+            val cells = puzzle.startingCells().toMutableList().also {
+                it[origin] = CellState(value = 5)
+                it[peer] = CellState(value = 5)
+            }
+            assertTrue(checkSudokuRules(puzzle, cells).cells.isEmpty())
+        }
+    }
+
     @Test fun antiKnightChecksAllEightMovesAndRespectsSpecialRuleSetting() {
         val puzzle = SudokuFixtures.empty.copy(antiKnight = true)
         val peers = listOf(21, 23, 29, 33, 47, 51, 57, 59)

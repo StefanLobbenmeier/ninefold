@@ -83,7 +83,7 @@ data class Puzzle(
     val fogLights: Set<CellPosition>? = null,
     /** Null uses regular 3×3 fog; a present list uses only the specified reveals. */
     val fogLinks: List<FogLink>? = null, val sourceUrl: String? = null, val videoUrl: String? = null, val videoTitle: String? = null,
-    val antiKnight: Boolean = false, val successMessage: String? = null,
+    val antiKnight: Boolean = false, val antiKing: Boolean = false, val successMessage: String? = null,
     /** Editable digits supplied by an importer, separate from fixed clues. */
     val initialValues: Map<Int, Int> = emptyMap(),
     val size: Int = 9,
@@ -130,9 +130,12 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
                 val peer = peerPosition.index(size)
                 if (peer != index) cells[peer].value?.let(::add)
             }
-            if (includeSpecialRules && puzzle.antiKnight) {
+            if (includeSpecialRules && (puzzle.antiKnight || puzzle.antiKing)) {
                 for (rowOffset in -2..2) for (columnOffset in -2..2) {
-                    if (kotlin.math.abs(rowOffset) * kotlin.math.abs(columnOffset) != 2) continue
+                    val knightMove = kotlin.math.abs(rowOffset) * kotlin.math.abs(columnOffset) == 2
+                    val kingMove = kotlin.math.abs(rowOffset) <= 1 && kotlin.math.abs(columnOffset) <= 1 &&
+                        (rowOffset != 0 || columnOffset != 0)
+                    if (!(puzzle.antiKnight && knightMove || puzzle.antiKing && kingMove)) continue
                     val row = position.row + rowOffset
                     val column = position.column + columnOffset
                     if (row !in 0 until size || column !in 0 until size) continue
