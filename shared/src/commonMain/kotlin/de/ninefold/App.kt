@@ -644,7 +644,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             val same = cell.value != null && selected.any { cells[it.index(puzzle.size)].value == cell.value }
             val selectionBackground = Color.LightGray.copy(alpha = .3f)
             val background = when { isSelected -> selectionBackground; position.index(puzzle.size) in conflicts -> Color(0xEFFFF1EC); position.index(puzzle.size) in uncertain -> Color(0xEFFFEDBD); same -> selectionBackground.copy(alpha = selectionBackground.alpha * .5f); else -> Color.Transparent }.let { if (colours.isNotEmpty()) it.copy(alpha = minOf(it.alpha, .18f)) else it }
-            val textBackdrop = if (CellColour.DarkGrey.number in colours) Color.White.copy(alpha = .85f) else Color.Transparent
+            val textBackdrop = Color.Transparent
             val fogged = puzzle.fogLights != null && position !in litCells
             Box(Modifier.fillMaxSize().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value?.symbolText() ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString { it.symbolText() }}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString { it.symbolText() }}" else ""}${if (colours.isNotEmpty()) ", colours ${colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index(puzzle.size) in uncertain) ", uncertain reading" else ""}" }.then(if (interactive) Modifier.clickable { onSelect(position) } else Modifier), contentAlignment = Alignment.Center) {
                 if (fogged) Canvas(Modifier.matchParentSize()) {
@@ -762,6 +762,20 @@ private fun GridLines(puzzle: Puzzle, inset: Dp, boxGap: Dp, litCells: Set<CellP
                 ))
             } }
         }
+        // White clue fills erase only grid strokes, leaving cell colours and notes intact.
+        val clueGaps = Path().apply {
+            (puzzle.underlays + puzzle.overlays).filter { it.backgroundColor?.toComposeColor() == Color.White }.forEach { item ->
+                val scale = if (item.isKropkiDot()) .75f else 1f
+                val width = (item.width * horizontal.cellSize * scale).toFloat()
+                val height = (item.height * horizontal.cellSize * scale).toFloat()
+                val center = Offset(horizontal.at(item.center.column), vertical.at(item.center.row))
+                val rect = androidx.compose.ui.geometry.Rect(center - Offset(width / 2, height / 2), Size(width, height))
+                if (width > 0 && height > 0) {
+                    if (item.rounded) addRoundRect(androidx.compose.ui.geometry.RoundRect(rect, CornerRadius(min(width, height) / 2)))
+                    else addRect(rect)
+                }
+            }
+        }
         fun drawLines() {
             for (line in 1 until puzzle.size) for (offset in 0 until puzzle.size) {
                 val x = horizontal.divider(line)
@@ -772,7 +786,9 @@ private fun GridLines(puzzle: Puzzle, inset: Dp, boxGap: Dp, litCells: Set<CellP
                     if (region(line - 1, offset) != region(line, offset)) thick else thin)
             }
         }
-        if (litCells == null) drawLines() else clipPath(fogMask) { drawLines() }
+        clipPath(clueGaps, ClipOp.Difference) {
+            if (litCells == null) drawLines() else clipPath(fogMask) { drawLines() }
+        }
     }
 }
 
@@ -837,7 +853,7 @@ private fun BoxScope.PuzzleGraphics(
             val cornerRadius = CornerRadius(min(area.width, area.height) / 2f)
             // Zero-width XV boxes size the text; stroking them paints a line behind the glyph.
             if (area.width > 0f && area.height > 0f) {
-                item.backgroundColor?.toComposeColor()?.let { color ->
+                item.backgroundColor?.toComposeColor()?.takeUnless { it == Color.White && revealedMarks == null }?.let { color ->
                     if (item.rounded) drawRoundRect(faded(color), topLeft, area, cornerRadius) else drawRect(faded(color), topLeft, area)
                 }
                 item.borderColor?.toComposeColor()?.let { color ->
