@@ -174,6 +174,9 @@ internal fun ImportDialog(onDismiss: () -> Unit, onImport: (Puzzle) -> Unit) {
                             Text(entries.map { it.path.replace(Regex("\\[\\d+\\]"), "[]") }.distinct().joinToString(), fontSize = 12.sp)
                         }
                     }
+                    if (importedPuzzle?.antiKing == true) {
+                        Text("King’s move rule imported: cells a chess king’s move apart cannot contain the same digit.")
+                    }
                     if (importedPuzzle?.antiKnight == true) {
                         Text("Knight’s move rule imported: cells a chess knight’s move apart cannot contain the same digit.")
                     }

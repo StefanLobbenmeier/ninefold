@@ -209,6 +209,32 @@ class SudokuPadImportTest {
         assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
     }
 
+    @Test fun importsExplicitAntiKingFlags() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"metadata":{"antiking":true}"""))
+        assertTrue(puzzle.antiKing)
+        assertTrue(parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"antiking":true""")).antiKing)
+        assertEquals(false, parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload()).antiKing)
+        assertEquals(false, parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"metadata":{"antiking":false}""")).antiKing)
+        assertEquals(false, parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"metadata":{"rules":"A king appears in the artwork."}""")).antiKing)
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+    }
+
+    @Test fun importsBothChessRulesWithMetadataPrecedenceAndNoOmissions() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"antiking":false,"antiknight":false,"metadata":{"antiking":true,"antiknight":true}"""))
+        assertTrue(puzzle.antiKing)
+        assertTrue(puzzle.antiKnight)
+        assertTrue(puzzle.importOmissions.none { "antiking" in it.path || "antiknight" in it.path })
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+        val disabled = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+            """"antiking":true,"antiknight":true,"metadata":{"antiking":false,"antiknight":false}"""))
+        assertEquals(false, disabled.antiKing)
+        assertEquals(false, disabled.antiKnight)
+    }
+
     @Test fun fetchesFromCorsEndpointAndPreservesNamespacedPathSeparators() = runTest {
         val engine = MockEngine { request ->
             assertEquals("https://sudokupad.svencodes.com/ctclegacy/test-setter/test-puzzle", request.url.toString())

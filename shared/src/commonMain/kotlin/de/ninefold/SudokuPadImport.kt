@@ -239,6 +239,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         solution = solution?.filter(Char::isDigit)?.takeIf { it.length == size * size },
         cages = cages,
         rules = rules,
+        antiKing = metadata.boolean("antiking") ?: root.boolean("antiking") ?: false,
         antiKnight = metadata.boolean("antiknight") ?: root.boolean("antiknight") ?: false,
         lines = lines,
         arrows = arrows,
