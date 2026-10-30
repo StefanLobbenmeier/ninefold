@@ -1,9 +1,11 @@
 // Replaced by prepare-offline-release.py after the production distribution is built.
-const RELEASE = {"version":"badd7356112ac341dc60fc7b9458fd45b1210ec31785d99ce6635093158fb06e","assets":[{"path":"658820f72b4617efb380.wasm","sha256":"08e904ec38a6a81a4809a853acf68022f83905286827e804e88b262c37f2954d"},{"path":"6c91d6c58da7dd8adf25.wasm","sha256":"88c52330e6d6ed088886dbee0acea0e355cccd5e812a19a576dc12539dd8de49"},{"path":"apple-touch-icon.png","sha256":"dc0f3d482b254c410324d10828e06cd3803c0aaa8070c21fcc7d3dad5f927bb1"},{"path":"composeResources/ninefold.shared.generated.resources/drawable/compose-multiplatform.xml","sha256":"8db35d9bcb1ad5b0e61fa2fd73bb0dc6180eac708f1dd8a22860acc3cdbcec3b"},{"path":"composeResources/ninefold.shared.generated.resources/drawable/ninefold_icon.png","sha256":"6f460b1923584c698f5e71368987f54a0f281c56b2dfb69c4548aa3763d8bf7c"},{"path":"composeResources/ninefold.shared.generated.resources/font/lora.ttf","sha256":"822a6621ccbe8d97d20ac88c1c41f5615c9c2c202eaa75f272cd452aac6475a7"},{"path":"external-links.js","sha256":"4d5efa1d7193a6e02c3e5270354196e29aaf1eacc5a56d594e7104a3f34e4d47"},{"path":"favicon.ico","sha256":"e02e52ef8c95faea36e4c0f2c0a85057bacbd2833779dbad25b550cadcc05d4a"},{"path":"icons/icon-192.png","sha256":"4cb6d09f6006c2ec99312cd4285612f780abf0c162f8b70cc12e64b33fdea735"},{"path":"icons/icon-512.png","sha256":"9b967d942b5a41f9dd85a8a058f6f388b2f5c96d1dd4cd003764a8c0a37965b3"},{"path":"icons/icon-maskable-192.png","sha256":"abf42172e804b0ebfd493b900506e8435ad862e4cd882b6c8b3aa03651357afc"},{"path":"icons/icon-maskable-512.png","sha256":"caf90b19802fa96280138507a8cf356d715898a8f5d9cadb8bfa82dcac9b5724"},{"path":"index.html","sha256":"5d08d1c6ad6af6aaf3f94f21e36848f8ee0429d464f1cafeb762976535a0fd1e"},{"path":"manifest.webmanifest","sha256":"420322e28bf6574eebac32c461edf49bd863b3d48cd6233787e314e0e3730448"},{"path":"offline.js","sha256":"c3c60cdd326847de44977f90bf70c3155dd4a2b1ffdf5b63db6aaa296b47672b"},{"path":"styles.css","sha256":"adeed4cf2e4f76faf945f1f0adf8a05fce135eb43b383a06ee336aa936ff9e5c"},{"path":"viewport-recovery.js","sha256":"bb56029da96cb47921d2a1ed8159cfd4b4e566203475617292f34b56ea45acc0"},{"path":"webApp.js","sha256":"f45635808ff1123bcf7236e8e0faad481543d7d0dc5f65e3d84a3f665c4eec6c"},{"path":"webApp.js.LICENSE.txt","sha256":"85a703daf937b69e6a45c75947dcea43f4026a835b84a7ea4300843217311baf"}]};
+const RELEASE = {"version":"6fd765468aded90b4fdaae4aaeea4b54d7a66cc0edf8a4b1e781be75072b44de","assets":[{"path":"2b3a090379bf5e634de4.wasm","sha256":"5c6553535f5888d613df8c26dd6838837ed79dbd556a3ff8e2ac68226434bfad"},{"path":"658820f72b4617efb380.wasm","sha256":"08e904ec38a6a81a4809a853acf68022f83905286827e804e88b262c37f2954d"},{"path":"apple-touch-icon.png","sha256":"dc0f3d482b254c410324d10828e06cd3803c0aaa8070c21fcc7d3dad5f927bb1"},{"path":"composeResources/ninefold.shared.generated.resources/drawable/compose-multiplatform.xml","sha256":"8db35d9bcb1ad5b0e61fa2fd73bb0dc6180eac708f1dd8a22860acc3cdbcec3b"},{"path":"composeResources/ninefold.shared.generated.resources/drawable/ninefold_icon.png","sha256":"6f460b1923584c698f5e71368987f54a0f281c56b2dfb69c4548aa3763d8bf7c"},{"path":"composeResources/ninefold.shared.generated.resources/font/lora.ttf","sha256":"822a6621ccbe8d97d20ac88c1c41f5615c9c2c202eaa75f272cd452aac6475a7"},{"path":"external-links.js","sha256":"4d5efa1d7193a6e02c3e5270354196e29aaf1eacc5a56d594e7104a3f34e4d47"},{"path":"favicon.ico","sha256":"e02e52ef8c95faea36e4c0f2c0a85057bacbd2833779dbad25b550cadcc05d4a"},{"path":"icons/icon-192.png","sha256":"4cb6d09f6006c2ec99312cd4285612f780abf0c162f8b70cc12e64b33fdea735"},{"path":"icons/icon-512.png","sha256":"9b967d942b5a41f9dd85a8a058f6f388b2f5c96d1dd4cd003764a8c0a37965b3"},{"path":"icons/icon-maskable-192.png","sha256":"abf42172e804b0ebfd493b900506e8435ad862e4cd882b6c8b3aa03651357afc"},{"path":"icons/icon-maskable-512.png","sha256":"caf90b19802fa96280138507a8cf356d715898a8f5d9cadb8bfa82dcac9b5724"},{"path":"index.html","sha256":"5d08d1c6ad6af6aaf3f94f21e36848f8ee0429d464f1cafeb762976535a0fd1e"},{"path":"manifest.webmanifest","sha256":"420322e28bf6574eebac32c461edf49bd863b3d48cd6233787e314e0e3730448"},{"path":"offline.js","sha256":"c3c60cdd326847de44977f90bf70c3155dd4a2b1ffdf5b63db6aaa296b47672b"},{"path":"styles.css","sha256":"adeed4cf2e4f76faf945f1f0adf8a05fce135eb43b383a06ee336aa936ff9e5c"},{"path":"viewport-recovery.js","sha256":"bb56029da96cb47921d2a1ed8159cfd4b4e566203475617292f34b56ea45acc0"},{"path":"webApp.js","sha256":"1b8d37a8ed288a745c874603361907851bb87d0435e437a35141ad9781db346f"},{"path":"webApp.js.LICENSE.txt","sha256":"85a703daf937b69e6a45c75947dcea43f4026a835b84a7ea4300843217311baf"}]};
 const scope = new URL(self.registration.scope);
 // CacheStorage is shared by every worker on this origin, including PR previews.
 const APP_CACHE_PREFIX = `ninefold-app-${encodeURIComponent(scope.href)}:`;
 const APP_CACHE = APP_CACHE_PREFIX + RELEASE?.version;
+const THUMBNAIL_CACHE = 'ninefold-thumbnails-v1';
+const MAX_THUMBNAILS = 200;
 const DATA_CACHE = 'ninefold-offline-data-v1';
 const assetUrls = new Set((RELEASE?.assets || []).map(asset => new URL(asset.path, scope).href));
 const isFontAsset = url => url.origin === 'https://fonts.gstatic.com';
@@ -81,14 +83,21 @@ self.addEventListener('fetch', event => {
         (url.origin === 'https://sudokupad.app' && url.pathname.startsWith('/api/puzzle/'));
     // Explicit reimports must reach the network and must not accumulate nonce cache entries.
     if (puzzle && url.searchParams.has('reimport')) return;
-    if (!puzzle && !isFontAsset(url)) return;
+    const thumbnail = url.origin === 'https://i.ytimg.com' && /^\/vi\/[A-Za-z0-9_-]{11}\/[A-Za-z0-9_-]+\.jpg$/.test(url.pathname);
+    if (!puzzle && !isFontAsset(url) && !thumbnail) return;
     event.respondWith((async () => {
-        const cache = await caches.open(DATA_CACHE);
+        const cache = await caches.open(thumbnail ? THUMBNAIL_CACHE : DATA_CACHE);
         const saved = await cache.match(event.request);
         if (saved) return saved;
         const response = await fetch(event.request);
         if (response.ok) {
-            try { await cache.put(event.request, response.clone()); } catch { /* Cache may be full. */ }
+            try {
+                await cache.put(event.request, response.clone());
+                if (thumbnail) {
+                    const keys = await cache.keys();
+                    for (const key of keys.slice(0, Math.max(0, keys.length - MAX_THUMBNAILS))) await cache.delete(key);
+                }
+            } catch { /* Cache may be full. */ }
         }
         return response;
     })());
