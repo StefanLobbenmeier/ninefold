@@ -48,6 +48,8 @@ function storage() {
             return {
                 async match(request) { return cache.get(key(request))?.clone(); },
                 async put(request, response) { cache.set(key(request), response.clone()); },
+                async keys() { return [...cache.keys()]; },
+                async delete(request) { return cache.delete(key(request)); },
             };
         },
         async delete(name) { return entries.delete(name); },
@@ -414,4 +416,31 @@ test('playing pauses update checks and defers cross-tab reload until browsing', 
     assert.equal(page.reloads, 0);
     page.window.ninefoldUpdate.setPaused(false);
     assert.equal(page.reloads, 1);
+});
+
+
+test('browse thumbnails persist offline and failed downloads are not cached', async () => {
+    const caches = storage();
+    const url = 'https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg';
+    const online = worker(old, caches, () => new Response('synthetic thumbnail'));
+    assert.equal(await (await online.dispatch('fetch', new Request(url))).text(), 'synthetic thumbnail');
+    const offline = worker(old, caches, () => { throw new Error('No internet'); });
+    assert.equal(await (await offline.dispatch('fetch', new Request(url))).text(), 'synthetic thumbnail');
+    assert.equal(offline.requests.length, 0);
+    const missing = 'https://i.ytimg.com/vi/bbbbbbbbbbb/hqdefault.jpg';
+    const failing = worker(old, caches, () => new Response('missing', { status: 404 }));
+    assert.equal((await failing.dispatch('fetch', new Request(missing))).status, 404);
+    assert.equal(await (await caches.open('ninefold-thumbnails-v1')).match(missing), undefined);
+});
+
+test('thumbnail cache is bounded and does not intercept unrelated images', async () => {
+    const caches = storage();
+    const online = worker(old, caches, () => new Response('synthetic thumbnail'));
+    for (let i = 0; i < 201; i++) {
+        await online.dispatch('fetch', new Request(`https://i.ytimg.com/vi/${String(i).padStart(11, '0')}/hqdefault.jpg`));
+    }
+    const cache = await caches.open('ninefold-thumbnails-v1');
+    assert.equal((await cache.keys()).length, 200);
+    assert.equal(await cache.match('https://i.ytimg.com/vi/00000000000/hqdefault.jpg'), undefined);
+    assert.equal(await online.dispatch('fetch', new Request('https://example.test/unrelated.jpg')), undefined);
 });
