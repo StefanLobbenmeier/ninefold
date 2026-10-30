@@ -266,7 +266,9 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
 
 /** Some exporters split a quadruple into a circle and one tiny overlay per digit. */
 private fun importQuadruples(overlays: List<PuzzleOverlay>, rules: String, size: Int): Pair<List<PuzzleOverlay>, List<QuadrupleClue>> {
-    if (!rules.contains("quadruple", ignoreCase = true)) return overlays to emptyList()
+    val describesCornerCircles = rules.contains("corner circles", ignoreCase = true) &&
+        rules.contains("surrounding four cells", ignoreCase = true)
+    if (!rules.contains("quadruple", ignoreCase = true) && !describesCornerCircles) return overlays to emptyList()
     val labels = mutableSetOf<PuzzleOverlay>()
     val replacements = mutableMapOf<PuzzleOverlay, PuzzleOverlay>()
     val clues = overlays.mapNotNull { circle ->
