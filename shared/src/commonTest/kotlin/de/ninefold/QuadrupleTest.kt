@@ -6,16 +6,21 @@ import kotlin.test.assertTrue
 
 class QuadrupleTest {
     @Test fun importsSplitNumericLabelsAsOneReadableClue() {
-        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
-            """"metadata":{"rules":"Quadruples: circled digits appear in the surrounding cells."},"overlays":[
-                {"center":[1,1],"width":0.62,"height":0.62,"rounded":true,"text":"","backgroundColor":"#FFFFFF"},
-                {"center":[0.88,0.915],"width":0.1,"height":0.1,"text":1},
-                {"center":[0.88,1.085],"width":0.1,"height":0.1,"text":2},
-                {"center":[1.12,1],"width":0.1,"height":0.1,"text":3}]"""))
-        assertEquals("1 2\n3", puzzle.overlays.single().text)
-        assertEquals(listOf(1, 2, 3), puzzle.quadruples.single().digits)
-        assertEquals(listOf(0, 1, 9, 10), puzzle.quadruples.single().cells.map { it.index })
-        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+        for (rules in listOf(
+            "Quadruples: circled digits appear in the surrounding cells.",
+            "Digits in corner circles must appear in the surrounding four cells, in some order.",
+        )) {
+            val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
+                """"metadata":{"rules":"$rules"},"overlays":[
+                    {"center":[1,1],"width":0.62,"height":0.62,"rounded":true,"text":"","backgroundColor":"#FFFFFF"},
+                    {"center":[0.88,0.915],"width":0.1,"height":0.1,"text":1},
+                    {"center":[0.88,1.085],"width":0.1,"height":0.1,"text":2},
+                    {"center":[1.12,1],"width":0.1,"height":0.1,"text":3}]"""))
+            assertEquals("1 2\n3", puzzle.overlays.single().text)
+            assertEquals(listOf(1, 2, 3), puzzle.quadruples.single().digits)
+            assertEquals(listOf(0, 1, 9, 10), puzzle.quadruples.single().cells.map { it.index })
+            assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+        }
     }
 
     @Test fun checksMissingDigitsAndPencilMarksOnlyWhenSpecialRulesEnabled() {
