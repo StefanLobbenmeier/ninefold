@@ -4,6 +4,8 @@ const scope = new URL(self.registration.scope);
 // CacheStorage is shared by every worker on this origin, including PR previews.
 const APP_CACHE_PREFIX = `ninefold-app-${encodeURIComponent(scope.href)}:`;
 const APP_CACHE = APP_CACHE_PREFIX + RELEASE?.version;
+const THUMBNAIL_CACHE = 'ninefold-thumbnails-v1';
+const MAX_THUMBNAILS = 200;
 const DATA_CACHE = 'ninefold-offline-data-v1';
 const assetUrls = new Set((RELEASE?.assets || []).map(asset => new URL(asset.path, scope).href));
 const isFontAsset = url => url.origin === 'https://fonts.gstatic.com';
@@ -81,14 +83,21 @@ self.addEventListener('fetch', event => {
         (url.origin === 'https://sudokupad.app' && url.pathname.startsWith('/api/puzzle/'));
     // Explicit reimports must reach the network and must not accumulate nonce cache entries.
     if (puzzle && url.searchParams.has('reimport')) return;
-    if (!puzzle && !isFontAsset(url)) return;
+    const thumbnail = url.origin === 'https://i.ytimg.com' && /^\/vi\/[A-Za-z0-9_-]{11}\/[A-Za-z0-9_-]+\.jpg$/.test(url.pathname);
+    if (!puzzle && !isFontAsset(url) && !thumbnail) return;
     event.respondWith((async () => {
-        const cache = await caches.open(DATA_CACHE);
+        const cache = await caches.open(thumbnail ? THUMBNAIL_CACHE : DATA_CACHE);
         const saved = await cache.match(event.request);
         if (saved) return saved;
         const response = await fetch(event.request);
         if (response.ok) {
-            try { await cache.put(event.request, response.clone()); } catch { /* Cache may be full. */ }
+            try {
+                await cache.put(event.request, response.clone());
+                if (thumbnail) {
+                    const keys = await cache.keys();
+                    for (const key of keys.slice(0, Math.max(0, keys.length - MAX_THUMBNAILS))) await cache.delete(key);
+                }
+            } catch { /* Cache may be full. */ }
         }
         return response;
     })());

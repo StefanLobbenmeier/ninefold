@@ -1,4 +1,5 @@
 [versions]
+coil = "3.6.3"
 agp = "9.5.0"
 android-compileSdk = "37"
 android-minSdk = "24"
@@ -19,6 +20,8 @@ ktor = "3.6.1"
 material3 = "1.12.0-alpha03"
 
 [libraries]
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 filekit-dialogs-compose = { module = "io.github.vinceglb:filekit-dialogs-compose", version = "0.17.0" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
