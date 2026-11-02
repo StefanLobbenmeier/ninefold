@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: sudoku-index
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   publish:
@@ -52,5 +52,9 @@ jobs:
           git add index.json index.js .nojekyll
           if ! git diff --cached --quiet; then
             git commit -m 'Refresh sudoku index'
-            git push origin HEAD:gh-pages
+            if ! git push origin HEAD:gh-pages; then
+              # A concurrent push may already have published this exact commit.
+              remote_head=$(git ls-remote origin refs/heads/gh-pages | cut -f1)
+              test "$remote_head" = "$(git rev-parse HEAD)"
+            fi
           fi
