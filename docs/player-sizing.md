@@ -11,7 +11,10 @@ at 1.3×. In portrait the frame's height/width ratio is clamped to 1.5–2.1, th
 gets a square at the top with a 5 px margin, and controls go below it. Outside artwork
 can change the rendered grid's size inside the board bounds.
 
-Ninefold now uses those frame and board rules. Its top bar remains 52 dp, accounting
+Ninefold uses those frame and board sizing rules. In portrait, the board sits 8 dp
+above the bottom-aligned input, with any spare vertical space above the board.
+The board allocation includes outside clues and artwork, which can leave more space
+between the grid itself and the input. Its top bar remains 52 dp, accounting
 for the approximately 11 px difference in height-limited landscape board sizes.
 Titles/authors/timers occupy the sidebar in landscape and the area below the board
 in portrait. Controls also scale down to fit short windows; long rules remain scrollable.
