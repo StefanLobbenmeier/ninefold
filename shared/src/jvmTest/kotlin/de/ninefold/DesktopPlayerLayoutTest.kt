@@ -74,7 +74,7 @@ class DesktopPlayerLayoutTest {
             PortraitPlayerLayout(
                 modifier = Modifier.requiredSize(width.dp, height.dp).testTag("portrait"),
                 board = { Box(Modifier.fillMaxSize().testTag("board")) },
-                controls = { Box(Modifier.fillMaxSize().testTag("controls")) },
+                controls = { Box(Modifier.height(220.dp).testTag("controls")) },
             )
         }
         listOf(390 to 792, 375 to 615, 850 to 848, 768 to 972).forEach { size ->
@@ -89,7 +89,10 @@ class DesktopPlayerLayoutTest {
             val expectedSize = minOf(size.first, (size.second / 1.5f).toInt()) - 5
             assertEquals(expectedSize.dp, board.right - board.left)
             assertEquals(board.right - board.left, board.bottom - board.top)
-            assertTrue(board.bottom <= controls.top)
+            assertEquals(8.dp, controls.top - board.bottom)
+            val frameHeight = minOf(size.second, ((expectedSize + 5) * 2.1f).toInt())
+            assertEquals(player.top + ((size.second - frameHeight) / 2 + frameHeight).dp, controls.bottom)
+            assertTrue(board.top >= player.top)
             assertTrue(board.bottom <= player.bottom)
             assertTrue(controls.bottom <= player.bottom)
         }

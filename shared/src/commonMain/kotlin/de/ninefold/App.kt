@@ -23,6 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -269,6 +273,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         }
     }
     val clearSelection by rememberUpdatedState { changeSelection(emptySet()) }
+    var inputBounds by remember { mutableStateOf<Rect?>(null) }
+    var playerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     val focusRequester = remember { FocusRequester() }
     val back by rememberUpdatedState(onBrowse)
@@ -309,21 +315,25 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             }
         }
         false
-    }.focusable().edgeSwipeBack { back() }.background(Paper).safeDrawingPadding().pointerInput(Unit) {
-        awaitEachGesture {
-            // Board gestures and controls consume their presses before the final pass.
-            // An unhandled press is on the background.
-            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
-            if (!down.isConsumed && colourSettings == null) clearSelection()
-        }
-    }) {
+    }.focusable().edgeSwipeBack { back() }.background(Paper).safeDrawingPadding()) {
         val compact = maxWidth <= maxHeight - 52.dp
         val landscapePhone = !compact && maxHeight < 600.dp
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().onGloballyPositioned { playerCoordinates = it }.pointerInput(compact) {
+            awaitEachGesture {
+                // Board gestures and controls consume their presses before the final pass.
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+                val position = playerCoordinates?.localToRoot(down.position)
+                val inInput = position != null && inputBounds?.let { bounds ->
+                    if (compact) position.y >= bounds.top else bounds.contains(position)
+                } == true
+                if (!down.isConsumed && !inInput && colourSettings == null) clearSelection()
+            }
+        }) {
             TopBar(puzzle, shareBaseUrl, desktop = !compact, elapsed = elapsed, canPause = started && !completed, onPause = { paused = true; showRules = true }) { clearSelection(); onBrowse() }
             if (compact) {
                 PortraitPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
+                    onInputBounds = { inputBounds = it },
                     board = {
                         SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
                     },
@@ -338,6 +348,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                     },
                 ) {
                     DesktopPlayerSidebar(
+                        onInputBounds = { inputBounds = it },
                         rules = {
                             SideCard("PUZZLE NOTES") {
                                 RulesText(puzzle.rules)
@@ -440,6 +451,7 @@ internal fun DesktopPlayerSidebar(
     rules: @Composable () -> Unit,
     input: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    onInputBounds: (Rect) -> Unit = {},
 ) {
     Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
         Box(Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState())) {
@@ -447,26 +459,28 @@ internal fun DesktopPlayerSidebar(
         }
         Spacer(Modifier.height(16.dp))
         // Also keep every input action reachable in very short landscape windows.
-        Box(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        Box(Modifier.fillMaxWidth().onGloballyPositioned { onInputBounds(it.boundsInRoot()) }
+            .verticalScroll(rememberScrollState())) {
             input()
         }
     }
 }
 
-// In portrait the square gets the width first; input fills the space below.
+// Keep the full board (including outside artwork) just above the bottom-aligned input.
 @Composable
 internal fun PortraitPlayerLayout(
     modifier: Modifier = Modifier,
+    onInputBounds: (Rect) -> Unit = {},
     board: @Composable () -> Unit,
     controls: @Composable () -> Unit,
 ) {
     Layout(content = {
         Box { board() }
-        BoxWithConstraints {
+        BoxWithConstraints(Modifier.onGloballyPositioned { onInputBounds(it.boundsInRoot()) }) {
             val density = LocalDensity.current
             val scale = minOf(maxWidth / 350.dp, maxHeight / 258.dp, 1.3f).coerceAtLeast(0.01f)
             CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
-                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) { controls() }
+                Column(Modifier.fillMaxWidth()) { controls() }
             }
         }
     }, modifier = modifier) { measurables, constraints ->
@@ -477,14 +491,18 @@ internal fun PortraitPlayerLayout(
         val margin = 5.dp.roundToPx().coerceAtMost(frameWidth)
         val boardSize = frameWidth - margin
         val controlsWidth = minOf(boardSize, 455.dp.roundToPx())
-        val remaining = (frameHeight - frameWidth).coerceAtLeast(0)
+        val gap = 8.dp.roundToPx()
+        val remaining = (frameHeight - boardSize - gap).coerceAtLeast(0)
         val boardPlaceable = measurables[0].measure(Constraints.fixed(boardSize, boardSize))
-        val controlsPlaceable = measurables[1].measure(Constraints.fixed(controlsWidth, remaining))
+        val controlsPlaceable = measurables[1].measure(Constraints(
+            minWidth = controlsWidth, maxWidth = controlsWidth, maxHeight = remaining,
+        ))
         layout(width, height) {
             val top = (height - frameHeight) / 2
             val controlsLeft = (width - controlsWidth) / 2
-            boardPlaceable.placeRelative((width - boardSize) / 2, top + margin / 2)
-            controlsPlaceable.placeRelative(controlsLeft, top + frameWidth)
+            val controlsTop = top + frameHeight - controlsPlaceable.height
+            boardPlaceable.placeRelative((width - boardSize) / 2, controlsTop - gap - boardSize)
+            controlsPlaceable.placeRelative(controlsLeft, controlsTop)
         }
     }
 }

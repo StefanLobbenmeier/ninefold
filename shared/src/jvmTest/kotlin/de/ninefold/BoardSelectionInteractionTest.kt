@@ -305,19 +305,40 @@ class BoardSelectionInteractionTest {
 
     @Test fun backgroundClearsSelectionWhileKeypadKeepsIt() {
         openPlayer()
-        checkBackgroundAndKeypad()
+        checkBackgroundAndKeypad(compact = false)
     }
 
     @Test fun compactBackgroundClearsSelectionWhileKeypadKeepsIt() {
         openPlayer(compact = true)
-        checkBackgroundAndKeypad()
+        checkBackgroundAndKeypad(compact = true)
     }
 
-    private fun checkBackgroundAndKeypad() {
+    private fun checkBackgroundAndKeypad(compact: Boolean) {
         drag(2, 1, 3)
         compose.onNode(hasText("5") and !hasText("Digit")).performTouchInput { click() }
         assertSelection(2 to 1, 2 to 2, 2 to 3)
         cell(2, 2).assertContentDescriptionContains("Row 2, column 2, 5", substring = true)
+        // Miss both adjacent buttons: their gap must preserve selection for touch and mouse.
+        val four = compose.onNodeWithText("4").fetchSemanticsNode().boundsInRoot
+        val five = compose.onNode(hasText("5") and !hasContentDescription("Row ", substring = true) and !hasText("Digit")).fetchSemanticsNode().boundsInRoot
+        val gap = Offset((four.right + five.left) / 2, five.center.y)
+        compose.onRoot().performTouchInput { click(gap) }
+        assertSelection(2 to 1, 2 to 2, 2 to 3)
+        compose.onRoot().performMouseInput { click(gap) }
+        assertSelection(2 to 1, 2 to 2, 2 to 3)
+        if (compact) {
+            // The entire area below the input's top edge is protected, including side margins.
+            compose.onRoot().performTouchInput { click(Offset(1f, five.center.y)) }
+            assertSelection(2 to 1, 2 to 2, 2 to 3)
+            compose.onRoot().performTouchInput { click(Offset(1f, height - 1f)) }
+            assertSelection(2 to 1, 2 to 2, 2 to 3)
+        } else {
+            compose.onNodeWithText("PLAY").performTouchInput { click() }
+            assertSelection(2 to 1, 2 to 2, 2 to 3)
+            compose.onRoot().performTouchInput { click(Offset(1f, five.center.y)) }
+            assertSelection()
+            drag(2, 1, 3)
+        }
         val boardY = cell(4, 4).fetchSemanticsNode().boundsInRoot.center.y
         compose.onRoot().performTouchInput { click(Offset(1f, boardY)) }
         assertSelection()
