@@ -1,5 +1,41 @@
 package de.ninefold
 
+/** Finalize centre edits only after leaving the cells, keeping narrower corner reminders. */
+internal fun cleanCornerNotes(
+    puzzle: Puzzle,
+    cells: List<CellState>,
+    leaving: Set<CellPosition>,
+    editing: Set<CellPosition>,
+): List<CellState> {
+    if (leaving.isEmpty()) return cells
+    val next = cells.toMutableList()
+    leaving.forEach { position ->
+        val index = position.index(puzzle.size)
+        val cell = cells[index]
+        if (!cell.given && cell.value == null && cell.centreNotes.isNotEmpty()) {
+            next[index] = cell.copy(cornerNotes = cell.cornerNotes intersect cell.centreNotes)
+        }
+    }
+    puzzle.regionCells().forEach { region ->
+        val groups = region.filter { position ->
+            val cell = cells[position.index(puzzle.size)]
+            !cell.given && cell.value == null && cell.centreNotes.size >= 2
+        }.groupBy { cells[it.index(puzzle.size)].centreNotes }
+        groups.forEach { (digits, positions) ->
+            // A complete pair/triplet makes a corner reminder redundant only when it
+            // covers the whole group. Wait until every member has left the selection.
+            if (positions.size == digits.size && positions.any { it in leaving } && positions.none { it in editing }) {
+                val redundant = digits.filter { digit -> positions.all { digit in cells[it.index(puzzle.size)].cornerNotes } }.toSet()
+                positions.forEach { position ->
+                    val index = position.index(puzzle.size)
+                    next[index] = next[index].copy(cornerNotes = next[index].cornerNotes - redundant)
+                }
+            }
+        }
+    }
+    return next
+}
+
 /** Toggle shared notes or colours consistently across the selection. */
 internal fun applyInput(cells: List<CellState>, selected: Set<CellPosition>, mode: InputMode, number: Int?): List<CellState> {
     if (mode != InputMode.Colour && number != null && number in 1..9 && number > gridSize(cells)) return cells
