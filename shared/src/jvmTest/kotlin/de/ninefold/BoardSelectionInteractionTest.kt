@@ -20,10 +20,11 @@ import kotlin.test.assertNotEquals
 class BoardSelectionInteractionTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun openPlayer(compact: Boolean = false, size: Int = 9) {
+    private fun openPlayer(compact: Boolean = false, size: Int = 9, notes: Map<CellPosition, CellState> = emptyMap()) {
         val puzzle = SudokuFixtures.empty.copy(title = "Selection test", size = size, givens = ".".repeat(size * size))
         val repository = GameRepository(MemoryAppStorage())
-        repository.saveGame(SavedGame(puzzle, puzzle.startingCells(), started = true))
+        val cells = puzzle.startingCells().toMutableList().also { cells -> notes.forEach { (position, state) -> cells[position.index(size)] = state } }
+        repository.saveGame(SavedGame(puzzle, cells, started = true))
         compose.setContent {
             MaterialTheme {
                 Box(if (compact) Modifier.width(400.dp) else Modifier) {
@@ -236,6 +237,47 @@ class BoardSelectionInteractionTest {
         cell(2, 1).assertContentDescriptionContains("corner notes 3, 8", substring = true)
         compose.onNodeWithContentDescription("Redo").performClick()
         cell(2, 1).assertContentDescriptionEquals("Row 2, column 1, empty, centre notes 2, 8")
+    }
+
+    @Test fun compactTouchInputCleansExcludedCornersOnlyAfterLeavingCell() {
+        openPlayer(compact = true)
+        clickCell(2, 2)
+        compose.onNodeWithText("Corner").performTouchInput { click() }
+        compose.onNode(hasText("3") and hasClickAction() and !hasContentDescription("Row ", substring = true)).performTouchInput { click() }
+        compose.onNode(hasText("8") and hasClickAction() and !hasContentDescription("Row ", substring = true)).performTouchInput { click() }
+        compose.onNodeWithText("Centre").performTouchInput { click() }
+        compose.onNode(hasText("2") and hasClickAction() and !hasContentDescription("Row ", substring = true)).performTouchInput { click() }
+        cell(2, 2).assertContentDescriptionContains("corner notes 3, 8", substring = true)
+        compose.onNode(hasText("8") and hasClickAction() and !hasContentDescription("Row ", substring = true)).performTouchInput { click() }
+        cell(2, 2).assertContentDescriptionContains("corner notes 3, 8", substring = true)
+        clickCell(3, 4)
+        cell(2, 2).assertContentDescriptionEquals("Row 2, column 2, empty, corner notes 8, centre notes 2, 8")
+    }
+
+    @Test fun compactTouchInputClearsMatchingCornerAndCentrePairs() {
+        openPlayer(compact = true)
+        drag(2, 7, 8)
+        fun digit(number: Int) = compose.onNode(hasText(number.toString()) and hasClickAction() and !hasContentDescription("Row ", substring = true)).performTouchInput { click() }
+        compose.onNodeWithText("Corner").performTouchInput { click() }
+        digit(2)
+        digit(3)
+        compose.onNodeWithText("Centre").performTouchInput { click() }
+        digit(2)
+        digit(3)
+        for (column in 7..8) cell(2, column).assertContentDescriptionEquals("Row 2, column $column, empty, selected, corner notes 2, 3, centre notes 2, 3")
+        clickCell(3, 4)
+        for (column in 7..8) cell(2, column).assertContentDescriptionEquals("Row 2, column $column, empty, centre notes 2, 3")
+    }
+
+    @Test fun leavingRestoredPairCleansCornersWithoutRetypingCentreNotes() {
+        val notes = setOf(CellPosition(1, 6), CellPosition(1, 7)).associateWith {
+            CellState(cornerNotes = setOf(2, 3), centreNotes = setOf(2, 3))
+        }
+        openPlayer(compact = true, notes = notes)
+        drag(2, 7, 8)
+        for (column in 7..8) cell(2, column).assertContentDescriptionContains("corner notes 2, 3", substring = true)
+        clickCell(3, 4)
+        for (column in 7..8) cell(2, column).assertContentDescriptionEquals("Row 2, column $column, empty, centre notes 2, 3")
     }
 
     @Test fun altTemporarilyTogglesLettersInBothDirections() {

@@ -157,7 +157,6 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var finalized by remember(puzzle) { mutableStateOf(cells) }
     var colourSettings by remember { mutableStateOf<CellColour?>(null) }
     var selected by remember(puzzle) { mutableStateOf(setOf(CellPosition(0, minOf(2, puzzle.size - 1)))) }
-    var centreEdits by remember(puzzle) { mutableStateOf(emptySet<CellPosition>()) }
     val mode = InputMode.entries.firstOrNull { it.name == repository.settings.inputMode } ?: InputMode.Digit
     var altHeld by remember { mutableStateOf(false) }
     val letters = repository.settings.letters != altHeld
@@ -228,7 +227,6 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     }
     fun enter(number: Int?, inputMode: InputMode = mode) = update { next ->
         val entered = applyInput(next, selected, inputMode, number)
-        centreEdits = centreEdits + selected.filter { next[it.index(puzzle.size)].centreNotes != entered[it.index(puzzle.size)].centreNotes }
         next.clear(); next.addAll(entered)
     }
     fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
@@ -239,12 +237,11 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     }
 
     fun changeSelection(next: Set<CellPosition>) {
-        val leaving = centreEdits - next
+        val leaving = selected - next
         update { updated ->
             val cleaned = cleanCornerNotes(puzzle, updated, leaving, next)
             cleaned.forEachIndexed { index, cell -> updated[index] = cell }
         }
-        centreEdits = centreEdits - leaving
         selected = next
         finalized = finalizedCells(cells, finalized, next)
     }
