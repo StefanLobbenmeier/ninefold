@@ -217,6 +217,27 @@ class BoardSelectionInteractionTest {
         compose.onNodeWithText("Corner").assertIsSelected()
     }
 
+    @Test fun leavingCentrePairCleansCornersAndSupportsUndoRedo() {
+        openPlayer()
+        drag(2, 1, 2)
+        compose.onNodeWithText("Corner").performClick()
+        compose.onRoot().performKeyInput { pressKey(Key.Three); pressKey(Key.Eight) }
+        compose.onNodeWithText("Centre").performClick()
+        compose.onRoot().performKeyInput { pressKey(Key.Two) }
+        cell(2, 1).assertContentDescriptionContains("corner notes 3, 8", substring = true)
+        compose.onRoot().performKeyInput { pressKey(Key.Eight) }
+        cell(2, 2).assertContentDescriptionContains("corner notes 3, 8", substring = true)
+        clickCell(3, 4)
+        for (column in 1..2) cell(2, column).assertContentDescriptionEquals("Row 2, column $column, empty, centre notes 2, 8")
+        compose.onNodeWithContentDescription("Undo").performClick()
+        cell(2, 1).assertContentDescriptionContains("corner notes 3, 8", substring = true)
+        // Moving after undo must not apply the cleanup again.
+        clickCell(4, 4)
+        cell(2, 1).assertContentDescriptionContains("corner notes 3, 8", substring = true)
+        compose.onNodeWithContentDescription("Redo").performClick()
+        cell(2, 1).assertContentDescriptionEquals("Row 2, column 1, empty, centre notes 2, 8")
+    }
+
     @Test fun altTemporarilyTogglesLettersInBothDirections() {
         openPlayer()
         compose.onRoot().performKeyInput { keyDown(Key.AltLeft) }
