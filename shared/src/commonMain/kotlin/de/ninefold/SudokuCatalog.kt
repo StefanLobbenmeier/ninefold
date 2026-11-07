@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.painterResource
 import ninefold.shared.generated.resources.Res
@@ -172,7 +173,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 } else item {
                     Card(colors = CardDefaults.cardColors(containerColor = Moss), shape = RoundedCornerShape(24.dp)) {
                         Column(Modifier.fillMaxWidth().padding(28.dp)) {
-                            Text("Your next good idea\nstarts with a square.", color = Color.White, fontFamily = editorialFont(), fontSize = 28.sp, lineHeight = 34.sp)
+                            Text("Your next good idea\nstarts with a square.", color = Color.White, fontFamily = FontFamily.Serif, fontSize = 28.sp, lineHeight = 34.sp)
                             Spacer(Modifier.height(20.dp))
                             FilledTonalButton({ switchTab(true) }) { Text("Find a puzzle"); Spacer(Modifier.width(12.dp)); AppIcon(Glyph.Play) }
                         }
@@ -198,7 +199,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                 }
             } else {
             item {
-                Text("Find your next challenge", fontFamily = editorialFont(), fontSize = 34.sp, lineHeight = 40.sp)
+                Text("Find your next challenge", fontFamily = FontFamily.Serif, fontSize = 34.sp, lineHeight = 40.sp)
                 if (refreshing) {
                     LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
                     Text(if (index == null) "Loading puzzles…" else "Refreshing puzzles…")
@@ -398,7 +399,7 @@ private fun FeaturedGameCard(game: SavedGame, elapsed: Long, enabled: Boolean, o
             BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 20.dp)) {
                 val details: @Composable () -> Unit = {
                     Column {
-                        Text(game.puzzle.title, fontFamily = editorialFont(), fontSize = 28.sp, lineHeight = 32.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        Text(game.puzzle.title, fontFamily = FontFamily.Serif, fontSize = 28.sp, lineHeight = 32.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         Text("by ${game.puzzle.author}", color = Sage, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
                     }
                 }

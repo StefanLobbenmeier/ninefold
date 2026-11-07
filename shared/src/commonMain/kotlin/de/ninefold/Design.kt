@@ -1,6 +1,5 @@
 package de.ninefold
 
-import ninefold.shared.generated.resources.lora
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.LocalContentColor
@@ -48,9 +47,3 @@ internal fun AppIcon(glyph: Glyph, modifier: Modifier = Modifier) {
         }
     }
 }
-
-/** Bundled so editorial headings render consistently, including in offline web builds. */
-@Composable
-internal fun editorialFont() = androidx.compose.ui.text.font.FontFamily(
-    org.jetbrains.compose.resources.Font(ninefold.shared.generated.resources.Res.font.lora),
-)

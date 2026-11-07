@@ -137,9 +137,8 @@ changed givens are updated throughout the board and history. A failed reimport k
 and displays the error. A dialog confirms successful reimports. Preparing a large catalog can take longer than a
 few seconds, depending on the connection. Production builds prepare a service worker that downloads
 and verifies the complete app (including all Wasm modules and chunks) before installing a release.
-Subsequent launches use that cached release immediately, even on a slow connection. Web startup renders
-the app immediately while the bundled heading font loads asynchronously; headings may briefly use
-a fallback font on the first frame. Updates download
+Subsequent launches use that cached release immediately, even on a slow connection. Headings use
+Compose's serif font family without a bundled custom font or a font preload step. Updates download
 into a separate cache; failed or interrupted downloads preserve the working release. A complete update
 shows a “New version ready” banner at the top of Home. Select Reload to activate it and reload
 all open app tabs (tabs playing a puzzle defer the reload until returning to the catalog).
