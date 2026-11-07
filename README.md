@@ -135,7 +135,10 @@ Solved, or a ready offline catalog entry to fetch and convert it again with the 
 A successful reimport replaces the saved conversion while keeping moves, history, and elapsed time;
 changed givens are updated throughout the board and history. A failed reimport keeps the old puzzle
 and displays the error. A dialog confirms successful reimports. Preparing a large catalog can take longer than a
-few seconds, depending on the connection. Production builds prepare a service worker that downloads
+few seconds, depending on the connection. GitHub Pages deploys the Kotlin/JS distribution, matching
+Rechoir's browser target while investigating iOS startup failures. The Kotlin/Wasm target remains
+available for local testing. Kotlin/JS still uses Skiko's Wasm renderer, but does not require the
+Kotlin/Wasm application runtime. Production builds prepare a service worker that downloads
 and verifies the complete app (including all Wasm modules and chunks) before installing a release.
 Subsequent launches use that cached release immediately, even on a slow connection. Headings use
 Compose's serif font family without a bundled custom font or a font preload step. Updates download
