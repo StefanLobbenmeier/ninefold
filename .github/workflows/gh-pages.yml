@@ -60,11 +60,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build web app (Wasm)
-        run: ./gradlew :webApp:wasmJsBrowserDistribution --console=plain
+      # Match Rechoir's browser runtime while investigating iOS startup failures.
+      # Kotlin/JS avoids the Kotlin/Wasm GC and exception-handling requirements.
+      - name: Build web app (JavaScript)
+        run: ./gradlew :webApp:jsBrowserDistribution --console=plain
 
       - name: Prepare Pages output
-        run: touch webApp/build/dist/wasmJs/productionExecutable/.nojekyll
+        run: touch webApp/build/dist/js/productionExecutable/.nojekyll
 
       # Fork pull requests have a read-only token. Still build them, without publishing.
       - name: Deploy to Pages branch
@@ -73,7 +75,7 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages
-          folder: webApp/build/dist/wasmJs/productionExecutable
+          folder: webApp/build/dist/js/productionExecutable
           target-folder: ${{ github.event_name == 'pull_request' && format('pr-preview/pr-{0}', github.event.pull_request.number) || '' }}
           clean-exclude: |
             pr-preview/
