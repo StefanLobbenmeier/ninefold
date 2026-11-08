@@ -152,6 +152,23 @@ class SudokuPadImportTest {
         assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
     }
 
+    @Test fun importsFpuzzlesRectangleLabelsBetweenCellsAndAtIntersections() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"rectangle":[
+            {"cells":["R1C3","R1C2"],"value":"4","baseC":"#FFFFFF","outlineC":"#FFFFFF","fontC":"#000000","width":0.5,"height":0.5},
+            {"cells":["R3C2","R2C2"],"value":"7","baseC":"#FFE100","outlineC":"#336699","fontC":"#123456","width":0.4,"height":0.6},
+            {"cells":["R5C5","R4C4","R5C4","R4C5"],"value":"A"},
+            {"cells":[]}
+        ]"""))
+        assertEquals(listOf(
+            PuzzleOverlay(GridPoint(.5, 2.0), .5, .5, "#FFFFFF", "#FFFFFF", "#000000", "4", rounded = false),
+            PuzzleOverlay(GridPoint(2.0, 1.5), .4, .6, "#FFE100", "#336699", "#123456", "7", rounded = false),
+            PuzzleOverlay(GridPoint(4.0, 4.0), .5, .5, "#FFFFFF", "#000000", "#000000", "A", rounded = false),
+        ), puzzle.overlays)
+        assertTrue(puzzle.startingCells().all { it == CellState() })
+        assertTrue(puzzle.importOmissions.none { it.path.contains("rectangle") })
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+    }
+
     @Test fun importsFpuzzlesLineOutlineColorsForEveryPath() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"line":[
             {"lines":[["R1C1","R1C2"],["R2C1","R2C2"]],"outlineC":"#3366FF"},
