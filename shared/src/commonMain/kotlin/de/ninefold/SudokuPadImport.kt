@@ -395,19 +395,19 @@ private fun parseLines(root: JsonObject, fpuzzles: Boolean): List<PuzzleLine> {
 }
 
 private fun parseFpuzzlesOverlays(root: JsonObject): List<PuzzleOverlay> = buildList {
-    // Decorative circles may sit between two cells or at a four-cell intersection.
-    root.array("circle").orEmpty().forEach { element ->
-        val circle = element.jsonObject
-        val cells = circle.array("cells").orEmpty().mapNotNull(::parseCell)
+    // Decorative shapes may sit between two cells or at a four-cell intersection.
+    for (feature in listOf("circle", "rectangle")) root.array(feature).orEmpty().forEach { element ->
+        val shape = element.jsonObject
+        val cells = shape.array("cells").orEmpty().mapNotNull(::parseCell)
         if (cells.isNotEmpty()) add(PuzzleOverlay(
             center = GridPoint(cells.map { it.row + .5 }.average(), cells.map { it.column + .5 }.average()),
-            width = circle.double("width") ?: .5,
-            height = circle.double("height") ?: .5,
-            backgroundColor = circle.string("baseC") ?: "#FFFFFF",
-            borderColor = circle.string("outlineC") ?: "#000000",
-            textColor = circle.string("fontC") ?: "#000000",
-            text = circle.string("value"),
-            rounded = true,
+            width = shape.double("width") ?: .5,
+            height = shape.double("height") ?: .5,
+            backgroundColor = shape.string("baseC") ?: "#FFFFFF",
+            borderColor = shape.string("outlineC") ?: "#000000",
+            textColor = shape.string("fontC") ?: "#000000",
+            text = shape.string("value"),
+            rounded = feature == "circle",
         ))
     }
     fun pairMarks(feature: String, background: String, border: String?, defaultText: String? = null) {
