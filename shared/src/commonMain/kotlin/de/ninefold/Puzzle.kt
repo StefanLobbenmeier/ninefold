@@ -21,6 +21,8 @@ data class KillerCage(
     val unique: Boolean = true,
     /** Sum stated in prose, without adding a printed clue to the artwork. */
     val ruleTotal: Int? = null,
+    /** Hidden source cages still enforce constraints, but have no border or printed total. */
+    val hidden: Boolean = false,
 )
 @Serializable
 data class FogLink(val triggers: Set<CellPosition>, val cells: Set<CellPosition>)
