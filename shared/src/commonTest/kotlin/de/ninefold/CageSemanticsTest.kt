@@ -7,6 +7,28 @@ class CageSemanticsTest {
         parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
             """"metadata":{"rules":"$rules"},"cages":[{"cells":[[0,0],[4,4]],$cage}]"""))
 
+    @Test fun hiddenCagesPreserveConstraintsAndVisibilityThroughSharing() {
+        // Disconnected cells model an invisible uniqueness group, not drawn cage artwork.
+        val puzzle = imported(""""hidden":true,"unique":true""")
+        assertTrue(puzzle.cages.single().hidden)
+        assertEquals(puzzle, puzzleFromShareLink(puzzleShareLink(puzzle)))
+        assertTrue(puzzle.importOmissions.isEmpty())
+        val cells = puzzle.startingCells().toMutableList()
+        cells[0] = CellState(value = 5)
+        cells[40] = CellState(value = 5)
+        assertEquals(setOf(0, 40), checkSudokuRules(puzzle, cells).cells)
+        assertTrue(checkSudokuRules(puzzle, cells, includeSpecialRules = false).cells.isEmpty())
+    }
+
+    @Test fun cageVisibilityDefaultsToVisibleAndRequiresABoolean() {
+        assertFalse(imported(""""value":10""").cages.single().hidden)
+        assertFalse(imported(""""hidden":false""").cages.single().hidden)
+        val malformed = imported(""""hidden":"yes" """)
+        assertFalse(malformed.cages.single().hidden)
+        assertTrue(malformed.importOmissions.any { it.path == "$.cages[0].hidden" })
+        assertTrue(imported(""""hidden":true,"value":10""").cages.single().hidden)
+    }
+
     @Test fun explicitUniquenessOverridesRulesAndSurvivesSharing() {
         for (unique in listOf(false, true)) {
             val puzzle = imported(""""value":10,"unique":$unique""", "Killer cages.")

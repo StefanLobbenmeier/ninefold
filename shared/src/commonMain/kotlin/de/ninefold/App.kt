@@ -697,13 +697,14 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             }
                 } } }
                 CageOverlay(puzzle, boxGap, puzzle.cages.mapNotNull { cage ->
+                    if (cage.hidden) return@mapNotNull null
                     val visible = cage.cells.intersect(litCells)
                     cage.copy(cells = visible).takeIf { visible.isNotEmpty() }
                 })
                 // Paint totals after the cage borders so the backing softens the dashes beneath them.
                 BoardCells(puzzle, boxGap) { repeat(puzzle.size) { row -> repeat(puzzle.size) { column ->
                     val position = CellPosition(row, column)
-                    val cage = puzzle.cages.firstOrNull { it.total != null && position == it.cells.minByOrNull { cell -> cell.index(puzzle.size) } }
+                    val cage = puzzle.cages.firstOrNull { !it.hidden && it.total != null && position == it.cells.minByOrNull { cell -> cell.index(puzzle.size) } }
                     Box(Modifier.fillMaxSize()) {
                         if (cage != null && position in litCells) Text(
                             cage.total.toString(),

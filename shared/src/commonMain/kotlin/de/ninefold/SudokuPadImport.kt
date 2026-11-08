@@ -201,7 +201,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
             null
         } else if (cells.isNotEmpty() && (value != null || cage.string("value").isNullOrBlank())) {
             KillerCage(value, cells, unique = cage.boolean("unique") ?: defaultUnique,
-                ruleTotal = sharedCageTotal.takeIf { value == null })
+                ruleTotal = sharedCageTotal.takeIf { value == null }, hidden = cage.boolean("hidden") == true)
         } else null
     }
     val lines = parseLines(root, fpuzzles)
@@ -210,7 +210,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText, size)
     // f-puzzles renders cages without totals as shaded regions. Keep their
     // killer uniqueness semantics while preserving that visual distinction.
-    val shadedCages = if (fpuzzles) cages.filter { it.total == null }.flatMap { it.cells }.distinct().map {
+    val shadedCages = if (fpuzzles) cages.filter { !it.hidden && it.total == null }.flatMap { it.cells }.distinct().map {
         PuzzleOverlay(GridPoint(it.row + .5, it.column + .5), 1.0, 1.0, backgroundColor = "#E0E0E0")
     } else emptyList()
     val underlays = shadedCages + cellShading + root.array("underlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
