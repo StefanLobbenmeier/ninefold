@@ -1,6 +1,7 @@
 package de.ninefold
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,14 +50,16 @@ internal fun ruleLines(rules: List<String>): List<RuleLine> = rules.flatMap { ru
 
 @Composable
 internal fun RulesText(rules: List<String>) {
-    Column {
-        ruleLines(rules).forEach { line ->
-            if (line.text.isBlank()) {
-                Spacer(Modifier.height(10.dp))
-            } else {
-                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-                    if (line.bullet) Text("•", Modifier.width(20.dp), lineHeight = 20.sp)
-                    Text(linkedRuleText(line.text, MaterialTheme.colorScheme.primary), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+    SelectionContainer {
+        Column {
+            ruleLines(rules).forEach { line ->
+                if (line.text.isBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                } else {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+                        if (line.bullet) Text("•", Modifier.width(20.dp), lineHeight = 20.sp)
+                        Text(linkedRuleText(line.text, MaterialTheme.colorScheme.primary), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, lineHeight = 20.sp)
+                    }
                 }
             }
         }
