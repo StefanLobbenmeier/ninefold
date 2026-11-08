@@ -20,15 +20,22 @@ internal enum class CatalogProgress(val label: String) {
 }
 
 internal enum class CatalogDifficulty(val label: String) {
-    All("Any difficulty"), Easy("Easy · under 30 min"), Medium("Medium · 30–60 min"),
+    All("Any difficulty"), GenerallyApproachable("Generally approachable · GAS"), Easy("Easy · under 30 min"), Medium("Medium · 30–60 min"),
     Hard("Hard · 60+ min"), Unknown("Unknown · no video length");
 
-    fun matches(seconds: Int?): Boolean = when (this) {
-        All -> true
-        Easy -> seconds != null && seconds in 1 until 1800
-        Medium -> seconds != null && seconds in 1800 until 3600
-        Hard -> seconds != null && seconds >= 3600
-        Unknown -> seconds == null || seconds <= 0
+    fun matches(entry: SudokuIndexEntry): Boolean {
+        if (this == All) return true
+        val isGas = entry.sourceId == "lucians-place"
+        if (this == GenerallyApproachable) return isGas
+        if (isGas) return false
+        val seconds = entry.durationSeconds
+        return when (this) {
+            Easy -> seconds != null && seconds in 1 until 1800
+            Medium -> seconds != null && seconds in 1800 until 3600
+            Hard -> seconds != null && seconds >= 3600
+            Unknown -> seconds == null || seconds <= 0
+            All, GenerallyApproachable -> false
+        }
     }
 }
 
@@ -60,7 +67,7 @@ internal fun CatalogFilters(
                 HorizontalDivider()
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text("Estimated difficulty", style = MaterialTheme.typography.labelMedium)
-                    Text("Based on video length, not your solve time.", style = MaterialTheme.typography.bodySmall)
+                    Text("GAS by source; other levels by video length, not your solve time.", style = MaterialTheme.typography.bodySmall)
                 }
                 CatalogDifficulty.entries.forEach { option ->
                     FilterOption(option.label, difficulty == option) { onDifficulty(option) }

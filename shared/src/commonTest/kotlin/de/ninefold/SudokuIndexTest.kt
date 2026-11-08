@@ -19,6 +19,16 @@ class SudokuIndexTest {
         assertEquals(listOf("new", "older"), index.entries.map { it.id })
         assertEquals("Cracking the Cryptic", index.entries.first().source)
         assertEquals("other", index.entries.last().source)
+        assertEquals("ctc", index.entries.first().sourceId)
+        assertEquals("other", index.entries.last().sourceId)
+    }
+
+    @Test fun luciansSourceReachesGasFilterThroughIndexParsing() {
+        val entry = parseSudokuIndex(payload().replace("\"ctc\"", "\"lucians-place\"")).entries.first()
+        assertEquals(
+            listOf(CatalogDifficulty.All, CatalogDifficulty.GenerallyApproachable),
+            CatalogDifficulty.entries.filter { it.matches(entry) },
+        )
     }
 
     @Test fun retainsSourceVideoWhenPresent() {
