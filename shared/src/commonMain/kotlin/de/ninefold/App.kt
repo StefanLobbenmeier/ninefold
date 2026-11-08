@@ -177,18 +177,20 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val settings = repository.settings
     val checkRules = settings.rules
     val checkRulesAutomatically = settings.automaticRules
+    val checkRulePencilmarksAutomatically = settings.automaticRulePencilmarks
     val includeSpecialRules = settings.specialRules
     val checkSolution = settings.solution
     val checkSolutionAutomatically = settings.automaticSolution
+    val checkSolutionPencilmarksAutomatically = settings.automaticSolutionPencilmarks
     var manualRulesCheck by remember { mutableStateOf(false) }
     var manualSolutionCheck by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(saved?.history ?: emptyList()) }
     var redoStack by remember { mutableStateOf(saved?.redo ?: emptyList()) }
-    val rulesResult = remember(puzzle, cells, checkRules, checkRulesAutomatically, includeSpecialRules, manualRulesCheck) {
-        if (checkRules && (checkRulesAutomatically || manualRulesCheck)) checkSudokuRules(puzzle, cells, includeSpecialRules) else PuzzleCheckResult()
+    val rulesResult = remember(puzzle, cells, settings, manualRulesCheck) {
+        settings.rulesResult(puzzle, cells, manualRulesCheck)
     }
-    val solutionResult = remember(puzzle, finalized, selected, checkSolution, checkSolutionAutomatically, manualSolutionCheck) {
-        if (checkSolution && (checkSolutionAutomatically || manualSolutionCheck)) checkAgainstSolution(puzzle, finalized).excluding(selected, puzzle.size) else PuzzleCheckResult()
+    val solutionResult = remember(puzzle, finalized, selected, settings, manualSolutionCheck) {
+        settings.solutionResult(puzzle, finalized, manualSolutionCheck).excluding(selected, puzzle.size)
     }
     val checkResult = rulesResult + solutionResult + (completionResult ?: PuzzleCheckResult())
 
@@ -388,9 +390,11 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     if (showChecking) CheckingDialog(
         checkRules, { repository.saveSettings(settings.copy(rules = it)); manualRulesCheck = false },
         checkRulesAutomatically, { repository.saveSettings(settings.copy(automaticRules = it)); manualRulesCheck = false },
+        checkRulePencilmarksAutomatically, { repository.saveSettings(settings.copy(automaticRulePencilmarks = it)); manualRulesCheck = false },
         includeSpecialRules, { repository.saveSettings(settings.copy(specialRules = it)); manualRulesCheck = false },
         checkSolution, { repository.saveSettings(settings.copy(solution = it)); manualSolutionCheck = false },
         checkSolutionAutomatically, { repository.saveSettings(settings.copy(automaticSolution = it)); manualSolutionCheck = false },
+        checkSolutionPencilmarksAutomatically, { repository.saveSettings(settings.copy(automaticSolutionPencilmarks = it)); manualSolutionCheck = false },
     ) { showChecking = false }
     if (showSuccess) CompletionDialog(puzzle, elapsed, { showSuccess = false }) {
         showSuccess = false
@@ -1111,22 +1115,26 @@ private fun AutomaticColourDialog(colour: CellColour, rule: AutomaticColourRule,
 private fun CheckingDialog(
     checkRules: Boolean, onCheckRules: (Boolean) -> Unit,
     automaticRules: Boolean, onAutomaticRules: (Boolean) -> Unit,
+    automaticRulePencilmarks: Boolean, onAutomaticRulePencilmarks: (Boolean) -> Unit,
     includeSpecialRules: Boolean, onIncludeSpecialRules: (Boolean) -> Unit,
     checkSolution: Boolean, onCheckSolution: (Boolean) -> Unit,
     automaticSolution: Boolean, onAutomaticSolution: (Boolean) -> Unit,
+    automaticSolutionPencilmarks: Boolean, onAutomaticSolutionPencilmarks: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { Button(onDismiss) { Text("Done") } },
         title = { Text("Checking settings") },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             CheckOption("Check Sudoku rules", "Rows, columns, boxes, and impossible pencil marks.", checkRules, onCheckRules)
-            IndentedCheckOption("Check automatically", automaticRules, onAutomaticRules, checkRules)
             IndentedCheckOption("Include special rules", includeSpecialRules, onIncludeSpecialRules, checkRules)
+            IndentedCheckOption("Automatically check entered digits", automaticRules, onAutomaticRules, checkRules)
+            IndentedCheckOption("Automatically check pencilmarks", automaticRulePencilmarks, onAutomaticRulePencilmarks, checkRules)
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
             CheckOption("Check against solution", "Wrong digits and pencil marks that exclude the solution.", checkSolution, onCheckSolution)
-            IndentedCheckOption("Check automatically", automaticSolution, onAutomaticSolution, checkSolution)
+            IndentedCheckOption("Automatically check entered digits", automaticSolution, onAutomaticSolution, checkSolution)
+            IndentedCheckOption("Automatically check pencilmarks", automaticSolutionPencilmarks, onAutomaticSolutionPencilmarks, checkSolution)
             Text("Solution checks wait until you leave a cell. Rule checks can run while you type. Checks that are not automatic run when you press Check.", color = Color.Gray, fontSize = 12.sp, lineHeight = 17.sp)
         } },
         shape = RoundedCornerShape(22.dp),
