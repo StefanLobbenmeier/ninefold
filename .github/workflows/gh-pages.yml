@@ -35,6 +35,27 @@ jobs:
       - name: Run JVM tests
         run: xvfb-run --auto-servernum ./gradlew :shared:jvmTest --console=plain
 
+  test-js:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: test-js-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run JavaScript browser tests
+        run: ./gradlew :shared:jsTest --console=plain
+
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
