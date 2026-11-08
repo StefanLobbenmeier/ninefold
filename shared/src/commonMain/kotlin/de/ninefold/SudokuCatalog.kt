@@ -74,7 +74,7 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     }
     val entries = index?.entries.orEmpty()
     val filteredEntries = remember(entries, completedUrls, progressFilter, difficultyFilter) {
-        entries.filter { progressFilter.matches(it.puzzleUrl in completedUrls) && difficultyFilter.matches(it.durationSeconds) }
+        entries.filter { progressFilter.matches(it.puzzleUrl in completedUrls) && difficultyFilter.matches(it) }
     }
     fun scrollToFilters() { scope.launch { browseScroll.scrollToItem(0) } }
     fun resetFilters() {
