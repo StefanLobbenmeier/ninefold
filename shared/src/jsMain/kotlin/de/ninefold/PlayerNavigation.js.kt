@@ -1,6 +1,6 @@
 package de.ninefold
 import androidx.compose.runtime.*
-private fun subscribeBack(onBack: () -> Unit): () -> Unit = js("""((onBack) => {
+private fun subscribeBack(onBack: () -> Unit): () -> Unit = js("""(() => {
     let popped = false;
     history.pushState({ninefoldPlayer: true}, '', location.href);
     const listener = () => { popped = true; onBack(); };
@@ -9,7 +9,7 @@ private fun subscribeBack(onBack: () -> Unit): () -> Unit = js("""((onBack) => {
         window.removeEventListener('popstate', listener);
         if (!popped && history.state && history.state.ninefoldPlayer) history.back();
     };
-})(onBack)""")
+})()""")
 @Composable
 internal actual fun PlayerBackHandler(onBack: () -> Unit) {
     val current by rememberUpdatedState(onBack)

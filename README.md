@@ -42,6 +42,8 @@ Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
 - Web tests:
     - Wasm target: `./gradlew :shared:wasmJsTest`
     - JS target: `./gradlew :shared:jsTest`
+      - Uses headless Chrome, including a player startup test. Set `CHROME_BIN` if Chrome
+        is installed outside its standard location.
 - iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
 
 ---

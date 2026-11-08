@@ -82,6 +82,9 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
         }
+        webTest.dependencies {
+            implementation("org.jetbrains.compose.ui:ui-test:${libs.versions.composeMultiplatform.get()}")
+        }
         jvmTest.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.compose.uiTestJunit4)

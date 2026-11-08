@@ -592,7 +592,7 @@ private fun lzDecompress(length: Int, resetValue: Int, nextValue: (Int) -> Int):
 
 /** Restrict authored shading to unambiguous CSS hex colors; other encodings remain reported. */
 internal fun isImportedCellColor(value: String): Boolean =
-    Regex("#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})").matches(value)
+    Regex("^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$").matches(value)
 
 /** Preserve exported regions, including rectangular and irregular boxes. */
 private fun parseRegions(root: JsonObject, cells: JsonArray, fpuzzles: Boolean, size: Int): List<Set<CellPosition>>? {
