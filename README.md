@@ -143,7 +143,8 @@ and verifies the complete app (including all Wasm modules and chunks) before ins
 Subsequent launches use that cached release immediately, even on a slow connection. Headings use
 Compose's serif font family without a bundled custom font or a font preload step. Updates download
 into a separate cache; failed or interrupted downloads preserve the working release. A complete update
-shows a “New version ready” banner at the top of Home. Select Reload to activate it and reload
+activates automatically during startup if Home has not loaded, allowing a broken app to recover.
+Once Home has loaded, updates show a “New version ready” banner. Select Reload to activate it and reload
 all open app tabs (tabs playing a puzzle defer the reload until returning to the catalog).
 Checks run on launch, every five minutes, and when returning to the app, but pause while a puzzle
 is open or the app is hidden. Returning to the catalog resumes checks;

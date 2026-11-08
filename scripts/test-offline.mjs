@@ -61,9 +61,8 @@ function worker(release, caches, network, workerScope = scope, windows = []) {
     const requests = [];
     let activations = 0;
     vm.runInNewContext(release.source, {
-        URL, Response, Uint8Array, crypto: webcrypto, caches,
+        URL, Response, Uint8Array, crypto: webcrypto, caches, MessageChannel, setTimeout, clearTimeout,
         fetch: async (...args) => { requests.push(args); return network(...args); },
-        // Activation must only be requested by an explicit update message.
         self: {
             clients: { matchAll: async () => windows },
             registration: { scope: workerScope }, addEventListener: (name, handler) => { handlers[name] = handler; },
@@ -214,8 +213,12 @@ test('explicit puzzle reimports bypass saved responses and leave the offline cac
     assert.equal(caches.entries.get('ninefold-offline-data-v1').size, 1);
 });
 
-test('only explicit user acceptance asks a fully installed worker to activate', async () => {
-    const updater = worker(next, storage(), networkFor(next));
+test('a running app can withhold automatic activation until explicit acceptance', async () => {
+    const client = { url: scope, postMessage: (message, ports) => {
+        assert.equal(message.type, 'update-consent');
+        ports[0].postMessage({ allowed: false });
+    } };
+    const updater = worker(next, storage(), networkFor(next), scope, [client]);
     await updater.dispatch('install');
     assert.equal(updater.activations, 0);
     await updater.dispatch('message', { type: 'unrelated' });
@@ -227,7 +230,7 @@ test('only explicit user acceptance asks a fully installed worker to activate', 
 const registrationSource = readFileSync(new URL('../webApp/src/webMain/resources/offline.js', import.meta.url), 'utf8');
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-async function browserUpdates({ waiting = null, controlled = true, supported = true } = {}) {
+async function browserUpdates({ waiting = null, controlled = true, supported = true, home = true } = {}) {
     const window = new EventTarget();
     const document = new EventTarget();
     document.visibilityState = 'visible';
@@ -254,6 +257,7 @@ async function browserUpdates({ waiting = null, controlled = true, supported = t
         setTimeout: callback => { timeouts.set(callback, callback); return callback; },
         clearTimeout: id => timeouts.delete(id),
     });
+    if (home) window.ninefoldUpdate.setPaused(false);
     await settle();
     const states = [];
     const unsubscribe = window.ninefoldUpdate.subscribe(value => states.push(value));
@@ -337,6 +341,75 @@ test('an update already waiting at launch is available to late subscribers and c
     page.unsubscribe();
     for (const callback of page.timeouts.values()) callback();
     assert.equal(page.states.at(-1), 'Applying');
+});
+
+test('startup assumes consent until Home is reached, including a late waiting update', async () => {
+    for (const alreadyWaiting of [false, true]) {
+        const messages = [];
+        const waiting = { postMessage: message => messages.push(message.type) };
+        const page = await browserUpdates({ home: false, waiting: alreadyWaiting ? waiting : null });
+        if (!alreadyWaiting) {
+            page.registration.waiting = waiting;
+            page.registration.dispatchEvent(new Event('updatefound'));
+            await page.intervals[0].callback();
+        }
+        assert.deepEqual(messages, ['activate-update']);
+        assert.equal(page.states.at(-1), 'Applying');
+        page.serviceWorker.dispatchEvent(new Event('controllerchange'));
+        assert.equal(page.reloads, 1);
+    }
+});
+
+test('worker consent follows startup, playing, and Home state', async () => {
+    const page = await browserUpdates({ home: false });
+    const consent = () => {
+        let allowed;
+        const event = new Event('message');
+        event.data = { type: 'update-consent' };
+        event.ports = [{ postMessage: reply => { allowed = reply.allowed; } }];
+        page.serviceWorker.dispatchEvent(event);
+        return allowed;
+    };
+    assert.equal(consent(), true);
+    page.window.ninefoldUpdate.setPaused(true);
+    assert.equal(consent(), false);
+    page.window.ninefoldUpdate.setPaused(false);
+    assert.equal(consent(), false);
+});
+
+test('opening a puzzle before Home prevents automatic activation', async () => {
+    const messages = [];
+    const page = await browserUpdates({ home: false });
+    page.window.ninefoldUpdate.setPaused(true);
+    page.registration.waiting = { postMessage: message => messages.push(message.type) };
+    const installing = new EventTarget();
+    page.registration.installing = installing;
+    page.registration.dispatchEvent(new Event('updatefound'));
+    installing.dispatchEvent(new Event('statechange'));
+    assert.deepEqual(messages, []);
+    page.window.ninefoldUpdate.setPaused(false);
+    await settle();
+    assert.equal(page.states.at(-1), 'Ready');
+    assert.deepEqual(messages, []);
+});
+
+test('one running app withholds consent even when another startup allows it', async () => {
+    const clients = [true, false].map(allowed => ({
+        url: scope, postMessage: (_, ports) => ports[0].postMessage({ allowed }),
+    }));
+    const updater = worker(next, storage(), networkFor(next), scope, clients);
+    await updater.dispatch('install');
+    assert.equal(updater.activations, 0);
+});
+
+test('a complete worker activates when startup is broken or every page consents', async () => {
+    for (const clients of [[], [{ url: scope, postMessage() {} }], [{
+        url: scope, postMessage: (_, ports) => ports[0].postMessage({ allowed: true }),
+    }]]) {
+        const updater = worker(next, storage(), networkFor(next), scope, clients);
+        await updater.dispatch('install');
+        assert.equal(updater.activations, 1);
+    }
 });
 
 test('initial installation and unsupported browsers do not prompt or reload', async () => {

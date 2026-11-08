@@ -30,8 +30,25 @@ self.addEventListener('install', event => {
             await caches.delete(APP_CACHE);
             throw error;
         }
-        // Let existing tabs finish using their release. The complete new release
-        // activates once those tabs close or the user accepts the in-app update prompt.
+        // A broken startup cannot display a confirmation. Only a running app can
+        // withhold consent, either to show its Home prompt or to protect a game.
+        const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const consent = await Promise.all(windows.filter(client => client.url.startsWith(scope.href)).map(client =>
+            new Promise(resolve => {
+                const channel = new MessageChannel();
+                const finish = allowed => {
+                    clearTimeout(timeout);
+                    channel.port1.close();
+                    channel.port2.close();
+                    resolve(allowed);
+                };
+                const timeout = setTimeout(() => finish(true), 3000);
+                channel.port1.onmessage = event => finish(event.data?.allowed === true);
+                try { client.postMessage({ type: 'update-consent' }, [channel.port2]); }
+                catch { finish(true); }
+            })
+        ));
+        if (consent.every(Boolean)) await self.skipWaiting();
     })());
 });
 

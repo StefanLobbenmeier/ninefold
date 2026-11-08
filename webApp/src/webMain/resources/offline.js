@@ -4,6 +4,7 @@ window.ninefoldUpdate = (() => {
     let state = 'None';
     let activationTimeout;
     let paused = false;
+    let reachedHome = false;
     let checkForUpdate = () => {};
     let pendingReload = false;
     const reload = () => {
@@ -16,7 +17,11 @@ window.ninefoldUpdate = (() => {
         listeners.forEach(listener => listener(value));
     };
     const ready = () => {
-        if (state !== 'Applying') publish(registration?.waiting ? 'Ready' : 'None');
+        if (state === 'Applying') return;
+        const failed = state === 'Failed';
+        publish(registration?.waiting ? 'Ready' : 'None');
+        // Startup must recover even if Compose never manages to show Home.
+        if (!reachedHome && !failed) api.apply();
     };
     const api = {
         subscribe(listener) {
@@ -25,6 +30,8 @@ window.ninefoldUpdate = (() => {
             return () => listeners.delete(listener);
         },
         setPaused(value) {
+            // The first unpaused notification comes from a successfully composed Home.
+            if (!value) reachedHome = true;
             if (paused === value) return;
             paused = value;
             if (!paused) {
@@ -44,6 +51,11 @@ window.ninefoldUpdate = (() => {
     };
 
     if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', event => {
+            if (event.data?.type === 'update-consent') {
+                event.ports[0]?.postMessage({ allowed: !paused && !reachedHome });
+            }
+        });
         // All open app tabs switch together when the user accepts an update in any tab.
         // Initial installation must not reload an uncontrolled first visit.
         let controlled = Boolean(navigator.serviceWorker.controller);
