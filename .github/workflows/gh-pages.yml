@@ -63,7 +63,17 @@ jobs:
       # Match Rechoir's browser runtime while investigating iOS startup failures.
       # Kotlin/JS avoids the Kotlin/Wasm GC and exception-handling requirements.
       - name: Build web app (JavaScript)
-        run: ./gradlew :webApp:jsBrowserDistribution --console=plain
+        run: |
+          for attempt in 1 2 3; do
+            if ./gradlew :webApp:jsBrowserDistribution --console=plain; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "Web build failed; retrying after a transient dependency error (attempt $attempt of 3)."
+            sleep $((attempt * 15))
+          done
 
       - name: Prepare Pages output
         run: touch webApp/build/dist/js/productionExecutable/.nojekyll
