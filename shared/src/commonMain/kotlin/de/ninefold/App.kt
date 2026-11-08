@@ -15,8 +15,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -1007,14 +1005,8 @@ private fun Controls(gridSize: Int, mode: InputMode, letters: Boolean, onLetters
             FilledTonalIconToggleButton(multiple, { onMultiple() }, Modifier.size(48.dp).semantics { contentDescription = "Select multiple" }, shape = RoundedCornerShape(12.dp)) { AppIcon(Glyph.Multiple) }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            val numberRows = remember(letters, mode, gridSize) {
-                (if (letters && mode != InputMode.Colour) 10..35 else if (mode == InputMode.Colour) 1..9 else 1..gridSize).chunked(3)
-            }
-            LazyColumn(
-                Modifier.heightIn(max = if (compact) 156.dp else 170.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(numberRows, key = { it.first() }) { numbers ->
+            Column(Modifier.heightIn(max = if (compact) 156.dp else 170.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                (if (letters && mode != InputMode.Colour) 10..35 else if (mode == InputMode.Colour) 1..9 else 1..gridSize).chunked(3).forEach { numbers ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         numbers.forEach { number ->
                             val colour = if (mode == InputMode.Colour) CellColour.fromNumber(number) else null
@@ -1165,17 +1157,15 @@ private fun RulesDialog(puzzle: Puzzle, starting: Boolean, paused: Boolean = fal
         confirmButton = { Button(onDismiss) { Text(if (starting) "Okay, start puzzle" else if (paused) "Resume puzzle" else "Okay") } },
         containerColor = Color.White,
         title = { Column { Text(puzzle.title, maxLines = 2, overflow = TextOverflow.Ellipsis); Text("by ${puzzle.author}", style = MaterialTheme.typography.bodyMedium, color = Moss) } },
-        text = { LazyColumn(Modifier.heightIn(max = 440.dp)) {
-            item {
-                Text("RULES", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
-                RulesText(puzzle.rules)
-                if (puzzle.solution == null) Text("Note: This puzzle does not have solution checking.", Modifier.padding(top = 8.dp))
-            }
-            if (puzzle.videoUrl != null || puzzle.sourceUrl != null) item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
-            puzzle.videoUrl?.let { url -> item { TextButton({ uriHandler.openUri(url) }) { Text(puzzle.videoTitle?.let { "Featured in video: \"$it\"" } ?: "Watch source video") } } }
-            puzzle.sourceUrl?.let { url -> item { TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad") } } }
-            if (paused) item { Text("Game paused. Your timer resumes when you close the rules.", color = Color.Gray, fontSize = 12.sp) }
-            if (starting) item { Text("Your timer starts when you tap Okay.", color = Color.Gray, fontSize = 12.sp) }
+        text = { Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+            Text("RULES", color = Moss, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+            RulesText(puzzle.rules)
+            if (puzzle.solution == null) Text("Note: This puzzle does not have solution checking.", Modifier.padding(top = 8.dp))
+            if (puzzle.videoUrl != null || puzzle.sourceUrl != null) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            puzzle.videoUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text(puzzle.videoTitle?.let { "Featured in video: \"$it\"" } ?: "Watch source video") } }
+            puzzle.sourceUrl?.let { url -> TextButton({ uriHandler.openUri(url) }) { Text("Open original SudokuPad") } }
+            if (paused) Text("Game paused. Your timer resumes when you close the rules.", color = Color.Gray, fontSize = 12.sp)
+            if (starting) Text("Your timer starts when you tap Okay.", color = Color.Gray, fontSize = 12.sp)
         } }, shape = RoundedCornerShape(22.dp),
     )
 }

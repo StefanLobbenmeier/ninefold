@@ -46,7 +46,11 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
     var localTab by remember { mutableStateOf(false) }
     val browsing = if (onTab == null) localTab else browseTab
     fun switchTab(value: Boolean) { if (onTab == null) localTab = value else onTab(value) }
-    val inProgress = games.games.values.filter { it.started && !it.completed }.sortedBy { games.recentGames.indexOf(it.puzzle.storageId()).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
+    val inProgress = remember(games.games, games.recentGames) {
+        games.games.values.filter { it.started && !it.completed }
+            .sortedBy { games.recentGames.indexOf(it.puzzle.storageId()).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
+    }
+    val solved = remember(games.games) { games.games.values.filter { it.completed }.reversed() }
     var index by remember(repository) { mutableStateOf(repository.cached()) }
     var refreshing by remember { mutableStateOf(index == null) }
     var cached by remember { mutableStateOf(index != null) }
@@ -180,15 +184,18 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                     }
                 }
                 if (inProgress.size > 1) item { SectionLabel("Pick up another", "${inProgress.size - 1} in progress") }
-                items(inProgress.drop(1), key = { "continue.${it.puzzle.storageId()}" }) { game ->
+                items(
+                    inProgress.drop(1),
+                    key = { "continue.${it.puzzle.storageId()}" },
+                    contentType = { "saved-game" },
+                ) { game ->
                     SavedGameCard(game, games.elapsed(game.puzzle), "Continue", enabled = opening == null && reimporting == null,
                         onReimport = game.puzzle.sourceUrl?.let { url -> { reimport(url, game.puzzle.title, game.puzzle.videoUrl) } },
                         onReset = { resetPuzzle = game.puzzle }, onMarkDone = { games.markDone(game.puzzle) },
                         onOpen = { onOpen(game.puzzle) })
                 }
-                val solved = games.games.values.filter { it.completed }.reversed()
                 if (solved.isNotEmpty()) item { SectionLabel("Well played", "${solved.size} solved") }
-                items(solved, key = { "solved.${it.puzzle.storageId()}" }) { game ->
+                items(solved, key = { "solved.${it.puzzle.storageId()}" }, contentType = { "saved-game" }) { game ->
                     SavedGameCard(game, games.elapsed(game.puzzle), "View", enabled = opening == null && reimporting == null,
                         onReimport = game.puzzle.sourceUrl?.let { url -> { reimport(url, game.puzzle.title, game.puzzle.videoUrl) } },
                         onReset = { resetPuzzle = game.puzzle }, onMarkDone = { games.markDone(game.puzzle) },
@@ -224,7 +231,11 @@ internal fun SudokuCatalog(repository: SudokuIndexRepository, games: GameReposit
                     TextButton(::resetFilters) { Text("Clear filters") }
                 }
             }
-            items(filteredEntries, key = { "catalog.${it.id}" }) { entry ->
+            items(
+                filteredEntries,
+                key = { "catalog.${it.id}" },
+                contentType = { "catalog-game" },
+            ) { entry ->
                 val status = statuses[entry.id] ?: DownloadStatus.Waiting
                 val openPuzzle: () -> Unit = {
                     opening = entry.id
