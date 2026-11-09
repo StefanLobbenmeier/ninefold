@@ -2,9 +2,9 @@ package de.ninefold
 
 import kotlinx.serialization.Serializable
 
-/** Symbols 1–9 are digits; 10–35 represent A–Z in saved values and notes. */
+/** Symbols 0–9 are digits; 10–35 represent A–Z in saved values and notes. */
 internal fun Int.symbolText(): String = if (this in 10..35) ('A' + (this - 10)).toString() else toString()
-private fun Int.isDigitSymbol(): Boolean = this in 1..9
+private fun Int.isDigitSymbol(): Boolean = this in 0..9
 
 @Serializable
 data class CellPosition(val row: Int, val column: Int) {

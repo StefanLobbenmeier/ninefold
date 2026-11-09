@@ -41,7 +41,7 @@ internal fun gameShortcut(key: Key, primaryModifier: Boolean, shift: Boolean, al
             shift -> InputMode.Corner
             else -> null
         }
-        return GameShortcut.Enter(digit.takeUnless { it == 0 }, temporaryMode)
+        return GameShortcut.Enter(digit, temporaryMode)
     }
 
     if (primaryModifier) when (key) {

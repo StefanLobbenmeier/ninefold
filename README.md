@@ -219,7 +219,8 @@ starts a new selection, including when it starts on a selected cell. Adjacent se
 Digit, Corner, Centre, and Colour sit beside the keypad. Choose Corner or
 Centre to enter pencil marks in all empty selected cells. A note is added to every selected cell
 if any are missing it; tapping that number again removes it from all of them. Filled digits and
-givens are preserved when adding notes. For each editable selected cell, Erase (or 0) clears the
+givens are preserved when adding notes. The 0 button beside Erase enters zero as a digit or pencil
+mark; the keyboard 0 and numpad 0 keys do the same. For each editable selected cell, Erase clears the
 active number category first. If that category is empty, it clears the remaining digits and notes;
 if all number categories are empty, it clears colours. Undo restores the whole group in one step.
 
@@ -227,7 +228,7 @@ Choose Colour to replace the digits with SudokuPad's nine default swatches: ligh
 dark grey, green, purple, orange, red, yellow, and blue. Colours apply to all selected cells,
 including givens and filled digits. Selecting a colour adds it to the group if any cell lacks it;
 selecting it again removes it from the group. Multiple colours appear as stripes behind the
-puzzle clues and digits. In Colour mode, Erase and 0 clear only colours. Colours and colour
+puzzle clues and digits. In Colour mode, Erase clears only colours and zero input is disabled. Colours and colour
 undo/redo history are saved with the game.
 
 Long-press a colour swatch to configure automatic colouring. Each colour has its own enable switch

@@ -11,7 +11,18 @@ class GameShortcutsTest {
         assertEquals(GameShortcut.Enter(4, InputMode.Centre), gameShortcut(Key.NumPad4, true, false))
         assertEquals(GameShortcut.Enter(4, InputMode.Corner), gameShortcut(Key.Four, false, true))
         assertEquals(GameShortcut.Enter(4, InputMode.Colour), gameShortcut(Key.NumPad4, true, true))
-        assertEquals(GameShortcut.Enter(null, null), gameShortcut(Key.Zero, false, false))
+        assertEquals(GameShortcut.Enter(0, null), gameShortcut(Key.Zero, false, false))
+    }
+
+    @Test fun zeroUsesDigitAndNoteModesWhileDeleteStillErases() {
+        for (key in listOf(Key.Zero, Key.NumPad0)) {
+            assertEquals(GameShortcut.Enter(0, null), gameShortcut(key, false, false))
+            assertEquals(GameShortcut.Enter(0, InputMode.Corner), gameShortcut(key, false, true))
+            assertEquals(GameShortcut.Enter(0, InputMode.Centre), gameShortcut(key, true, false))
+        }
+        for (key in listOf(Key.Backspace, Key.Delete, Key.NumPadDelete)) {
+            assertEquals(GameShortcut.Enter(null, null), gameShortcut(key, false, false))
+        }
     }
 
     @Test fun selectionAndHistoryBindingsTakePrecedenceOverToolKeys() {
