@@ -34,6 +34,29 @@ class BoardSelectionInteractionTest {
         }
     }
 
+    @Test fun compactZeroButtonEntersValuesAndNotes() {
+        openPlayer(compact = true)
+        clickCell(2, 2)
+        val zero = compose.onNode(hasText("0") and hasClickAction())
+        val toggleBounds = compose.onNodeWithContentDescription("Switch numbers and letters").fetchSemanticsNode().boundsInRoot
+        val zeroBounds = zero.fetchSemanticsNode().boundsInRoot
+        val erase = compose.onNodeWithContentDescription("Erase")
+        val eraseBounds = erase.fetchSemanticsNode().boundsInRoot
+        kotlin.test.assertTrue(toggleBounds.right <= zeroBounds.left && zeroBounds.right <= eraseBounds.left)
+        zero.performClick()
+        cell(2, 2).assertContentDescriptionContains("column 2, 0", substring = true)
+        erase.performClick()
+        cell(2, 2).assertContentDescriptionContains("empty", substring = true)
+        for (mode in listOf("Corner", "Centre")) {
+            compose.onNodeWithText(mode).performClick()
+            zero.performClick()
+            cell(2, 2).assertContentDescriptionContains("${mode.lowercase()} notes 0", substring = true)
+            erase.performClick()
+        }
+        compose.onNodeWithText("Colour").performClick()
+        zero.assertIsNotEnabled()
+    }
+
     @Test fun smallGridSupportsLastCellInputDraggingAndKeyboardWrap() {
         openPlayer(size = 6)
         assertEquals(36, compose.onAllNodes(hasContentDescription("Row ", substring = true)).fetchSemanticsNodes().size)

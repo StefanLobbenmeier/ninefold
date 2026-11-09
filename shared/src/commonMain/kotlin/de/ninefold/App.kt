@@ -1046,10 +1046,12 @@ private fun Controls(gridSize: Int, mode: InputMode, letters: Boolean, onLetters
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (compact) {
                     FilledTonalButton(onLetters, Modifier.weight(1f).height(48.dp).semantics { contentDescription = "Switch numbers and letters" }, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(0.dp)) { Text(if (letters) "A–Z" else "1–$gridSize") }
+                    FilledTonalButton({ onNumber(0) }, Modifier.weight(1f).height(48.dp), enabled = mode != InputMode.Colour, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(0.dp)) { Text("0", fontSize = 22.sp, fontWeight = FontWeight.SemiBold) }
                     FilledTonalIconButton({ onNumber(null) }, Modifier.weight(1f).height(48.dp).semantics { contentDescription = if (mode == InputMode.Colour) "Erase colours" else "Erase" }, shape = RoundedCornerShape(12.dp)) { AppIcon(Glyph.Erase) }
                 } else {
                     FilledTonalIconToggleButton(multiple, { onMultiple() }, Modifier.weight(1f).height(52.dp).semantics { contentDescription = "Select multiple" }, shape = RoundedCornerShape(10.dp)) { AppIcon(Glyph.Multiple) }
                     IconButton(onUndo, Modifier.weight(1f).height(52.dp).semantics { contentDescription = "Undo" }, enabled = canUndo) { AppIcon(Glyph.Undo) }
+                    FilledTonalButton({ onNumber(0) }, Modifier.weight(1f).height(52.dp), enabled = mode != InputMode.Colour, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) { Text("0", fontSize = 22.sp, fontWeight = FontWeight.SemiBold) }
                     IconButton({ onNumber(null) }, Modifier.weight(1f).height(52.dp).semantics { contentDescription = if (mode == InputMode.Colour) "Erase colours" else "Erase" }) { AppIcon(Glyph.Erase) }
                 }
             }
