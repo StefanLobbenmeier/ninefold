@@ -42,26 +42,26 @@ internal fun toolSensitiveSelection(
         InputMode.Digit -> listOf(
             { it.value != null && it.value == source.value },
             { it.colours.intersect(source.colours).isNotEmpty() },
-            { source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
-            { it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
+            { it.value == null && source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
+            { it.value == null && it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
         )
         InputMode.Centre -> listOf(
             { it.value != null && it.value == source.value },
-            { source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
-            { it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
+            { it.value == null && source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
+            { it.value == null && it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
             { it.colours.intersect(source.colours).isNotEmpty() },
         )
         InputMode.Corner -> listOf(
             { it.value != null && it.value == source.value },
-            { it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
-            { source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
+            { it.value == null && it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
+            { it.value == null && source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
             { it.colours.intersect(source.colours).isNotEmpty() },
         )
         InputMode.Colour -> listOf(
             { it.value != null && it.value == source.value },
             { it.colours.intersect(source.colours).isNotEmpty() },
-            { source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
-            { it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
+            { it.value == null && source.centreNotes.isNotEmpty() && it.centreNotes.containsAll(source.centreNotes) },
+            { it.value == null && it.cornerNotes.intersect(source.cornerNotes).isNotEmpty() },
         )
     }
     val selector = selectors.firstOrNull { it(source) } ?: return emptySet()

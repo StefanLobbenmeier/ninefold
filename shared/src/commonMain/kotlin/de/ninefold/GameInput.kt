@@ -1,5 +1,22 @@
 package de.ninefold
 
+/** Apply optional automations when cells leave the selection, preserving notes under digits. */
+internal fun finalizeCellInput(
+    puzzle: Puzzle,
+    cells: List<CellState>,
+    leaving: Set<CellPosition>,
+    editing: Set<CellPosition>,
+    settings: CheckingSettings,
+): List<CellState> {
+    val promoted = if (settings.promoteSingleCentreDigit) cells.mapIndexed { index, cell ->
+        if (CellPosition(index / puzzle.size, index % puzzle.size) in leaving &&
+            !cell.given && cell.value == null && cell.centreNotes.size == 1) {
+            cell.copy(value = cell.centreNotes.single())
+        } else cell
+    } else cells
+    return if (settings.centreDigitsRemoveCornerDigits) cleanCornerNotes(puzzle, promoted, leaving, editing) else promoted
+}
+
 /** Finalize centre edits only after leaving the cells, keeping narrower corner reminders. */
 internal fun cleanCornerNotes(
     puzzle: Puzzle,
@@ -80,7 +97,7 @@ internal fun applyInput(cells: List<CellState>, selected: Set<CellPosition>, mod
     return cells.toMutableList().also { next -> editable.forEach { index ->
         val old = cells[index]
         next[index] = when {
-            mode == InputMode.Digit -> old.copy(value = number, cornerNotes = emptySet(), centreNotes = emptySet())
+            mode == InputMode.Digit -> old.copy(value = number)
             old.value != null -> old
             mode == InputMode.Corner -> old.copy(cornerNotes = if (addNote) old.cornerNotes + number else old.cornerNotes - number)
             else -> old.copy(centreNotes = if (addNote) old.centreNotes + number else old.centreNotes - number)

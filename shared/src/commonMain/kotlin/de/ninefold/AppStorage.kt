@@ -42,6 +42,8 @@ internal data class CheckingSettings(
     val specialRules: Boolean = true, val solution: Boolean = true, val automaticSolution: Boolean = true,
     val automaticRulePencilmarks: Boolean = automaticRules,
     val automaticSolutionPencilmarks: Boolean = automaticSolution,
+    val promoteSingleCentreDigit: Boolean = true,
+    val centreDigitsRemoveCornerDigits: Boolean = true,
 )
 
 @Serializable(with = SavedGameSerializer::class)

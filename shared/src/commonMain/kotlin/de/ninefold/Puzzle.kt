@@ -152,7 +152,7 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
                 }
             }
         }
-        val invalid = (cell.cornerNotes + cell.centreNotes).intersect(fixedPeerDigits)
+        val invalid = if (cell.value == null) (cell.cornerNotes + cell.centreNotes).intersect(fixedPeerDigits) else emptySet()
         if (invalid.isNotEmpty()) pencilMarks.getOrPut(index, ::mutableSetOf).addAll(invalid)
     }
 
@@ -303,17 +303,17 @@ fun checkAgainstSolution(puzzle: Puzzle, cells: List<CellState>): PuzzleCheckRes
     // Accept the whole group when it includes the answer, without revealing its position.
     val validCornerDigits = cells.indices.groupBy(::block).mapValues { (_, indices) ->
         indices.mapNotNull { index ->
-            solution.getOrNull(index)?.digitToIntOrNull()?.takeIf { it in cells[index].cornerNotes }
+            solution.getOrNull(index)?.digitToIntOrNull()?.takeIf { cells[index].value == null && it in cells[index].cornerNotes }
         }.toSet()
     }
     cells.forEachIndexed { index, cell ->
         val answer = solution.getOrNull(index)?.digitToIntOrNull() ?: return@forEachIndexed
         if (!cell.given && cell.value?.isDigitSymbol() == true && answer != cell.value) conflicts += index
-        if (cell.cornerNotes.isNotEmpty()) {
+        if (cell.value == null && cell.cornerNotes.isNotEmpty()) {
             val invalid = cell.cornerNotes.filterTo(mutableSetOf(), Int::isDigitSymbol) - validCornerDigits[block(index)].orEmpty()
             if (invalid.isNotEmpty()) pencilMarks[index] = invalid
         }
-        if (cell.centreNotes.any(Int::isDigitSymbol) && answer !in cell.centreNotes) {
+        if (cell.value == null && cell.centreNotes.any(Int::isDigitSymbol) && answer !in cell.centreNotes) {
             pencilMarks[index] = pencilMarks[index].orEmpty() + cell.centreNotes.filter(Int::isDigitSymbol)
         }
     }
