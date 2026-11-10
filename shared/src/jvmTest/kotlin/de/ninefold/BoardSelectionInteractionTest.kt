@@ -20,9 +20,10 @@ import kotlin.test.assertNotEquals
 class BoardSelectionInteractionTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun openPlayer(compact: Boolean = false, size: Int = 9, notes: Map<CellPosition, CellState> = emptyMap()) {
+    private fun openPlayer(compact: Boolean = false, size: Int = 9, notes: Map<CellPosition, CellState> = emptyMap(), settings: CheckingSettings = CheckingSettings()) {
         val puzzle = SudokuFixtures.empty.copy(title = "Selection test", size = size, givens = ".".repeat(size * size))
         val repository = GameRepository(MemoryAppStorage())
+        repository.saveSettings(settings)
         val cells = puzzle.startingCells().toMutableList().also { cells -> notes.forEach { (position, state) -> cells[position.index(size)] = state } }
         repository.saveGame(SavedGame(puzzle, cells, started = true))
         compose.setContent {
@@ -79,7 +80,7 @@ class BoardSelectionInteractionTest {
         cell(1, 3).assertContentDescriptionContains("column 3, 5", substring = true)
         compose.onNodeWithText("CLASSIC").assertDoesNotExist()
         compose.onNodeWithText("Checking settings").assertDoesNotExist()
-        compose.onNodeWithContentDescription("Checking settings").assertExists()
+        compose.onNodeWithContentDescription("Settings").assertExists()
     }
 
     private fun cell(row: Int, column: Int) = compose.onNode(
@@ -468,8 +469,26 @@ class BoardSelectionInteractionTest {
         kotlin.test.assertTrue(pixels[pixels.width / 2, pixels.height / 2].red < .3f)
     }
 
+    @Test fun deselectPromotesSingleCentreDigitAndSupportsUndoRedoAndErase() {
+        openPlayer()
+        clickCell(2, 2)
+        compose.onNodeWithText("Centre").performClick()
+        compose.onRoot().performKeyInput { pressKey(Key.Five) }
+        cell(2, 2).assertContentDescriptionContains("empty, selected, centre notes 5", substring = true)
+        clickCell(3, 3)
+        cell(2, 2).assertContentDescriptionContains("column 2, 5", substring = true)
+        compose.onNodeWithContentDescription("Undo").performClick()
+        cell(2, 2).assertContentDescriptionContains("empty, centre notes 5", substring = true)
+        compose.onNodeWithContentDescription("Redo").performClick()
+        cell(2, 2).assertContentDescriptionContains("column 2, 5", substring = true)
+        clickCell(2, 2)
+        compose.onNodeWithText("Digit").performClick()
+        compose.onNodeWithContentDescription("Erase").performClick()
+        cell(2, 2).assertContentDescriptionContains("empty, selected, centre notes 5", substring = true)
+    }
+
     @Test fun automaticColoursUpdateWhileEditingAndWhenConfigurationChanges() {
-        openPlayer(compact = true)
+        openPlayer(compact = true, settings = CheckingSettings(promoteSingleCentreDigit = false))
         clickCell(2, 2)
         compose.onNodeWithText("Colour").performClick()
         cell(2, 2).assertIsSelected()

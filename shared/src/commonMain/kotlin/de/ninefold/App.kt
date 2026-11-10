@@ -241,7 +241,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     fun changeSelection(next: Set<CellPosition>) {
         val leaving = selected - next
         update { updated ->
-            val cleaned = cleanCornerNotes(puzzle, updated, leaving, next)
+            val cleaned = finalizeCellInput(puzzle, updated, leaving, next, repository.settings)
             cleaned.forEachIndexed { index, cell -> updated[index] = cell }
         }
         selected = next
@@ -395,6 +395,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         checkSolution, { repository.saveSettings(settings.copy(solution = it)); manualSolutionCheck = false },
         checkSolutionAutomatically, { repository.saveSettings(settings.copy(automaticSolution = it)); manualSolutionCheck = false },
         checkSolutionPencilmarksAutomatically, { repository.saveSettings(settings.copy(automaticSolutionPencilmarks = it)); manualSolutionCheck = false },
+        settings.promoteSingleCentreDigit, { repository.saveSettings(settings.copy(promoteSingleCentreDigit = it)) },
+        settings.centreDigitsRemoveCornerDigits, { repository.saveSettings(settings.copy(centreDigitsRemoveCornerDigits = it)) },
     ) { showChecking = false }
     if (showSuccess) CompletionDialog(puzzle, elapsed, { showSuccess = false }) {
         showSuccess = false
@@ -1077,7 +1079,7 @@ private fun Controls(gridSize: Int, mode: InputMode, letters: Boolean, onLetters
         if (!compact) TextButton(onCheck, Modifier.weight(1f), enabled = canCheck) { AppIcon(Glyph.Check); Spacer(Modifier.width(6.dp)); Text("Check") }
         if (!compact) IconButton(onRedo, Modifier.semantics { contentDescription = "Redo" }, enabled = canRedo) { AppIcon(Glyph.Redo) }
         if (compact) TextButton(onChecking, Modifier.weight(1f)) { AppIcon(Glyph.Settings); Spacer(Modifier.width(6.dp)); Text("Settings") }
-        else IconButton(onChecking, Modifier.semantics { contentDescription = "Checking settings" }) { AppIcon(Glyph.Settings) }
+        else IconButton(onChecking, Modifier.semantics { contentDescription = "Settings" }) { AppIcon(Glyph.Settings) }
     }
 }
 
@@ -1123,13 +1125,18 @@ private fun CheckingDialog(
     checkSolution: Boolean, onCheckSolution: (Boolean) -> Unit,
     automaticSolution: Boolean, onAutomaticSolution: (Boolean) -> Unit,
     automaticSolutionPencilmarks: Boolean, onAutomaticSolutionPencilmarks: (Boolean) -> Unit,
+    promoteSingleCentreDigit: Boolean, onPromoteSingleCentreDigit: (Boolean) -> Unit,
+    centreDigitsRemoveCornerDigits: Boolean, onCentreDigitsRemoveCornerDigits: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { Button(onDismiss) { Text("Done") } },
-        title = { Text("Checking settings") },
+        title = { Text("Settings") },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CheckOption("Promote single centre digits", "Turn a single centre digit into a placed digit when you deselect its cell.", promoteSingleCentreDigit, onPromoteSingleCentreDigit)
+            CheckOption("Centre digits remove corner digits", "Remove excluded corner digits and redundant pair or triplet reminders when you deselect cells.", centreDigitsRemoveCornerDigits, onCentreDigitsRemoveCornerDigits)
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
             CheckOption("Check Sudoku rules", "Rows, columns, boxes, and impossible pencil marks.", checkRules, onCheckRules)
             IndentedCheckOption("Include special rules", includeSpecialRules, onIncludeSpecialRules, checkRules)
             IndentedCheckOption("Automatically check entered digits", automaticRules, onAutomaticRules, checkRules)
