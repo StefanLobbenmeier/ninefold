@@ -221,15 +221,14 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     fun clearManualChecks() { manualRulesCheck = false; manualSolutionCheck = false }
     fun checkNow() { manualRulesCheck = checkRules; manualSolutionCheck = checkSolution }
 
-    fun update(transform: (MutableList<CellState>) -> Unit) {
+    fun update(transform: (List<CellState>) -> List<CellState>) {
         if (!started) return
-        val next = cells.toMutableList().also(transform)
+        val next = transform(cells)
         if (next == cells) return
         history = history + listOf(cells); redoStack = emptyList(); cells = next; finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save()
     }
     fun enter(number: Int?, inputMode: InputMode = mode) = update { next ->
-        val entered = applyInput(next, selected, inputMode, number)
-        next.clear(); next.addAll(entered)
+        applyInput(next, selected, inputMode, number)
     }
     fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
     fun redo() { redoStack.firstOrNull()?.let { history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
@@ -241,8 +240,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     fun changeSelection(next: Set<CellPosition>) {
         val leaving = selected - next
         update { updated ->
-            val cleaned = finalizeCellInput(puzzle, updated, leaving, next, repository.settings)
-            cleaned.forEachIndexed { index, cell -> updated[index] = cell }
+            finalizeCellInput(puzzle, updated, leaving, next, repository.settings)
         }
         selected = next
         finalized = finalizedCells(cells, finalized, next)
