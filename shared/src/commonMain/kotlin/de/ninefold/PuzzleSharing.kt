@@ -29,7 +29,7 @@ fun puzzleFromShareLink(link: String): Puzzle? {
         throw IllegalArgumentException("This puzzle link is damaged or incomplete.", error)
     }
     require(puzzle.givens.length == puzzle.cellCount && puzzle.givens.all { it == '.' || it in '0'..'9' }) { "This puzzle link has an invalid grid." }
-    require(puzzle.solution == null || (puzzle.solution.length == puzzle.cellCount && puzzle.solution.all { it in '1'..'9' })) { "This puzzle link has an invalid solution." }
+    require(puzzle.solution == null || (puzzle.solution.length == puzzle.cellCount && puzzle.solution.all { it in '0'..'9' })) { "This puzzle link has an invalid solution." }
     fun CellPosition.valid() = row in 0 until puzzle.size && column in 0 until puzzle.size
     fun GridPoint.valid() = row.isFinite() && column.isFinite()
     require(puzzle.regions.orEmpty().all { region -> region.all { it.valid() } } &&

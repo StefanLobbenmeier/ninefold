@@ -68,7 +68,7 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
                 (it["color"] as? JsonPrimitive)?.contentOrNull?.let(::isImportedCellColor) != true)
                 report("$path.color", "Cell shading is only imported for CSS hex colors.")
             val digit = (it["value"] as? JsonPrimitive)?.intOrNull
-            if (meaningful(it["value"] ?: JsonNull) && digit !in 1..9) report("$.${key}[$r][$c].value", "Value is not imported as a digit.")
+            if (meaningful(it["value"] ?: JsonNull) && digit !in 0..9) report("$.${key}[$r][$c].value", "Value is not imported as a digit.")
         } }
     }
     for (key in listOf("overlays", "underlays")) objects(key, "center width height backgroundColor borderColor stroke color textColor text rounded thickness fontSize") { obj, path ->

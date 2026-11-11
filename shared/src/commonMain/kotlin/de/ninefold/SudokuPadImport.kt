@@ -151,11 +151,11 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     }
     val initialValues = mutableMapOf<Int, Int>()
     val givens = sourceCells.flatMap { row -> row.jsonArray.map { cell ->
-        cell.jsonObject.int("value")?.takeIf { it in 1..9 }?.digitToChar() ?: '.'
+        cell.jsonObject.int("value")?.takeIf { it in 0..9 }?.digitToChar() ?: '.'
     } }.joinToString("")
     val fixedGivens = givens.mapIndexed { index, digit ->
         val cell = sourceCells[index / size].jsonArray[index % size].jsonObject
-        if (fpuzzles && cell.boolean("given") != true && digit in '1'..'9') {
+        if (fpuzzles && cell.boolean("given") != true && digit in '0'..'9') {
             // Unmarked f-puzzles values can contain the setter's completed grid.
             // Only an explicit false denotes an authored editable starting value.
             if (cell.boolean("given") == false) initialValues[index] = digit.digitToInt()

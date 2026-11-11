@@ -19,7 +19,7 @@ internal object SudokuFixtures {
         val size = kotlin.math.sqrt(givens.length.toDouble()).toInt()
         require(size in 1..9 && size * size == givens.length)
         return givens.chunked(size).joinToString(prefix = "[", postfix = "]") { row ->
-            row.map { if (it in '1'..'9') """{"value":$it${if (fixed) ",\"given\":true" else ""}}""" else "{}" }
+            row.map { if (it in '0'..'9') """{"value":$it${if (fixed) ",\"given\":true" else ""}}""" else "{}" }
                 .joinToString(prefix = "[", postfix = "]")
         }
     }

@@ -97,6 +97,34 @@ class SudokuPadImportTest {
         assertEquals("#FF0000", puzzle.overlays[1].borderColor)
     }
 
+    @Test fun importsZeroGivensAndNumericArtwork() {
+        val givens = "0" + ".".repeat(80)
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(givens, properties =
+            """"overlays":[{"center":[0.5,1.5],"text":0}],"metadata":{"solution":"${"012345678".repeat(9)}"}"""))
+        assertEquals(givens, puzzle.givens)
+        assertEquals(CellState(0, given = true), puzzle.startingCells()[0])
+        assertEquals(CellState(), puzzle.startingCells()[1])
+        assertEquals("0", puzzle.overlays.single().text)
+        assertTrue(puzzle.importOmissions.none { it.path.endsWith(".value") })
+        val shared = assertNotNull(puzzleFromShareLink(puzzleShareLink(puzzle)))
+        assertEquals(puzzle, shared)
+        assertEquals(puzzle.startingCells(), shared.startingCells())
+    }
+
+    @Test fun importsFixedAndEditableFpuzzlesZeros() {
+        val payload = SudokuFixtures.fpuzzlesPayload("00" + ".".repeat(79))
+            .replaceFirst("{\"value\":0,\"given\":true}", "{\"value\":0,\"given\":false}")
+        val puzzle = parseSudokuPadPayload(payload)
+        assertEquals(".0" + ".".repeat(79), puzzle.givens)
+        assertEquals(mapOf(0 to 0), puzzle.initialValues)
+        assertEquals(CellState(0), puzzle.startingCells()[0])
+        assertEquals(CellState(0, given = true), puzzle.startingCells()[1])
+        assertTrue(puzzle.importOmissions.isEmpty())
+        val unmarked = parseSudokuPadPayload(payload.replace(",\"given\":false", ""))
+        assertEquals(CellState(), unmarked.startingCells()[0])
+        assertTrue(unmarked.initialValues.isEmpty())
+    }
+
     @Test fun ignoresUnmarkedFpuzzlesSolutionValues() {
         val payload = SudokuFixtures.fpuzzlesPayload(givens = "12" + ".".repeat(79))
             .replace("{\"value\":2,\"given\":true}", "{\"value\":2}")
