@@ -104,8 +104,8 @@ data class Puzzle(
     }
     fun regionIndex(position: CellPosition): Int = regionCells().indexOfFirst { position in it }
     fun startingCells(): List<CellState> = givens.mapIndexed { index, char ->
-        val value = char.digitToIntOrNull()?.takeIf { it in 1..9 }
-        CellState(value = value ?: initialValues[index]?.takeIf { it in 1..9 }, given = value != null)
+        val value = char.digitToIntOrNull()
+        CellState(value = value ?: initialValues[index]?.takeIf { it in 0..9 }, given = value != null)
     }.let { it + List((cellCount - it.size).coerceAtLeast(0)) { CellState() } }.take(cellCount)
 }
 
