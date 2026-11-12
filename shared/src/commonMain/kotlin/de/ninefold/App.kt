@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Path
@@ -866,7 +869,8 @@ private fun BoxScope.PuzzleGraphics(
     fadedOutsideClues: Set<PuzzleOverlay> = emptySet(),
     fadedOutsideArrows: Set<PuzzleArrow> = emptySet(),
 ) {
-    Canvas(Modifier.matchParentSize()) {
+    // Isolate artwork so white clue fills can erase earlier strokes without erasing cell colours.
+    Canvas(Modifier.matchParentSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
         val padding = inset.toPx()
         val x = BoardAxis(size.width - 2 * padding, boxGap.toPx(), puzzle.size)
         val y = BoardAxis(size.height - 2 * padding, boxGap.toPx(), puzzle.size)
@@ -881,8 +885,10 @@ private fun BoxScope.PuzzleGraphics(
             val cornerRadius = CornerRadius(min(area.width, area.height) / 2f)
             // Zero-width XV boxes size the text; stroking them paints a line behind the glyph.
             if (area.width > 0f && area.height > 0f) {
-                item.backgroundColor?.toComposeColor()?.takeUnless { it == Color.White && revealedMarks == null }?.let { color ->
-                    if (item.rounded) drawRoundRect(faded(color), topLeft, area, cornerRadius) else drawRect(faded(color), topLeft, area)
+                item.backgroundColor?.toComposeColor()?.let { color ->
+                    val blendMode = if (color == Color.White && revealedMarks == null) BlendMode.Clear else BlendMode.SrcOver
+                    if (item.rounded) drawRoundRect(faded(color), topLeft, area, cornerRadius, blendMode = blendMode)
+                    else drawRect(faded(color), topLeft, area, blendMode = blendMode)
                 }
                 item.borderColor?.toComposeColor()?.let { color ->
                     if (item.rounded) drawRoundRect(faded(color), topLeft, area, cornerRadius, style = Stroke(item.thickness.toFloat().coerceAtLeast(1f)))
