@@ -15,7 +15,7 @@ junit = "4.13.2"
 kotlin = "2.4.21"
 kotlin-wrappers = "2026.11.1"
 kotlinx-coroutines = "1.11.0"
-kotlinx-serialization = "1.12.0"
+kotlinx-serialization = "1.13.0"
 ktor = "3.6.1"
 material3 = "1.12.0-alpha03"
 
