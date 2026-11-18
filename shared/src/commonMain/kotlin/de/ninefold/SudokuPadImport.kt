@@ -448,7 +448,7 @@ private fun parseArrows(root: JsonObject, fpuzzles: Boolean, overlays: List<Puzz
             arrow.array("lines").orEmpty().mapNotNull { line ->
                 val points = line.jsonArray.mapNotNull(::parsePoint)
                 points.takeIf { it.size > 1 }?.let {
-                    PuzzleArrow(it, circle = circleCells.firstOrNull(), pathCells = points.mapNotNull { it.cellPositionOrNull(size) }.distinct())
+                    PuzzleArrow(it, circle = circleCells.firstOrNull(), pathCells = arrowPathCells(points, size))
                 }
             }
         } else {
@@ -461,12 +461,33 @@ private fun parseArrows(root: JsonObject, fpuzzles: Boolean, overlays: List<Puzz
                 listOf(PuzzleArrow(
                     points, arrow.string("color") ?: "#777777", arrow.double("thickness") ?: 3.0,
                     arrow.double("headLength") ?: .3, bulb?.center?.cellPositionOrNull(size),
-                    points.mapNotNull { it.cellPositionOrNull(size) }.distinct(),
+                    arrowPathCells(points, size),
                 ))
             }
         }
     }
 }
+
+/** Exported waypoints describe bends and endpoints, and may skip cells along a straight shaft. */
+private fun arrowPathCells(points: List<GridPoint>, size: Int): List<CellPosition> =
+    points.zipWithNext().flatMap { (start, end) ->
+        val rowDelta = end.row - start.row
+        val columnDelta = end.column - start.column
+        val crossings = buildList {
+            add(0.0)
+            add(1.0)
+            for (boundary in 0..size) {
+                if (rowDelta != 0.0) add((boundary - start.row) / rowDelta)
+                if (columnDelta != 0.0) add((boundary - start.column) / columnDelta)
+            }
+        }.filter { it in 0.0..1.0 }.distinct().sorted()
+        // Sample inside each crossed cell; a diagonal touching a corner does not enter its neighbours.
+        crossings.zipWithNext().mapNotNull { (from, to) ->
+            val midpoint = (from + to) / 2
+            GridPoint(start.row + rowDelta * midpoint, start.column + columnDelta * midpoint)
+                .cellPositionOrNull(size)
+        }
+    }.distinct()
 
 private fun parseOverlay(element: JsonElement, cellSize: Double): PuzzleOverlay? {
     val value = element.jsonObject
