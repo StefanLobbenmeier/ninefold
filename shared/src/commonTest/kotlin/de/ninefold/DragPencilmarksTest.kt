@@ -45,6 +45,36 @@ class DragPencilmarksTest {
         assertEquals(cells, drag(cells, b, a, puzzle = puzzle.copy(fogLights = setOf(b), fogLinks = emptyList())))
     }
 
+    @Test fun importedWhiteDotKeepsOnlyConsecutiveNotes() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties =
+            """"difference":[{"cells":["R1C1","R2C1"]}]"""))
+        val source = CellPosition(1, 0)
+        val candidates = setOf(1, 3, 5, 7, 9)
+        val cells = board(source to CellState(value = 6), a to CellState(
+            centreNotes = candidates, cornerNotes = candidates,
+        ))
+        val result = drag(cells, source, a, puzzle = puzzle)
+        assertEquals(CellState(centreNotes = setOf(5, 7), cornerNotes = setOf(5, 7)), result[a.index])
+        assertEquals(mapOf(a.index to setOf(1, 3, 9)), checkSudokuRules(puzzle, cells).pencilMarks)
+        assertEquals(cells, drag(cells, a, source, puzzle = puzzle))
+    }
+
+    @Test fun importedBlackDotKeepsBothRatioDirections() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties =
+            """"ratio":[{"cells":["R1C1","R1C2"]}]"""))
+        val cells = board(a to CellState(value = 4), b to notes(1, 2, 3, 6, 8))
+        assertEquals(notes(2, 8), drag(cells, a, b, puzzle = puzzle)[b.index])
+        assertEquals(mapOf(b.index to setOf(1, 3, 6)), checkSudokuRules(puzzle, cells).pencilMarks)
+    }
+
+    @Test fun grayEdgeArtworkDoesNotUseStandardDotRules() {
+        val puzzle = empty.copy(overlays = listOf(
+            PuzzleOverlay(GridPoint(.5, 1.0), backgroundColor = "#CFCFCF", rounded = true),
+        ))
+        val cells = board(a to CellState(value = 6), b to notes(3, 5, 7))
+        assertEquals(cells, drag(cells, a, b, puzzle = puzzle))
+    }
+
     @Test fun aFastReverseThermometerDragUsesPointerOrder() {
         val puzzle = empty.copy(lines = listOf(PuzzleLine(
             listOf(GridPoint(.5, .5), GridPoint(.5, 1.5), GridPoint(.5, 2.5)), rule = LineRule.Thermometer,
