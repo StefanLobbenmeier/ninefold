@@ -19,6 +19,14 @@ internal class BoardSelectionGesture(
     }
 }
 
+internal data class BoardDragStep(
+    val gesture: BoardSelectionGesture,
+    val path: List<CellPosition>,
+    val added: Set<CellPosition>,
+    val targets: Set<CellPosition>,
+    val startCells: List<CellState>,
+)
+
 internal enum class SelectionBorder { Top, Right, Bottom, Left }
 
 internal fun selectionBorders(position: CellPosition, selected: Set<CellPosition>): Set<SelectionBorder> {
@@ -83,7 +91,7 @@ internal fun boardCellsAlongSegment(startX: Float, startY: Float, endX: Float, e
     val inset = if (additive) 0f else .125f
     val dx = endX - startX
     val dy = endY - startY
-    return buildSet {
+    return buildList {
         for (row in 0 until gridSize) for (column in 0 until gridSize) {
             var enter = 0f
             var exit = 1f
@@ -98,8 +106,8 @@ internal fun boardCellsAlongSegment(startX: Float, startY: Float, endX: Float, e
             // Intersect the whole segment so fast drags still include every crossed target.
             if (intersectsAxis(startX, dx, (column + inset) / gridSize, (column + 1f - inset) / gridSize) &&
                 intersectsAxis(startY, dy, (row + inset) / gridSize, (row + 1f - inset) / gridSize)) {
-                add(CellPosition(row, column))
+                add(enter to CellPosition(row, column))
             }
         }
-    }
+    }.sortedBy { it.first }.mapTo(linkedSetOf()) { it.second }
 }
