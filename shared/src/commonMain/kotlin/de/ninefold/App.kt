@@ -224,17 +224,25 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     fun clearManualChecks() { manualRulesCheck = false; manualSolutionCheck = false }
     fun checkNow() { manualRulesCheck = checkRules; manualSolutionCheck = checkSolution }
 
-    fun update(transform: (List<CellState>) -> List<CellState>) {
+    var undoDrag by remember(puzzle) { mutableStateOf<BoardSelectionGesture?>(null) }
+
+    fun update(drag: BoardSelectionGesture? = null, transform: (List<CellState>) -> List<CellState>) {
         if (!started) return
         val next = transform(cells)
         if (next == cells) return
-        history = history + listOf(cells); redoStack = emptyList(); cells = next; finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save()
+        if (drag == null || drag !== undoDrag) history = history + listOf(cells)
+        undoDrag = drag
+        redoStack = emptyList()
+        cells = next
+        finalized = finalizedCells(cells, finalized, selected)
+        clearManualChecks()
+        save()
     }
     fun enter(number: Int?, inputMode: InputMode = mode) = update { next ->
         applyInput(next, selected, inputMode, number)
     }
-    fun undo() { history.lastOrNull()?.let { redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
-    fun redo() { redoStack.firstOrNull()?.let { history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
+    fun undo() { history.lastOrNull()?.let { undoDrag = null; redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
+    fun redo() { redoStack.firstOrNull()?.let { undoDrag = null; history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
 
     fun setMultiple(enabled: Boolean) {
         repository.saveSettings(repository.settings.copy(multiSelect = enabled))
@@ -247,6 +255,12 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         }
         selected = next
         finalized = finalizedCells(cells, finalized, next)
+    }
+    fun clearDragPencilmarks(step: BoardDragStep) {
+        if (!repository.settings.clearPencilmarksOnDrag || colourSettings != null) return
+        update(step.gesture) {
+            clearDraggedPencilmarks(puzzle, it, step.path, step.added, step.targets, puzzle.litCells(step.startCells))
+        }
     }
     fun select(position: CellPosition) {
         if (colourSettings != null) return
@@ -343,7 +357,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                     modifier = Modifier.fillMaxSize(),
                     onInputBounds = { inputBounds = it },
                     board = {
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onDragStep = ::clearDragPencilmarks, onToolSelect = ::smartSelect, onSelect = ::select)
                     },
                 ) {
                     Controls(puzzle.size, effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
@@ -352,7 +366,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                 DesktopPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
                     board = {
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onToolSelect = ::smartSelect, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onDragStep = ::clearDragPencilmarks, onToolSelect = ::smartSelect, onSelect = ::select)
                     },
                 ) {
                     DesktopPlayerSidebar(
@@ -396,6 +410,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         checkSolution, { repository.saveSettings(settings.copy(solution = it)); manualSolutionCheck = false },
         checkSolutionAutomatically, { repository.saveSettings(settings.copy(automaticSolution = it)); manualSolutionCheck = false },
         checkSolutionPencilmarksAutomatically, { repository.saveSettings(settings.copy(automaticSolutionPencilmarks = it)); manualSolutionCheck = false },
+        settings.clearPencilmarksOnDrag, { repository.saveSettings(settings.copy(clearPencilmarksOnDrag = it)) },
         settings.promoteSingleCentreDigit, { repository.saveSettings(settings.copy(promoteSingleCentreDigit = it)) },
         settings.centreDigitsRemoveCornerDigits, { repository.saveSettings(settings.copy(centreDigitsRemoveCornerDigits = it)) },
     ) { showChecking = false }
@@ -573,9 +588,11 @@ private fun CompletionDialog(puzzle: Puzzle, elapsed: Long, onViewPuzzle: () -> 
 }
 
 @Composable
-internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), interactive: Boolean = true, fadedOutsideClues: Set<PuzzleOverlay> = emptySet(), onToggleOutsideClue: ((PuzzleOverlay) -> Unit)? = null, fadedOutsideArrows: Set<PuzzleArrow> = emptySet(), onToggleOutsideArrow: ((PuzzleArrow) -> Unit)? = null, onSelect: (CellPosition) -> Unit) {
+internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onDragStep: ((BoardDragStep) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), interactive: Boolean = true, fadedOutsideClues: Set<PuzzleOverlay> = emptySet(), onToggleOutsideClue: ((PuzzleOverlay) -> Unit)? = null, fadedOutsideArrows: Set<PuzzleArrow> = emptySet(), onToggleOutsideArrow: ((PuzzleArrow) -> Unit)? = null, onSelect: (CellPosition) -> Unit) {
     val currentSelection by rememberUpdatedState(selected)
     val currentDragSelection by rememberUpdatedState(onDragSelection)
+    val currentDragStep by rememberUpdatedState(onDragStep)
+    val currentCells by rememberUpdatedState(cells)
     val currentToolSelect by rememberUpdatedState(onToolSelect)
     val currentAdditive by rememberUpdatedState(additiveSelection)
     val padCells = remember(puzzle) { puzzle.boardPaddingCells() }
@@ -626,7 +643,10 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                             val modifiers = currentEvent.keyboardModifiers
                             val additive = currentAdditive || modifiers.isCtrlPressed || modifiers.isMetaPressed
                             val isDoubleTap = start == lastTapPosition && down.uptimeMillis - lastTapTime <= 400L
-                            val gesture = BoardSelectionGesture(currentSelection, start, additive)
+                            val initial = currentSelection
+                            val gesture = BoardSelectionGesture(initial, start, additive)
+                            val path = mutableListOf(start)
+                            val startCells = currentCells
                             var gestureSelection = gesture.visit()
                             var previous = down.position
                             var moved = false
@@ -641,18 +661,26 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                                     x.normalized(change.position.x), y.normalized(change.position.y),
                                     additive = additive, size = puzzle.size,
                                 )
+                                for (position in crossed) {
+                                    if (position != path.last()) path.add(position)
+                                }
                                 val next = gesture.visit(crossed)
                                 if (next != gestureSelection) {
                                     moved = true
+                                    val targets = next - gestureSelection
                                     gestureSelection = next
                                     currentDragSelection?.invoke(next)
+                                    if (targets.isNotEmpty()) {
+                                        val added = if (additive) next - initial else next
+                                        currentDragStep?.invoke(BoardDragStep(gesture, path, added, targets, startCells))
+                                    }
                                 }
                                 previous = change.position
                                 lastEventTime = change.uptimeMillis
                                 change.consume()
                             } while (change.pressed)
                             val isLongPress = !moved && lastEventTime - down.uptimeMillis >= 500L
-                            if (isDoubleTap || isLongPress) {
+                            if (!moved && (isDoubleTap || isLongPress)) {
                                 currentToolSelect?.invoke(start, additive)
                                 lastTapPosition = null
                                 lastTapTime = Long.MIN_VALUE
@@ -910,7 +938,7 @@ private fun BoxScope.PuzzleGraphics(
             val color = line.color.toComposeColor() ?: Color.Gray
             val width = (line.thickness / 50.0 * cell).toFloat().coerceAtLeast(2f)
             drawConstraintLine(line.points.map(::at), color, width)
-            if (line.rule == LineRule.Thermometer) line.points.firstOrNull()?.let { bulb ->
+            if (line.rule.isThermometer) line.points.firstOrNull()?.let { bulb ->
                 drawCircle(color, radius = cell * .35f, center = at(bulb))
             }
         }
@@ -1129,6 +1157,7 @@ private fun CheckingDialog(
     checkSolution: Boolean, onCheckSolution: (Boolean) -> Unit,
     automaticSolution: Boolean, onAutomaticSolution: (Boolean) -> Unit,
     automaticSolutionPencilmarks: Boolean, onAutomaticSolutionPencilmarks: (Boolean) -> Unit,
+    clearPencilmarksOnDrag: Boolean, onClearPencilmarksOnDrag: (Boolean) -> Unit,
     promoteSingleCentreDigit: Boolean, onPromoteSingleCentreDigit: (Boolean) -> Unit,
     centreDigitsRemoveCornerDigits: Boolean, onCentreDigitsRemoveCornerDigits: (Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -1138,6 +1167,7 @@ private fun CheckingDialog(
         confirmButton = { Button(onDismiss) { Text("Done") } },
         title = { Text("Settings") },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CheckOption("Clear pencil marks by dragging", "Drag from a digit, pair, or variant clue to remove candidates from cells you add to the selection.", clearPencilmarksOnDrag, onClearPencilmarksOnDrag)
             CheckOption("Promote single centre digits", "Turn a single centre digit into a placed digit when you deselect its cell.", promoteSingleCentreDigit, onPromoteSingleCentreDigit)
             CheckOption("Centre digits remove corner digits", "Remove excluded corner digits and redundant pair or triplet reminders when you deselect cells.", centreDigitsRemoveCornerDigits, onCentreDigitsRemoveCornerDigits)
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -1158,7 +1188,7 @@ private fun CheckingDialog(
 @Composable
 private fun CheckOption(label: String, description: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked, onChecked)
+        Checkbox(checked, onChecked, modifier = Modifier.semantics { contentDescription = label })
         Column(Modifier.weight(1f)) { Text(label, fontWeight = FontWeight.SemiBold); Text(description, color = Color.Gray, fontSize = 12.sp) }
     }
 }

@@ -33,7 +33,11 @@ enum class LineRule(val label: String) {
     Unspecified("Display only"), GermanWhisper("German whisper (difference ≥ 5)"),
     DutchWhisper("Dutch whisper (difference ≥ 4)"), Renban("Renban"),
     Palindrome("Palindrome"), Thermometer("Thermometer"), RegionSum("Region sum"),
+    SlowThermometer("Slow thermometer"),
 }
+
+internal val LineRule.isThermometer: Boolean
+    get() = this == LineRule.Thermometer || this == LineRule.SlowThermometer
 
 @Serializable
 data class PuzzleLine(
@@ -184,6 +188,28 @@ fun checkSudokuRules(puzzle: Puzzle, cells: List<CellState>, includeSpecialRules
     return PuzzleCheckResult(conflicts, pencilMarks.mapValues { it.value.toSet() })
 }
 
+/** Minimum rise from the first position to each later position, in either traversal direction. */
+internal fun thermometerRises(
+    path: List<CellPosition>,
+    rule: LineRule,
+    regions: List<Set<CellPosition>>,
+): List<Int> {
+    if (rule == LineRule.Thermometer) return path.indices.toList()
+    val rises = MutableList(path.size) { 0 }
+    for (end in 1 until path.size) {
+        val target = path[end]
+        rises[end] = rises[end - 1]
+        for (start in 0 until end) {
+            val source = path[start]
+            if (source != target && (source.row == target.row || source.column == target.column ||
+                    regions.any { source in it && target in it })) {
+                rises[end] = maxOf(rises[end], rises[start] + 1)
+            }
+        }
+    }
+    return rises
+}
+
 private fun checkNumericSpecialRules(puzzle: Puzzle, cells: List<CellState>): PuzzleCheckResult {
     val size = puzzle.size
     val conflicts = mutableSetOf<Int>()
@@ -217,7 +243,8 @@ private fun checkNumericSpecialRules(puzzle: Puzzle, cells: List<CellState>): Pu
         }
     }
     if (includeSpecialRules) puzzle.lines.forEach { line ->
-        val indices = line.points.mapNotNull { it.cellPositionOrNull(size) }.map { it.index(size) }.distinct()
+        val path = line.points.mapNotNull { it.cellPositionOrNull(size) }.distinct()
+        val indices = path.map { it.index(size) }
         val values = indices.mapNotNull { index -> cells.getOrNull(index)?.value?.let { index to it } }
         fun markPairs(isInvalid: (Int, Int) -> Boolean) {
             values.zipWithNext().filter { isInvalid(it.first.second, it.second.second) }
@@ -226,13 +253,14 @@ private fun checkNumericSpecialRules(puzzle: Puzzle, cells: List<CellState>): Pu
         when (line.rule) {
             LineRule.GermanWhisper -> markPairs { a, b -> kotlin.math.abs(a - b) < 5 }
             LineRule.DutchWhisper -> markPairs { a, b -> kotlin.math.abs(a - b) < 4 }
-            LineRule.Thermometer -> {
-                // Each blank cell still needs a distinct digit between its neighbours.
+            LineRule.Thermometer, LineRule.SlowThermometer -> {
+                val regions = puzzle.regionCells()
+                val rises = path.indices.map { thermometerRises(path.drop(it), line.rule, regions) }
                 fun withinBounds(offset: Int, value: Int): Boolean =
-                    value >= offset + 1 && value <= size - (indices.lastIndex - offset)
+                    value >= 1 + rises[0][offset] && value <= size - rises[offset].last()
                 fun compatible(offset: Int, value: Int, otherOffset: Int, otherValue: Int): Boolean =
-                    if (offset < otherOffset) otherValue - value >= otherOffset - offset
-                    else value - otherValue >= offset - otherOffset
+                    if (offset < otherOffset) otherValue - value >= rises[offset][otherOffset - offset]
+                    else value - otherValue >= rises[otherOffset][offset - otherOffset]
 
                 indices.forEachIndexed { offset, index ->
                     val cell = cells.getOrNull(index) ?: return@forEachIndexed

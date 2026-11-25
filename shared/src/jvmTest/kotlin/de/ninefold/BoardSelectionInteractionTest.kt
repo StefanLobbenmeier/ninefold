@@ -122,6 +122,35 @@ class BoardSelectionInteractionTest {
         assertSelection(4 to 4)
     }
 
+    @Test fun dragClearingAppearsBeforeReleaseAndCanBeUndoneOrDisabled() {
+        openPlayer(notes = mapOf(
+            CellPosition(2, 0) to CellState(value = 2),
+            CellPosition(2, 1) to CellState(centreNotes = setOf(2, 8)),
+            CellPosition(2, 2) to CellState(centreNotes = setOf(3, 8)),
+        ))
+        val start = cell(3, 1).fetchSemanticsNode().boundsInRoot.center
+        val middle = cell(3, 2).fetchSemanticsNode().boundsInRoot.center
+        val end = cell(3, 3).fetchSemanticsNode().boundsInRoot.center
+        val root = compose.onRoot()
+        root.performTouchInput { down(start); moveTo(middle) }
+        cell(3, 2).assertContentDescriptionContains("column 2, 8", substring = true)
+        cell(3, 3).assertContentDescriptionContains("centre notes 3, 8", substring = true)
+        root.performTouchInput { moveTo(end) }
+        cell(3, 3).assertContentDescriptionContains("column 3, 3", substring = true)
+        root.performTouchInput { up() }
+        compose.onNodeWithContentDescription("Undo").performClick()
+        cell(3, 2).assertContentDescriptionContains("centre notes 2, 8", substring = true)
+        cell(3, 3).assertContentDescriptionContains("centre notes 3, 8", substring = true)
+
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithContentDescription("Clear pencil marks by dragging").assertIsOn().performClick()
+        compose.onNodeWithText("Done").performClick()
+        drag(3, 1, 3)
+        assertSelection(3 to 1, 3 to 2, 3 to 3)
+        cell(3, 2).assertContentDescriptionContains("centre notes 2, 8", substring = true)
+        cell(3, 3).assertContentDescriptionContains("centre notes 3, 8", substring = true)
+    }
+
     @Test fun multipleAddsCellsAndSwitchingItOffMakesNextGestureReplaceTheGroup() {
         openPlayer()
         clickCell(2, 2)

@@ -181,7 +181,7 @@ class GamePersistenceTest {
         val game = SavedGame(puzzle, cells, true, listOf(puzzle.startingCells()), listOf(cells))
         repository.saveGame(game)
         repository.saveElapsed(puzzle, 123)
-        val settings = CheckingSettings(inputMode = "Corner", multiSelect = true, rules = false, automaticRules = false, specialRules = false, solution = false, automaticSolution = false)
+        val settings = CheckingSettings(inputMode = "Corner", multiSelect = true, rules = false, automaticRules = false, specialRules = false, solution = false, automaticSolution = false, clearPencilmarksOnDrag = false)
         repository.saveSettings(settings)
         val reopened = GameRepository(storage)
         assertEquals(game, reopened.game(puzzle))

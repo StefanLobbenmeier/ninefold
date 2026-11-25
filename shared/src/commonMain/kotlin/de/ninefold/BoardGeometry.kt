@@ -13,7 +13,7 @@ internal fun Puzzle.boardPaddingCells(): Float {
     // Some exporters draw outside arrows entirely as decorative line segments.
     lines.forEach { line ->
         line.points.forEach { include(it, line.thickness / 100.0) }
-        if (line.rule == LineRule.Thermometer) line.points.firstOrNull()?.let { include(it, .35) }
+        if (line.rule.isThermometer) line.points.firstOrNull()?.let { include(it, .35) }
     }
     arrows.forEach { arrow ->
         arrow.points.forEach { include(it, arrow.thickness / 100.0) }
@@ -70,4 +70,28 @@ internal fun PuzzleArrow.isOutsideClue(size: Int): Boolean = points.size >= 2 &&
         it.row <= 0 || it.row >= size || it.column <= 0 || it.column >= size
     } && points.any {
         it.row < 0 || it.row > size || it.column < 0 || it.column > size
+    }
+
+/** Exported waypoints describe bends and endpoints, and may skip cells along a straight shaft. */
+internal fun gridPathCells(points: List<GridPoint>, size: Int): List<CellPosition> =
+    points.zipWithNext().flatMap { (start, end) ->
+        val rowDelta = end.row - start.row
+        val columnDelta = end.column - start.column
+        val crossings = buildList {
+            add(0.0)
+            add(1.0)
+            for (boundary in 0..size) {
+                if (rowDelta != 0.0) add((boundary - start.row) / rowDelta)
+                if (columnDelta != 0.0) add((boundary - start.column) / columnDelta)
+            }
+        }.filter { it in 0.0..1.0 }.distinct().sorted()
+        // Sample inside each crossed cell; a diagonal touching a corner does not enter its neighbours.
+        crossings.zipWithNext().mapNotNull { (from, to) ->
+            val midpoint = (from + to) / 2
+            GridPoint(start.row + rowDelta * midpoint, start.column + columnDelta * midpoint)
+                .cellPositionOrNull(size)
+        }
+    }.fold(mutableListOf()) { path, position ->
+        if (path.lastOrNull() != position) path.add(position)
+        path
     }

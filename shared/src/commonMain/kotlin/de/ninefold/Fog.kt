@@ -34,9 +34,7 @@ internal fun Puzzle.litCells(cells: List<CellState>): Set<CellPosition> {
 internal fun PuzzleOverlay.isRevealedEdgeMark(litCells: Set<CellPosition>): Boolean {
     // SudokuPad exports XV labels with zero-width, 1.05-cell-high text boxes.
     // Their box dimensions describe text sizing rather than the painted glyph bounds.
-    val isXV = text?.trim()?.uppercase() in setOf("V", "X") &&
-        width in 0.0..1.1 && height > 0 && height <= 1.1
-    if (!isXV && !isKropkiDot()) return false
+    if (edgeSum() == null && !isKropkiDot()) return false
     return edgeMarkCells().any { it in litCells }
 }
 
@@ -53,14 +51,23 @@ internal fun PuzzleOverlay.isRevealedQuadruple(clues: List<QuadrupleClue>, litCe
             abs(center.column - (clue.cells.map { it.column }.average() + .5)) < .001
     }
 
-private fun PuzzleOverlay.edgeMarkCells(): List<CellPosition> {
+internal fun PuzzleOverlay.edgeSum(): Int? {
+    if (width !in 0.0..1.1 || height <= 0 || height > 1.1) return null
+    return when (text?.trim()?.uppercase()) {
+        "X" -> 10
+        "V" -> 5
+        else -> null
+    }
+}
+
+internal fun PuzzleOverlay.edgeMarkCells(size: Int = 9): List<CellPosition> {
     fun near(a: Double, b: Double) = abs(a - b) < .001
     val row = round(center.row).toInt()
     val column = round(center.column).toInt()
-    val horizontal = row in 1..8 && near(center.row, row.toDouble()) &&
-        near(center.column, kotlin.math.floor(center.column) + .5) && center.column in 0.0..9.0
-    val vertical = column in 1..8 && near(center.column, column.toDouble()) &&
-        near(center.row, kotlin.math.floor(center.row) + .5) && center.row in 0.0..9.0
+    val horizontal = row in 1 until size && near(center.row, row.toDouble()) &&
+        near(center.column, kotlin.math.floor(center.column) + .5) && center.column in 0.0..<size.toDouble()
+    val vertical = column in 1 until size && near(center.column, column.toDouble()) &&
+        near(center.row, kotlin.math.floor(center.row) + .5) && center.row in 0.0..<size.toDouble()
     return when {
         horizontal -> listOf(CellPosition(row - 1, center.column.toInt()), CellPosition(row, center.column.toInt()))
         vertical -> listOf(CellPosition(center.row.toInt(), column - 1), CellPosition(center.row.toInt(), column))
