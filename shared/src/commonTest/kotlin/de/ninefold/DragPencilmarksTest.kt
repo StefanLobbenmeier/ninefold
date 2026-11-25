@@ -75,6 +75,28 @@ class DragPencilmarksTest {
         assertEquals(3, result[tip.index].value)
     }
 
+    @Test fun reverseDragUsesTheImportedSlowThermometerPath() {
+        val payload = SudokuFixtures.sudokuPadPayload(properties = """
+            "cages":[{"value":"rules: Normal sudoku rules apply. Slow thermometers: digits along each thermometer shape must either increase or stay the same at each step, from the round bulb to the tip."}],
+            "lines":[{"wayPoints":[[3.5,3.5],[1.5,1.5]],"color":"#AAAAAA","thickness":15}],
+            "underlays":[{"center":[1.5,1.5],"width":0.7,"height":0.7,"rounded":true,"backgroundColor":"#AAAAAA"}]
+        """.trimIndent())
+        val puzzle = parseSudokuPadPayload(payload)
+        val line = puzzle.lines.single()
+        assertEquals(LineRule.SlowThermometer, line.rule)
+        assertEquals(listOf(GridPoint(1.5, 1.5), GridPoint(2.5, 2.5), GridPoint(3.5, 3.5)), line.points)
+        assertEquals(false, line.drawThermometerBulb)
+        val tip = CellPosition(3, 3)
+        val middle = CellPosition(2, 2)
+        val bulb = CellPosition(1, 1)
+        val cells = board(tip to CellState(value = 8, given = true), middle to notes(4, 8, 9), bulb to notes(5, 8, 9))
+        val result = drag(cells, tip, middle, bulb, puzzle = puzzle.copy(rules = emptyList()))
+        assertEquals(setOf(4, 8), result[middle.index].centreNotes)
+        assertEquals(5, result[bulb.index].value)
+        val artworkOnly = parseSudokuPadPayload(payload.replace("rules: Normal sudoku rules apply. Slow", "rules: Slow variant. Slow"))
+        assertEquals(LineRule.Unspecified, artworkOnly.lines.single().rule)
+    }
+
     @Test fun whisperUsesCentreCandidatesAndKeepsContradictoryCentresIntact() {
         val puzzle = empty.copy(lines = listOf(PuzzleLine(
             listOf(GridPoint(.5, .5), GridPoint(.5, 1.5)), rule = LineRule.GermanWhisper,
