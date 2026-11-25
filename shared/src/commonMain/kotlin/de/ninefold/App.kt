@@ -938,7 +938,7 @@ private fun BoxScope.PuzzleGraphics(
             val color = line.color.toComposeColor() ?: Color.Gray
             val width = (line.thickness / 50.0 * cell).toFloat().coerceAtLeast(2f)
             drawConstraintLine(line.points.map(::at), color, width)
-            if (line.rule.isThermometer) line.points.firstOrNull()?.let { bulb ->
+            if (line.rule.isThermometer && line.drawThermometerBulb) line.points.firstOrNull()?.let { bulb ->
                 drawCircle(color, radius = cell * .35f, center = at(bulb))
             }
         }

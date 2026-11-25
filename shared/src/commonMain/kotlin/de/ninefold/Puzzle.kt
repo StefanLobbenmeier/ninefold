@@ -43,6 +43,7 @@ internal val LineRule.isThermometer: Boolean
 data class PuzzleLine(
     val points: List<GridPoint>, val color: String = "#A0A0A0", val thickness: Double = 6.0,
     val rule: LineRule = LineRule.Unspecified,
+    val drawThermometerBulb: Boolean = true,
 )
 @Serializable
 data class PuzzleArrow(

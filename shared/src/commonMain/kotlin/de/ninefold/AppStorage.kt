@@ -73,7 +73,7 @@ internal class GameRepository(
         val payload = storage.read("ninefold.game.$id.v1") ?: return@runCatching null
         val game = json.decodeFromString<SavedGame>(payload)
         if (json.parseToJsonElement(payload).jsonObject["historyEncoding"] == null) legacyGames += id
-        game
+        if (game.puzzle.sourceUrl != null) game.copy(puzzle = game.puzzle.withImportedSlowThermometers()) else game
     }.getOrNull()
     var storageError by mutableStateOf<String?>(null)
         private set
@@ -187,7 +187,7 @@ internal class GameRepository(
     fun elapsed(puzzle: Puzzle): Long = (read<Long>("timer.${puzzle.storageId()}") ?: 0L).coerceAtLeast(0)
     fun saveElapsed(puzzle: Puzzle, seconds: Long) { write("timer.${puzzle.storageId()}", seconds) }
     fun cachedPuzzle(entry: SudokuIndexEntry): Puzzle? = puzzles[entry.puzzleUrl]
-        ?: (read<Puzzle>("puzzle.${entry.puzzleUrl}") ?: games[entry.puzzleUrl]?.puzzle)
+        ?: (read<Puzzle>("puzzle.${entry.puzzleUrl}")?.withImportedSlowThermometers() ?: games[entry.puzzleUrl]?.puzzle)
             ?.also { puzzles[entry.puzzleUrl] = it }
 
     suspend fun reimportPuzzle(

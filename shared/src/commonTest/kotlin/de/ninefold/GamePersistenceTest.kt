@@ -8,6 +8,24 @@ import kotlin.test.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GamePersistenceTest {
+    @Test fun reopeningAnOlderImportRecognizesSlowThermosAndKeepsProgress() {
+        val bulb = GridPoint(.5, .5)
+        val puzzle = SudokuFixtures.empty.copy(
+            sourceUrl = "https://sudokupad.app/synthetic-slow-thermo",
+            rules = listOf("Slow thermo: digits along each thermometer shape must either increase or stay the same at each step, from the round bulb to the tip."),
+            lines = listOf(PuzzleLine(listOf(bulb, GridPoint(.5, 2.5)))),
+            underlays = listOf(PuzzleOverlay(bulb, .8, .8, backgroundColor = "#A0A0A0", rounded = true)),
+        )
+        val storage = MemoryAppStorage()
+        val cells = puzzle.startingCells().toMutableList().apply { this[0] = CellState(value = 2) }
+        val game = SavedGame(puzzle, cells, true, history = listOf(puzzle.startingCells()))
+        GameRepository(storage).saveGame(game)
+
+        val reopened = GameRepository(storage).game(puzzle)!!
+        assertEquals(LineRule.SlowThermometer, reopened.puzzle.lines.single().rule)
+        assertEquals(game.copy(puzzle = reopened.puzzle), reopened)
+    }
+
     @Test fun markingDonePersistsWithoutChangingTheBoard() {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)

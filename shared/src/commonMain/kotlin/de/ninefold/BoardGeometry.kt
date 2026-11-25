@@ -13,7 +13,7 @@ internal fun Puzzle.boardPaddingCells(): Float {
     // Some exporters draw outside arrows entirely as decorative line segments.
     lines.forEach { line ->
         line.points.forEach { include(it, line.thickness / 100.0) }
-        if (line.rule.isThermometer) line.points.firstOrNull()?.let { include(it, .35) }
+        if (line.rule.isThermometer && line.drawThermometerBulb) line.points.firstOrNull()?.let { include(it, .35) }
     }
     arrows.forEach { arrow ->
         arrow.points.forEach { include(it, arrow.thickness / 100.0) }
