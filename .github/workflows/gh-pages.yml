@@ -61,10 +61,12 @@ jobs:
     permissions:
       contents: write
       pages: read
+      pull-requests: read
     # Serialize updates to the shared deployment branch.
     concurrency:
       group: github-pages
       cancel-in-progress: false
+      queue: max
     environment:
       name: ${{ github.event_name == 'pull_request' && 'github-pages-preview' || 'github-pages' }}
       url: ${{ steps.url.outputs.url }}
@@ -99,9 +101,20 @@ jobs:
       - name: Prepare Pages output
         run: touch webApp/build/dist/js/productionExecutable/.nojekyll
 
+      # A queued or rerun build can outlive the PR that triggered it.
+      - name: Check whether the PR is still open
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        id: preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          state="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .state)"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+
       # Fork pull requests have a read-only token. Still build them, without publishing.
       - name: Deploy to Pages branch
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name != 'pull_request' || steps.preview.outputs.state == 'open'
         id: deployment
         uses: JamesIves/github-pages-deploy-action@v4
         with:

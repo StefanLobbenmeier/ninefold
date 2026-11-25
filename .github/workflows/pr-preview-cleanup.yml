@@ -1,0 +1,47 @@
+name: Clean up PR previews
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prune-previews:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+      queue: max
+    steps:
+      # Only check out the deployment branch, including on fork PR close events.
+      - name: Checkout Pages branch
+        uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+
+      - name: Remove previews for closed PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open_prs="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].number')"
+
+          for preview in pr-preview/pr-*; do
+            if [[ -d "$preview" && ! -L "$preview" && "$preview" =~ ^pr-preview/pr-([0-9]+)$ ]]; then
+              if ! grep -Fxq -- "${BASH_REMATCH[1]}" <<< "$open_prs"; then
+                git rm -r -- "$preview"
+              fi
+            fi
+          done
+
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Remove previews for closed pull requests'
+            git push origin HEAD:gh-pages
+          fi
