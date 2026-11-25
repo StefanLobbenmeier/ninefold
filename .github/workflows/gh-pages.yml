@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+  pull_request_target:
+    types: [closed]
   push:
     branches:
       - main
@@ -12,6 +14,7 @@ permissions:
 
 jobs:
   test:
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     concurrency:
       group: test-${{ github.workflow }}-${{ github.ref }}
@@ -36,6 +39,7 @@ jobs:
         run: xvfb-run --auto-servernum ./gradlew :shared:jvmTest --console=plain
 
   test-js:
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     concurrency:
       group: test-js-${{ github.workflow }}-${{ github.ref }}
@@ -57,14 +61,16 @@ jobs:
         run: ./gradlew :shared:jsTest --console=plain
 
   build-and-deploy:
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pages: read
+      pull-requests: read
     # Serialize updates to the shared deployment branch.
     concurrency:
       group: github-pages
-      cancel-in-progress: false
+      queue: max
     environment:
       name: ${{ github.event_name == 'pull_request' && 'github-pages-preview' || 'github-pages' }}
       url: ${{ steps.url.outputs.url }}
@@ -99,9 +105,20 @@ jobs:
       - name: Prepare Pages output
         run: touch webApp/build/dist/js/productionExecutable/.nojekyll
 
+      # A queued or rerun build can outlive the PR that triggered it.
+      - name: Check whether the PR is still open
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        id: preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          state="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .state)"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+
       # Fork pull requests have a read-only token. Still build them, without publishing.
       - name: Deploy to Pages branch
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name != 'pull_request' || steps.preview.outputs.state == 'open'
         id: deployment
         uses: JamesIves/github-pages-deploy-action@v4
         with:
@@ -127,3 +144,40 @@ jobs:
           fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployment: $url" >> "$GITHUB_STEP_SUMMARY"
+
+  prune-previews:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    concurrency:
+      group: github-pages
+      queue: max
+    steps:
+      # Only check out the deployment branch, including on fork PR close events.
+      - name: Checkout Pages branch
+        uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+
+      - name: Remove previews for closed PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open_prs="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].number')"
+
+          for preview in pr-preview/pr-*; do
+            if [[ -d "$preview" && ! -L "$preview" && "$preview" =~ ^pr-preview/pr-([0-9]+)$ ]]; then
+              if ! grep -Fxq -- "${BASH_REMATCH[1]}" <<< "$open_prs"; then
+                git rm -r -- "$preview"
+              fi
+            fi
+          done
+
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Remove previews for closed pull requests'
+            git push origin HEAD:gh-pages
+          fi
