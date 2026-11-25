@@ -97,6 +97,35 @@ class DragPencilmarksTest {
         assertEquals(LineRule.Unspecified, artworkOnly.lines.single().rule)
     }
 
+    @Test fun checksAndDragsUseTheSameDutchWhisperEdges() {
+        val puzzle = empty.copy(lines = listOf(PuzzleLine(
+            listOf(GridPoint(.5, .5), GridPoint(.5, 2.5)), rule = LineRule.DutchWhisper,
+        )))
+        val cells = board(a to CellState(value = 3), b to notes(4, 7), c to notes(4, 7))
+        assertEquals(mapOf(b.index to setOf(4)), checkSudokuRules(puzzle, cells).pencilMarks)
+        assertEquals(7, drag(cells, a, b, puzzle = puzzle)[b.index].value)
+        assertEquals(cells, drag(cells, a, c, puzzle = puzzle))
+    }
+
+    @Test fun antiKnightDragUsesTheSamePeersAsChecking() {
+        val target = CellPosition(1, 2)
+        val puzzle = empty.copy(antiKnight = true, regions = emptyList())
+        val cells = board(a to CellState(value = 3), target to notes(3, 7))
+        assertEquals(mapOf(target.index to setOf(3)), checkSudokuRules(puzzle, cells).pencilMarks)
+        assertEquals(7, drag(cells, a, target, puzzle = puzzle)[target.index].value)
+    }
+
+    @Test fun regionSumDragUsesTheCompletedSegmentsItHasTraversed() {
+        val puzzle = empty.copy(lines = listOf(PuzzleLine(
+            listOf(GridPoint(.5, .5), GridPoint(.5, 3.5)), rule = LineRule.RegionSum,
+        )))
+        val cells = board(a to CellState(value = 1), b to CellState(value = 2),
+            c to CellState(value = 4), d to notes(7, 8))
+        assertEquals(mapOf(d.index to setOf(8)), checkSudokuRules(puzzle, cells).pencilMarks)
+        assertEquals(7, drag(cells, a, b, c, d, puzzle = puzzle)[d.index].value)
+        assertEquals(cells, drag(cells, b, c, d, puzzle = puzzle))
+    }
+
     @Test fun whisperUsesCentreCandidatesAndKeepsContradictoryCentresIntact() {
         val puzzle = empty.copy(lines = listOf(PuzzleLine(
             listOf(GridPoint(.5, .5), GridPoint(.5, 1.5)), rule = LineRule.GermanWhisper,
