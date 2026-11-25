@@ -248,10 +248,19 @@ internal fun Puzzle.sudokuRules(includeSpecialRules: Boolean = true): List<Sudok
     }
 
     for (overlay in overlays) {
-        val sum = overlay.edgeSum() ?: continue
         val pair = overlay.edgeMarkCells(gridSize)
-        if (pair.size == 2) {
-            add(numericPair(pair.first(), pair.last(), fillFromPlacedDigit = true) { a, b -> a + b == sum })
+        if (pair.size != 2) continue
+        val (first, second) = pair
+        val sum = overlay.edgeSum()
+        if (sum != null) {
+            add(numericPair(first, second, fillFromPlacedDigit = true) { a, b -> a + b == sum })
+        } else if (overlay.isKropkiDot()) {
+            when (overlay.backgroundColor?.removePrefix("#")?.uppercase()) {
+                "FFF", "FFFFFF", "FFFF", "FFFFFFFF" ->
+                    add(numericPair(first, second) { a, b -> abs(a - b) == 1 })
+                "000", "000000", "000F", "000000FF" ->
+                    add(numericPair(first, second) { a, b -> a == 2 * b || b == 2 * a })
+            }
         }
     }
 }
