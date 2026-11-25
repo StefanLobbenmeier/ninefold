@@ -23,12 +23,15 @@ internal fun clearDraggedPencilmarks(
             (0 until puzzle.size).mapTo(mutableSetOf()) { CellPosition(it, index) },
         )
     }
+    val slowThermoBulbs = puzzle.importedSlowThermometerBulbs()
     val lines = puzzle.lines.mapNotNull { line ->
         when {
             line.rule.isThermometer ->
                 line.rule to line.points.mapNotNull { it.cellPositionOrNull(puzzle.size) }.distinct()
             line.rule == LineRule.GermanWhisper ->
                 line.rule to gridPathCells(line.points, puzzle.size)
+            line.rule == LineRule.Unspecified && slowThermoBulbs.isNotEmpty() ->
+                line.slowThermometerPath(slowThermoBulbs, puzzle.size)?.let { LineRule.SlowThermometer to it }
             else -> null
         }
     }
@@ -113,4 +116,40 @@ internal fun clearDraggedPencilmarks(
         previous.add(target)
     }
     return next
+}
+
+private val slowThermometerInstruction = Regex(
+    """(?:Normal sudoku rules apply\.\s*)?Slow thermo(?:meters?)?:\s*digits along each thermometer shape must either increase or stay the same at each step, from the round bulb to the tip\.""",
+    RegexOption.IGNORE_CASE,
+)
+
+// SudokuPad can export thermometers as line and circle artwork, including in already saved puzzles.
+private fun Puzzle.importedSlowThermometerBulbs(): List<PuzzleOverlay> {
+    if (!slowThermometerInstruction.matches(rules.joinToString(" ").trim())) return emptyList()
+    return (overlays + underlays).filter {
+        it.rounded && it.text.isNullOrBlank() && it.width == it.height && it.width in .5..1.0
+    }
+}
+
+private fun PuzzleLine.slowThermometerPath(bulbs: List<PuzzleOverlay>, size: Int): List<CellPosition>? {
+    if (points.any {
+        val cell = it.cellPositionOrNull(size)
+        cell == null || it != GridPoint(cell.row + .5, cell.column + .5)
+    }) return null
+    if (points.zipWithNext().any { (a, b) ->
+        val rows = abs(a.row - b.row)
+        val columns = abs(a.column - b.column)
+        rows != 0.0 && columns != 0.0 && rows != columns
+    }) return null
+    val path = gridPathCells(points, size)
+    if (path.size < 2 || path.distinct().size != path.size) return null
+    val bulb = bulbs.singleOrNull {
+        it.backgroundColor.equals(color, ignoreCase = true) && it.width > thickness / 50.0 &&
+            it.center.cellPositionOrNull(size) in path
+    }?.center
+    return when (bulb) {
+        points.first() -> path
+        points.last() -> path.reversed()
+        else -> null
+    }
 }

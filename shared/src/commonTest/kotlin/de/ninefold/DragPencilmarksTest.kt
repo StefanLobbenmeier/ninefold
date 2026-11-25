@@ -75,6 +75,23 @@ class DragPencilmarksTest {
         assertEquals(3, result[tip.index].value)
     }
 
+    @Test fun reverseDragRecognizesAnImportedSlowThermometerWithASkippedWaypoint() {
+        val payload = SudokuFixtures.sudokuPadPayload(properties = """
+            "cages":[{"value":"rules: Normal sudoku rules apply. Slow thermometers: digits along each thermometer shape must either increase or stay the same at each step, from the round bulb to the tip."}],
+            "lines":[{"wayPoints":[[3.5,3.5],[1.5,1.5]],"color":"#AAAAAA","thickness":15}],
+            "underlays":[{"center":[1.5,1.5],"width":0.7,"height":0.7,"rounded":true,"backgroundColor":"#AAAAAA"}]
+        """.trimIndent())
+        val puzzle = parseSudokuPadPayload(payload)
+        val tip = CellPosition(3, 3)
+        val middle = CellPosition(2, 2)
+        val bulb = CellPosition(1, 1)
+        val cells = board(tip to CellState(value = 8, given = true), middle to notes(4, 8, 9), bulb to notes(5, 8, 9))
+        val result = drag(cells, tip, middle, bulb, puzzle = puzzle)
+        assertEquals(setOf(4, 8), result[middle.index].centreNotes)
+        assertEquals(5, result[bulb.index].value)
+        assertEquals(cells, drag(cells, tip, middle, bulb, puzzle = puzzle.copy(rules = emptyList())))
+    }
+
     @Test fun whisperUsesCentreCandidatesAndKeepsContradictoryCentresIntact() {
         val puzzle = empty.copy(lines = listOf(PuzzleLine(
             listOf(GridPoint(.5, .5), GridPoint(.5, 1.5)), rule = LineRule.GermanWhisper,
