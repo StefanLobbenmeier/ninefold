@@ -1167,7 +1167,7 @@ private fun CheckingDialog(
         confirmButton = { Button(onDismiss) { Text("Done") } },
         title = { Text("Settings") },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            CheckOption("Clear pencil marks by dragging", "Drag from a digit, a group of matching center marks, or a variant clue to remove candidates from cells you add to the selection.", clearPencilmarksOnDrag, onClearPencilmarksOnDrag)
+            CheckOption("Clear pencil marks by dragging", "Drag from a digit, a naked group, or a variant clue to remove candidates from cells you add to the selection.", clearPencilmarksOnDrag, onClearPencilmarksOnDrag)
             CheckOption("Promote single centre digits", "Turn a single centre digit into a placed digit when you deselect its cell.", promoteSingleCentreDigit, onPromoteSingleCentreDigit)
             CheckOption("Centre digits remove corner digits", "Remove excluded corner digits and redundant pair or triplet reminders when you deselect cells.", centreDigitsRemoveCornerDigits, onCentreDigitsRemoveCornerDigits)
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
