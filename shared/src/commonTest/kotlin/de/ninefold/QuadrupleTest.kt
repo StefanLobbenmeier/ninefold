@@ -5,6 +5,32 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class QuadrupleTest {
+    @Test fun importsExplicitFpuzzlesQuadruplesWithRepeatedDigits() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties =
+            """"quadruple":[{"cells":["R2C2","R1C1","R2C1","R1C2"],"values":[4,4,6]}]"""))
+
+        val clue = puzzle.quadruples.single()
+        assertEquals(listOf(4, 4, 6), clue.digits)
+        assertEquals(setOf(0, 1, 9, 10), clue.cells.map { it.index }.toSet())
+        val circle = puzzle.overlays.single()
+        assertEquals(GridPoint(1.0, 1.0), circle.center)
+        assertEquals("4 4\n6", circle.text)
+        assertTrue(circle.rounded)
+        assertTrue(puzzle.importOmissions.isEmpty())
+    }
+
+    @Test fun reportsMalformedFpuzzlesQuadruples() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties =
+            """"quadruple":[
+                {"cells":["R1C1","R1C3","R2C1","R2C3"],"values":[4]},
+                {"cells":["R1C1","R1C2","R2C1","R2C2"],"values":[4,0]}
+            ]"""))
+
+        assertTrue(puzzle.quadruples.isEmpty())
+        assertTrue(puzzle.overlays.isEmpty())
+        assertEquals(listOf("$.quadruple[0]", "$.quadruple[1]"), puzzle.importOmissions.map { it.path })
+    }
+
     @Test fun importsSplitNumericLabelsAsOneReadableClue() {
         for (rules in listOf(
             "Quadruples: circled digits appear in the surrounding cells.",
