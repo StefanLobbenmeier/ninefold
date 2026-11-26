@@ -193,11 +193,13 @@ internal fun Puzzle.sudokuRules(includeSpecialRules: Boolean = true): List<Sudok
 
     for (line in lines) {
         val path = when (line.rule) {
-            LineRule.GermanWhisper, LineRule.DutchWhisper, LineRule.RegionSum -> gridPathCells(line.points, gridSize)
+            LineRule.GermanWhisper, LineRule.DutchWhisper, LineRule.RegionSum, LineRule.Diagonal ->
+                gridPathCells(line.points, gridSize)
             else -> line.points.mapNotNull { it.cellPositionOrNull(gridSize) }.distinct()
         }
         if (path.isEmpty()) continue
         when (line.rule) {
+            LineRule.Diagonal -> add(distinctSymbols(path.distinct()))
             LineRule.GermanWhisper, LineRule.DutchWhisper -> {
                 val difference = if (line.rule == LineRule.GermanWhisper) 5 else 4
                 for ((first, second) in path.zipWithNext()) {

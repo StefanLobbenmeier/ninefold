@@ -21,7 +21,7 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
         obj.forEach { (key, value) -> if (key !in known && meaningful(value)) report("$path.$key", "Source property is not imported.") }
     }
     val metadata = "title author rules ruleset solution antiking antiknight video videoUrl videos successMessage msgcorrect"
-    fields(root, "$", "$metadata id size regions cellSize cells grid metadata cages killercage lines line arrows arrow overlays underlays foglight triggereffect solution thermometer palindrome circle rectangle difference ratio xv even odd littlekillersum")
+    fields(root, "$", "$metadata id size regions cellSize cells grid metadata cages killercage lines line arrows arrow overlays underlays foglight triggereffect solution thermometer palindrome circle rectangle difference ratio xv even odd littlekillersum diagonal+ diagonal-")
     (root["metadata"] as? JsonObject)?.let { fields(it, "$.metadata", metadata) }
     val graphicalArrays = listOf("cages", "killercage", "lines", "line", "arrows", "arrow", "overlays", "underlays", "foglight", "triggereffect", "thermometer", "palindrome", "circle", "rectangle", "difference", "ratio", "xv", "even", "odd", "littlekillersum")
     graphicalArrays.forEach { key ->
