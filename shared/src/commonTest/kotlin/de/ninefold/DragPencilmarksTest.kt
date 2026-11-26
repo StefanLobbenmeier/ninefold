@@ -55,6 +55,19 @@ class DragPencilmarksTest {
         }
     }
 
+    @Test fun mixedCentreNotesFormATripleWithThreeSharedCandidates() {
+        val target = notes(1, 3, 6, 8).copy(cornerNotes = setOf(1, 3, 6, 8))
+        val cells = board(a to notes(1, 6), b to notes(1, 3, 6), c to notes(1, 3, 6), d to target)
+        assertEquals(CellState(value = 8, centreNotes = setOf(8), cornerNotes = setOf(8)),
+            drag(cells, a, b, c, d)[d.index])
+        assertEquals(target, drag(cells, a, b, d)[d.index])
+
+        val differentNotes = board(a to notes(1, 6), b to notes(1, 3), c to notes(3, 6), d to target)
+        val unrelated = CellPosition(0, 4)
+        val withUnrelated = differentNotes.toMutableList().apply { this[unrelated.index] = notes(4, 5) }
+        assertEquals(8, drag(withUnrelated, a, unrelated, b, c, d)[d.index].value)
+    }
+
     @Test fun xFillsTheComplementEvenWithoutPencilmarks() {
         val puzzle = empty.copy(overlays = listOf(PuzzleOverlay(GridPoint(.5, 1.0), text = "X")))
         val cells = board(b to CellState(value = 7))

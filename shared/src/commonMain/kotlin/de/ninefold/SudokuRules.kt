@@ -81,17 +81,32 @@ internal class SudokuRule(
             )
         }
 
-        val groupedSymbols = if (allDifferent) {
-            sources.values.filter { it.value == null && it.centreNotes.size >= 2 }
-                .groupingBy { it.centreNotes }.eachCount()
-                .filter { (notes, count) -> notes.size == count }
-                .keys.flatten().toSet()
-        } else emptySet()
+        val groupedSymbols = if (allDifferent) nakedGroupSymbols(sources.values) else emptySet()
         return DragRule(
             rejects = { digit -> digit in groupedSymbols || rulesOut(target, digit) { sources[it]?.value } },
             canFill = false,
         )
     }
+}
+
+private fun nakedGroupSymbols(sources: Collection<CellState>): Set<Int> {
+    val notes = sources.filter { it.value == null && it.centreNotes.size >= 2 }.map { it.centreNotes }
+    val noteSets = notes.filter { it.size <= notes.size }.distinct()
+    val checked = mutableSetOf<Set<Int>>()
+    val grouped = mutableSetOf<Int>()
+
+    fun check(symbols: Set<Int>) {
+        if (symbols.size > notes.size || !checked.add(symbols)) return
+        // Each cell whose notes fit entirely inside this union needs one of its symbols.
+        if (notes.count { symbols.containsAll(it) } == symbols.size) grouped.addAll(symbols)
+        for (other in noteSets) {
+            // Disjoint groups can be checked independently.
+            if (other.any { it in symbols } && !symbols.containsAll(other)) check(symbols + other)
+        }
+    }
+
+    noteSets.forEach(::check)
+    return grouped
 }
 
 private fun distinctSymbols(cells: List<CellPosition>, requiresVisibleGroup: Boolean = false) =
