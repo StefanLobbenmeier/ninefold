@@ -21,15 +21,15 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
         obj.forEach { (key, value) -> if (key !in known && meaningful(value)) report("$path.$key", "Source property is not imported.") }
     }
     val metadata = "title author rules ruleset solution antiking antiknight video videoUrl videos successMessage msgcorrect"
-    fields(root, "$", "$metadata id size regions cellSize cells grid metadata cages killercage lines line arrows arrow overlays underlays foglight triggereffect solution thermometer palindrome circle rectangle difference ratio xv even odd littlekillersum diagonal+ diagonal-")
+    fields(root, "$", "$metadata id size regions cellSize cells grid metadata cages killercage lines line arrows arrow overlays underlays foglight triggereffect solution thermometer palindrome circle rectangle difference ratio xv even odd littlekillersum quadruple diagonal+ diagonal-")
     (root["metadata"] as? JsonObject)?.let { fields(it, "$.metadata", metadata) }
-    val graphicalArrays = listOf("cages", "killercage", "lines", "line", "arrows", "arrow", "overlays", "underlays", "foglight", "triggereffect", "thermometer", "palindrome", "circle", "rectangle", "difference", "ratio", "xv", "even", "odd", "littlekillersum")
+    val graphicalArrays = listOf("cages", "killercage", "lines", "line", "arrows", "arrow", "overlays", "underlays", "foglight", "triggereffect", "thermometer", "palindrome", "circle", "rectangle", "difference", "ratio", "xv", "even", "odd", "littlekillersum", "quadruple")
     graphicalArrays.forEach { key ->
         root[key]?.takeIf { meaningful(it) && it !is JsonArray }?.let {
             report("$.$key", "Expected an array; source content is not parsed.")
         }
     }
-    if (!fpuzzles) for (key in listOf("thermometer", "palindrome", "circle", "rectangle", "difference", "ratio", "xv", "even", "odd", "littlekillersum")) {
+    if (!fpuzzles) for (key in listOf("thermometer", "palindrome", "circle", "rectangle", "difference", "ratio", "xv", "even", "odd", "littlekillersum", "quadruple")) {
         if (meaningful(root[key] ?: JsonNull)) report("$.$key", "This source feature is only parsed in f-puzzles format.")
     }
     val sourceMetadata = root["metadata"] as? JsonObject
@@ -118,6 +118,10 @@ internal fun sudokuPadOmissions(root: JsonObject, fpuzzles: Boolean, puzzle: Puz
         }?.let { GridPoint(it.groupValues[1].toInt() - .5, it.groupValues[2].toInt() - .5) }
         if (fpuzzles && (position == null || puzzle.outsideClues.none { it.position == position }))
             report(path, "Little killer clue has no usable outside cell, direction, or total and is dropped.")
+    }
+    if (fpuzzles) objects("quadruple", "cells values") { obj, path ->
+        if (parseFpuzzlesQuadruple(obj, puzzle.size) == null)
+            report(path, "Quadruple has invalid digits or does not cover a 2×2 block.")
     }
     for (key in listOf("circle", "rectangle", "difference", "ratio", "xv", "even", "odd")) objects(key, "cells cell value width height baseC outlineC fontC")
     if (puzzle.lines.any { it.rule == LineRule.Unspecified } || listOf("difference", "ratio", "xv", "even", "odd").any { meaningful(root[it] ?: JsonNull) })

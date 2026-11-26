@@ -207,7 +207,17 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     val lines = parseLines(root, fpuzzles).withImportedDiagonals(root, size)
     val littleKillers = if (fpuzzles) parseFpuzzlesLittleKillers(root, size) else emptyList()
     val rawOverlays = littleKillers.map { PuzzleOverlay(it.position, .6, .6, text = it.value.toString()) } + root.array("overlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
-    val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText, size)
+    val (importedOverlays, graphicalQuadruples) = importQuadruples(rawOverlays, rulesText, size)
+    val nativeQuadruples = if (fpuzzles) root.array("quadruple").orEmpty().mapNotNull {
+        parseFpuzzlesQuadruple(it, size)
+    } else emptyList()
+    val overlays = importedOverlays + nativeQuadruples.map { clue ->
+        PuzzleOverlay(
+            center = GridPoint(clue.cells.minOf { it.row } + 1.0, clue.cells.minOf { it.column } + 1.0),
+            width = .62, height = .62, backgroundColor = "#FFFFFF", borderColor = "#000000",
+            text = quadrupleText(clue.digits), rounded = true, fontSize = if (clue.digits.size > 2) .22 else null,
+        )
+    }
     // f-puzzles renders cages without totals as shaded regions. Keep their
     // killer uniqueness semantics while preserving that visual distinction.
     val shadedCages = if (fpuzzles) cages.filter { !it.hidden && it.total == null }.flatMap { it.cells }.distinct().map {
@@ -246,7 +256,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         overlays = overlays,
         underlays = underlays,
         outsideClues = outsideClues,
-        quadruples = quadruples,
+        quadruples = graphicalQuadruples + nativeQuadruples,
         fogLights = fog.takeIf { hasFog },
         fogLinks = fogLinks,
         sourceUrl = sourceUrl,
@@ -263,6 +273,22 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         successMessage = successMessage,
     )
 }
+
+internal fun parseFpuzzlesQuadruple(element: JsonElement, size: Int): QuadrupleClue? {
+    val clue = element as? JsonObject ?: return null
+    val digits = clue.array("values")?.map { it.asInt()?.takeIf { digit -> digit in 1..size } ?: return null }
+        ?: return null
+    if (digits.size !in 1..4) return null
+    val cells = clue.array("cells")?.map { parseCell(it) ?: return null } ?: return null
+    if (cells.size != 4 || cells.distinct().size != 4 ||
+        cells.any { it.row !in 0 until size || it.column !in 0 until size }) return null
+    if (cells.maxOf { it.row } - cells.minOf { it.row } != 1 ||
+        cells.maxOf { it.column } - cells.minOf { it.column } != 1) return null
+    return QuadrupleClue(digits, cells)
+}
+
+private fun quadrupleText(digits: List<Int>): String =
+    digits.chunked(2).joinToString("\n") { it.joinToString(" ") }
 
 /** Some exporters split a quadruple into a circle and one tiny overlay per digit. */
 private fun importQuadruples(overlays: List<PuzzleOverlay>, rules: String, size: Int): Pair<List<PuzzleOverlay>, List<QuadrupleClue>> {
@@ -289,7 +315,7 @@ private fun importQuadruples(overlays: List<PuzzleOverlay>, rules: String, size:
             else circle.text.orEmpty().filter(Char::isDigit).map { it.digitToInt() }
         if (digits.isEmpty() || digits.size > 4 || digits.any { it !in 1..9 }) return@mapNotNull null
         labels += parts
-        replacements[circle] = circle.copy(text = digits.chunked(2).joinToString("\n") { it.joinToString(" ") })
+        replacements[circle] = circle.copy(text = quadrupleText(digits))
         QuadrupleClue(digits, listOf(CellPosition(row - 1, column - 1), CellPosition(row - 1, column),
             CellPosition(row, column - 1), CellPosition(row, column)))
     }
@@ -582,7 +608,8 @@ private fun parseFogCells(element: JsonElement?, size: Int = 9): Set<CellPositio
 private fun parseCell(element: JsonElement): CellPosition? {
     if (element is JsonArray) return CellPosition(element.getOrNull(0)?.asInt() ?: return null, element.getOrNull(1)?.asInt() ?: return null)
     val match = Regex("R(\\d+)C(\\d+)", RegexOption.IGNORE_CASE).matchEntire(element.asString() ?: return null) ?: return null
-    return CellPosition(match.groupValues[1].toInt() - 1, match.groupValues[2].toInt() - 1)
+    return CellPosition((match.groupValues[1].toIntOrNull() ?: return null) - 1,
+        (match.groupValues[2].toIntOrNull() ?: return null) - 1)
 }
 
 private fun JsonObject.obj(name: String): JsonObject? = get(name) as? JsonObject
