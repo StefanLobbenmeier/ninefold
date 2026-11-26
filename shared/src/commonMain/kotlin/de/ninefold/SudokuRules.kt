@@ -81,12 +81,14 @@ internal class SudokuRule(
             )
         }
 
-        val pairDigits = if (allDifferent) {
-            sources.values.filter { it.value == null && it.centreNotes.size == 2 }
-                .groupingBy { it.centreNotes }.eachCount().filterValues { it == 2 }.keys.flatten().toSet()
+        val groupedSymbols = if (allDifferent) {
+            sources.values.filter { it.value == null && it.centreNotes.size >= 2 }
+                .groupingBy { it.centreNotes }.eachCount()
+                .filter { (notes, count) -> notes.size == count }
+                .keys.flatten().toSet()
         } else emptySet()
         return DragRule(
-            rejects = { digit -> digit in pairDigits || rulesOut(target, digit) { sources[it]?.value } },
+            rejects = { digit -> digit in groupedSymbols || rulesOut(target, digit) { sources[it]?.value } },
             canFill = false,
         )
     }

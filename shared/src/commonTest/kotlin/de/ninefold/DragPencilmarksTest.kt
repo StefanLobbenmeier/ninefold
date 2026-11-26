@@ -37,6 +37,24 @@ class DragPencilmarksTest {
         assertEquals(cells, clearDraggedPencilmarks(empty, cells, listOf(a, b, c), setOf(b, c)))
     }
 
+    @Test fun matchingCentreNotesClearLaterCellsWhenTheGroupIsComplete() {
+        val row = List(9) { CellPosition(0, it) }
+        val target = row.last()
+        for (size in 3..8) {
+            val sources = row.take(size)
+            val groupNotes = (1..size).toSet()
+            val targetNotes = groupNotes + 9
+            val cells = board(target to CellState(centreNotes = targetNotes, cornerNotes = targetNotes))
+                .toMutableList().apply {
+                    sources.forEach { this[it.index] = CellState(centreNotes = groupNotes) }
+                }
+
+            val complete = drag(cells, *(sources + target).toTypedArray())
+            assertEquals(CellState(value = 9, centreNotes = setOf(9), cornerNotes = setOf(9)), complete[target.index])
+            assertEquals(cells, drag(cells, *(sources.dropLast(1) + target).toTypedArray()))
+        }
+    }
+
     @Test fun xFillsTheComplementEvenWithoutPencilmarks() {
         val puzzle = empty.copy(overlays = listOf(PuzzleOverlay(GridPoint(.5, 1.0), text = "X")))
         val cells = board(b to CellState(value = 7))
