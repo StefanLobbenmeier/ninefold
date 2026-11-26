@@ -268,7 +268,10 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
 private fun importQuadruples(overlays: List<PuzzleOverlay>, rules: String, size: Int): Pair<List<PuzzleOverlay>, List<QuadrupleClue>> {
     val describesCornerCircles = rules.contains("corner circles", ignoreCase = true) &&
         rules.contains("surrounding four cells", ignoreCase = true)
-    if (!rules.contains("quadruple", ignoreCase = true) && !describesCornerCircles) return overlays to emptyList()
+    val describesIntersectionCircles = rules.contains("circles at the intersection of four cells", ignoreCase = true) &&
+        rules.contains("surrounding cells", ignoreCase = true)
+    if (!rules.contains("quadruple", ignoreCase = true) && !describesCornerCircles && !describesIntersectionCircles)
+        return overlays to emptyList()
     val labels = mutableSetOf<PuzzleOverlay>()
     val replacements = mutableMapOf<PuzzleOverlay, PuzzleOverlay>()
     val clues = overlays.mapNotNull { circle ->
