@@ -33,7 +33,7 @@ enum class LineRule(val label: String) {
     Unspecified("Display only"), GermanWhisper("German whisper (difference ≥ 5)"),
     DutchWhisper("Dutch whisper (difference ≥ 4)"), Renban("Renban"),
     Palindrome("Palindrome"), Thermometer("Thermometer"), RegionSum("Region sum"),
-    SlowThermometer("Slow thermometer"),
+    SlowThermometer("Slow thermometer"), Diagonal("Diagonal (no repeats)"),
 }
 
 internal val LineRule.isThermometer: Boolean

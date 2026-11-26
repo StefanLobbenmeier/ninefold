@@ -204,7 +204,7 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
                 ruleTotal = sharedCageTotal.takeIf { value == null }, hidden = cage.boolean("hidden") == true)
         } else null
     }
-    val lines = parseLines(root, fpuzzles)
+    val lines = parseLines(root, fpuzzles).withImportedDiagonals(root, size)
     val littleKillers = if (fpuzzles) parseFpuzzlesLittleKillers(root, size) else emptyList()
     val rawOverlays = littleKillers.map { PuzzleOverlay(it.position, .6, .6, text = it.value.toString()) } + root.array("overlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
     val (overlays, quadruples) = importQuadruples(rawOverlays, rulesText, size)
@@ -439,6 +439,28 @@ private fun parseLines(root: JsonObject, fpuzzles: Boolean): List<PuzzleLine> {
     }
     return generic + explicit("thermometer", LineRule.Thermometer, "#B8B8B8", 12.0) +
         explicit("palindrome", LineRule.Palindrome, "#CFCFCF", 6.0)
+}
+
+private fun List<PuzzleLine>.withImportedDiagonals(root: JsonObject, size: Int): List<PuzzleLine> {
+    val edge = size.toDouble()
+    val diagonals = mapOf(
+        "diagonal+" to listOf(GridPoint(0.0, edge), GridPoint(edge, 0.0)),
+        "diagonal-" to listOf(GridPoint(0.0, 0.0), GridPoint(edge, edge)),
+    )
+    val lines = toMutableList()
+    for ((flag, points) in diagonals) {
+        if (root.boolean(flag) != true) continue
+        // SudokuPad's SCL converter can supply both the flag and its artwork.
+        val existing = lines.indexOfFirst {
+            it.rule == LineRule.Unspecified && (it.points == points || it.points == points.asReversed())
+        }
+        if (existing >= 0) {
+            lines[existing] = lines[existing].copy(rule = LineRule.Diagonal)
+        } else {
+            lines += PuzzleLine(points, color = "#34BBE6", thickness = 2.0, rule = LineRule.Diagonal)
+        }
+    }
+    return lines
 }
 
 private fun parseFpuzzlesOverlays(root: JsonObject): List<PuzzleOverlay> = buildList {
