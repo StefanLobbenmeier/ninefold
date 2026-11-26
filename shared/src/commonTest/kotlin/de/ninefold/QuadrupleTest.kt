@@ -9,6 +9,7 @@ class QuadrupleTest {
         for (rules in listOf(
             "Quadruples: circled digits appear in the surrounding cells.",
             "Digits in corner circles must appear in the surrounding four cells, in some order.",
+            "Digits in circles at the intersection of four cells must appear in those surrounding cells.",
         )) {
             val puzzle = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
                 """"metadata":{"rules":"$rules"},"overlays":[
