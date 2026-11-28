@@ -168,7 +168,6 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var automaticColours by remember(puzzle) { mutableStateOf(puzzle.initialAutomaticColours(saved)) }
     var fadedOutsideClues by remember(puzzle) { mutableStateOf(saved?.fadedOutsideClues.orEmpty()) }
     var fadedOutsideArrows by remember(puzzle) { mutableStateOf(saved?.fadedOutsideArrows.orEmpty()) }
-    var finalized by remember(puzzle) { mutableStateOf(cells) }
     var colourSettings by remember { mutableStateOf<CellColour?>(null) }
     var selected by remember(puzzle) { mutableStateOf(setOf(CellPosition(0, minOf(2, puzzle.size - 1)))) }
     val mode = InputMode.entries.firstOrNull { it.name == repository.settings.inputMode } ?: InputMode.Digit
@@ -212,8 +211,8 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     val rulesResult = remember(puzzle, cells, settings, manualRulesCheck) {
         settings.rulesResult(puzzle, cells, manualRulesCheck)
     }
-    val solutionResult = remember(puzzle, finalized, selected, settings, manualSolutionCheck) {
-        settings.solutionResult(puzzle, finalized, manualSolutionCheck).excluding(selected, puzzle.size)
+    val solutionResult = remember(puzzle, cells, selected, settings, manualSolutionCheck) {
+        settings.solutionResult(puzzle, cells, manualSolutionCheck, editing = selected)
     }
     val checkResult = rulesResult + solutionResult + (completionResult ?: PuzzleCheckResult())
 
@@ -254,15 +253,14 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
         undoDrag = drag
         redoStack = emptyList()
         cells = next
-        finalized = finalizedCells(cells, finalized, selected)
         clearManualChecks()
         save()
     }
     fun enter(number: Int?, inputMode: InputMode = mode) = update { next ->
         applyInput(next, selected, inputMode, number)
     }
-    fun undo() { history.lastOrNull()?.let { undoDrag = null; redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
-    fun redo() { redoStack.firstOrNull()?.let { undoDrag = null; history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); finalized = finalizedCells(cells, finalized, selected); clearManualChecks(); save() } }
+    fun undo() { history.lastOrNull()?.let { undoDrag = null; redoStack = listOf(cells) + redoStack; cells = it; history = history.dropLast(1); clearManualChecks(); save() } }
+    fun redo() { redoStack.firstOrNull()?.let { undoDrag = null; history = history + listOf(cells); cells = it; redoStack = redoStack.drop(1); clearManualChecks(); save() } }
 
     fun setMultiple(enabled: Boolean) {
         repository.saveSettings(repository.settings.copy(multiSelect = enabled))
@@ -274,7 +272,6 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             finalizeCellInput(puzzle, updated, leaving, next, repository.settings)
         }
         selected = next
-        finalized = finalizedCells(cells, finalized, next)
     }
     fun clearDragPencilmarks(step: BoardDragStep) {
         if (!repository.settings.clearPencilmarksOnDrag || colourSettings != null) return

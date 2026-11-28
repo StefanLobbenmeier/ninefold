@@ -27,6 +27,33 @@ class CheckingSettingsTest {
         }
     }
 
+    @Test fun solutionHighlightsWaitForDeselectionButRuleChecksStayLive() {
+        val puzzle = SudokuFixtures.empty.copy(solution = SudokuFixtures.classic.solution)
+        val cells = applyInput(puzzle.startingCells(), setOf(CellPosition(0, 0), CellPosition(0, 1)), InputMode.Digit, 2)
+        val settings = CheckingSettings(automaticSolution = true)
+
+        assertEquals(setOf(0, 1), checkSudokuRules(puzzle, cells).cells)
+        assertEquals(setOf(1), settings.solutionResult(puzzle, cells, editing = setOf(CellPosition(0, 0))).cells)
+        assertEquals(setOf(0, 1), settings.solutionResult(puzzle, cells).cells)
+    }
+
+    @Test fun selectedCornerCandidateStillCountsForUnselectedCellsInItsRegion() {
+        val puzzle = SudokuFixtures.empty.copy(solution = SudokuFixtures.classic.solution)
+        val first = CellPosition(0, 0)
+        val second = CellPosition(0, 1)
+        val candidates = setOf(first, second)
+        val cells = applyInput(puzzle.startingCells(), candidates, InputMode.Corner, 5)
+        val settings = CheckingSettings(automaticSolutionPencilmarks = true)
+
+        for (editing in listOf(candidates, setOf(first), setOf(second), emptySet())) {
+            assertEquals(PuzzleCheckResult(), settings.solutionResult(puzzle, cells, editing = editing))
+        }
+
+        val wrong = applyInput(cells, setOf(first), InputMode.Corner, 5)
+        assertEquals(mapOf(1 to setOf(5)), settings.solutionResult(puzzle, wrong).pencilMarks)
+        assertEquals(PuzzleCheckResult(), settings.solutionResult(puzzle, wrong, editing = setOf(second)))
+    }
+
     @Test fun specialRulesApplyToBothAutomaticControls() {
         val puzzle = SudokuFixtures.empty.copy(antiKing = true)
         val cells = puzzle.startingCells().toMutableList().also {

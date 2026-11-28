@@ -102,20 +102,6 @@ class AutomaticColourTest {
         assertEquals(setOf(9), cell.colours)
     }
 
-    @Test fun solutionChecksWaitForFinalizationButRuleChecksStayLive() {
-        val puzzle = SudokuFixtures.empty.copy(solution = "1".repeat(81))
-        val original = puzzle.startingCells()
-        val editing = setOf(CellPosition(0, 0))
-        val live = original.toMutableList().also {
-            it[0] = CellState(value = 2)
-            it[1] = CellState(value = 2)
-        }
-        val finalized = finalizedCells(live, original, editing)
-        assertEquals(setOf(0, 1), checkSudokuRules(puzzle, live).cells)
-        assertEquals(setOf(1), checkAgainstSolution(puzzle, finalized).excluding(editing).cells)
-        assertEquals(setOf(0, 1), checkAgainstSolution(puzzle, finalizedCells(live, finalized, emptySet())).cells)
-    }
-
     @Test fun colourSettingsPersistPerGameWithoutPersistingDerivedColours() {
         val storage = MemoryAppStorage()
         val repository = GameRepository(storage)
