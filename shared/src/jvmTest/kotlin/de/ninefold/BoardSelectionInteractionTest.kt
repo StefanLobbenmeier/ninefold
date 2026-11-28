@@ -1,6 +1,9 @@
 package de.ninefold
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
@@ -20,7 +23,13 @@ import kotlin.test.assertNotEquals
 class BoardSelectionInteractionTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun openPlayer(compact: Boolean = false, size: Int = 9, notes: Map<CellPosition, CellState> = emptyMap(), settings: CheckingSettings = CheckingSettings()) {
+    private fun openPlayer(
+        compact: Boolean = false,
+        size: Int = 9,
+        notes: Map<CellPosition, CellState> = emptyMap(),
+        settings: CheckingSettings = CheckingSettings(),
+        keyboardController: SoftwareKeyboardController? = null,
+    ) {
         val puzzle = SudokuFixtures.empty.copy(title = "Selection test", size = size, givens = ".".repeat(size * size))
         val repository = GameRepository(MemoryAppStorage())
         repository.saveSettings(settings)
@@ -29,7 +38,10 @@ class BoardSelectionInteractionTest {
         compose.setContent {
             MaterialTheme {
                 Box(if (compact) Modifier.width(400.dp) else Modifier) {
-                    SudokuApp(puzzle, repository, shareBaseUrl = "https://example.com/", onBrowse = {})
+                    CompositionLocalProvider(LocalSoftwareKeyboardController provides
+                        (keyboardController ?: LocalSoftwareKeyboardController.current)) {
+                        SudokuApp(puzzle, repository, shareBaseUrl = "https://example.com/", onBrowse = {})
+                    }
                 }
             }
         }
@@ -56,6 +68,35 @@ class BoardSelectionInteractionTest {
         }
         compose.onNodeWithText("Colour").performClick()
         zero.assertIsNotEnabled()
+    }
+
+    @Test fun letterKeyboardToggleReplacesZeroWithoutGatingPhysicalKeys() {
+        var keyboardRequested = false
+        val controller = object : SoftwareKeyboardController {
+            override fun show() { keyboardRequested = true }
+            override fun hide() { keyboardRequested = false }
+        }
+        openPlayer(compact = true, settings = CheckingSettings(letters = true), keyboardController = controller)
+        val keyboard = compose.onNodeWithContentDescription("Letter keyboard")
+        compose.onNode(hasText("0") and hasClickAction()).assertDoesNotExist()
+        keyboard.assertIsOff()
+        clickCell(2, 2)
+        compose.runOnIdle { assertEquals(false, keyboardRequested) }
+        compose.onRoot().performKeyInput { pressKey(Key.Q) }
+        cell(2, 2).assertContentDescriptionContains("column 2, Q", substring = true)
+
+        keyboard.performClick().assertIsOn()
+        clickCell(2, 3)
+        compose.runOnIdle { assertEquals(true, keyboardRequested) }
+        compose.onNode(hasSetTextAction()).performTextInput("m")
+        cell(2, 3).assertContentDescriptionContains("column 3, M", substring = true)
+        compose.onRoot().performKeyInput { pressKey(Key.Z) }
+        cell(2, 3).assertContentDescriptionContains("column 3, Z", substring = true)
+
+        keyboard.performClick().assertIsOff()
+        compose.runOnIdle { assertEquals(false, keyboardRequested) }
+        compose.onRoot().performKeyInput { pressKey(Key.J) }
+        cell(2, 3).assertContentDescriptionContains("column 3, J", substring = true)
     }
 
     @Test fun smallGridSupportsLastCellInputDraggingAndKeyboardWrap() {

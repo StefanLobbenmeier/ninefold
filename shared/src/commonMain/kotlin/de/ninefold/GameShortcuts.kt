@@ -14,11 +14,17 @@ internal sealed interface GameShortcut {
     data object Redo : GameShortcut
 }
 
+private val letterKeys = listOf(
+    Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.I,
+    Key.J, Key.K, Key.L, Key.M, Key.N, Key.O, Key.P, Key.Q, Key.R,
+    Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z,
+)
+
 /** Maps hardware keys without depending on a particular desktop or mobile native event type. */
-internal fun gameShortcut(key: Key, primaryModifier: Boolean, shift: Boolean, alt: Boolean = false, letters: Boolean = false): GameShortcut? {
+internal fun gameShortcut(key: Key, primaryModifier: Boolean, shift: Boolean, alt: Boolean = false, letters: Boolean = false, typedLetter: Int? = null): GameShortcut? {
     if (letters) {
-        val letter = listOf(Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.I, Key.J, Key.K, Key.L, Key.M, Key.N, Key.O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z).indexOf(key)
-        if (letter >= 0) return GameShortcut.Enter(10 + letter, when { primaryModifier && shift -> InputMode.Colour; primaryModifier -> InputMode.Centre; shift -> InputMode.Corner; else -> null })
+        val letter = typedLetter ?: letterKeys.indexOf(key).takeIf { it >= 0 }?.plus(10)
+        if (letter != null) return GameShortcut.Enter(letter, when { primaryModifier && shift -> InputMode.Colour; primaryModifier -> InputMode.Centre; shift -> InputMode.Corner; else -> null })
     }
 
     val digit = when (key) {
