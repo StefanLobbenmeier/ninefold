@@ -675,6 +675,11 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             it.isRevealedEdgeMark(litCells) || it.isRevealedQuadruple(puzzle.quadruples, litCells)
         }
     }
+    val hiddenDots = remember(puzzle, revealedMarks) {
+        if (puzzle.fogLights == null) emptyList() else (puzzle.underlays + puzzle.overlays).filter {
+            it.isKropkiDot() && it !in revealedMarks
+        }
+    }
     val measurer = rememberTextMeasurer()
     BoxWithConstraints(modifier.fillMaxWidth().aspectRatio(1f)) {
         val boardWidth = maxWidth
@@ -700,8 +705,8 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                 }
             }
             // Grid is the background for all constraint artwork, regardless of clue type.
-            GridLines(puzzle, inset, boxGap)
-            PuzzleGraphics(puzzle, inset, boxGap, measurer, hiddenOverlays = revealedMarks, fadedOutsideClues = fadedOutsideClues, fadedOutsideArrows = fadedOutsideArrows)
+            GridLines(puzzle, inset, boxGap, hiddenDots = hiddenDots)
+            PuzzleGraphics(puzzle, inset, boxGap, measurer, hiddenOverlays = revealedMarks + hiddenDots, fadedOutsideClues = fadedOutsideClues, fadedOutsideArrows = fadedOutsideArrows)
             Box(Modifier.fillMaxSize().padding(inset).then(
                 if (!interactive || onDragSelection == null) Modifier else Modifier.pointerInput(puzzle) {
                     var lastTapPosition: CellPosition? = null
@@ -829,7 +834,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                 } } }
             }
             // Fog covers artwork, but its hidden cells still need visible boundaries.
-            if (puzzle.fogLights != null) GridLines(puzzle, inset, boxGap, litCells)
+            if (puzzle.fogLights != null) GridLines(puzzle, inset, boxGap, litCells, hiddenDots)
             // Text clues can have zero-width artwork; include the glyphs in their tap targets.
             if (interactive && onToggleOutsideClue != null) {
                 val extent = with(density) { (boardWidth - inset * 2).toPx() }
@@ -875,7 +880,10 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
 }
 
 @Composable
-private fun GridLines(puzzle: Puzzle, inset: Dp, boxGap: Dp, litCells: Set<CellPosition>? = null) {
+private fun GridLines(
+    puzzle: Puzzle, inset: Dp, boxGap: Dp, litCells: Set<CellPosition>? = null,
+    hiddenDots: List<PuzzleOverlay> = emptyList(),
+) {
     Canvas(Modifier.fillMaxSize().padding(inset)) {
         val thin = .55.dp.toPx()
         val thick = 1.5.dp.toPx()
@@ -896,7 +904,7 @@ private fun GridLines(puzzle: Puzzle, inset: Dp, boxGap: Dp, litCells: Set<CellP
         }
         // White clue fills erase only grid strokes, leaving cell colours and notes intact.
         val clueGaps = Path().apply {
-            (puzzle.underlays + puzzle.overlays).filter { it.backgroundColor?.toComposeColor() == Color.White }.forEach { item ->
+            (puzzle.underlays + puzzle.overlays).filter { it !in hiddenDots && it.backgroundColor?.toComposeColor() == Color.White }.forEach { item ->
                 val scale = if (item.isKropkiDot()) .75f else 1f
                 val width = (item.width * horizontal.cellSize * scale).toFloat()
                 val height = (item.height * horizontal.cellSize * scale).toFloat()

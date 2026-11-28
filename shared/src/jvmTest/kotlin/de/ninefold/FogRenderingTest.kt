@@ -22,6 +22,38 @@ import kotlin.test.assertTrue
 class FogRenderingTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun hiddenWhiteDotLeavesTheGridLineIntactUntilFogLifts() {
+        val dot = PuzzleOverlay(GridPoint(.5, 3.0), .34, .34,
+            backgroundColor = "#FFFFFF", borderColor = "#000000", rounded = true)
+        val trigger = CellPosition(1, 0)
+        val base = SudokuFixtures.empty.copy(fogLights = setOf(trigger),
+            fogLinks = listOf(FogLink(setOf(trigger), setOf(CellPosition(0, 2), CellPosition(0, 3)))))
+        var puzzle by mutableStateOf(base)
+        var cells by mutableStateOf(base.startingCells())
+        compose.setContent {
+            MaterialTheme {
+                SudokuBoard(puzzle, cells, emptySet(), emptySet(),
+                    modifier = Modifier.width(450.dp).testTag("board"), onSelect = {})
+            }
+        }
+        val expected = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+        val density = expected.width / 450f
+        val inset = kotlin.math.round(2 * density)
+        val axis = BoardAxis(expected.width - 2 * inset, kotlin.math.round(.95f * density))
+        val x = (inset + axis.at(dot.center.column)).toInt()
+        val y = (inset + axis.at(dot.center.row)).toInt()
+
+        compose.runOnIdle { puzzle = base.copy(overlays = listOf(dot)) }
+        val hidden = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+        assertEquals(expected[x, y], hidden[x, y])
+
+        compose.runOnIdle {
+            cells = cells.toMutableList().also { it[trigger.index(base.size)] = CellState(value = 1) }
+        }
+        val revealed = compose.onNodeWithTag("board").captureToImage().toPixelMap()
+        assertEquals(Color.White, revealed[x, y])
+    }
+
     @Test fun importedQuadruplesCoverThinAndThickGridLinesButStayHiddenByFog() {
         val imported = parseSudokuPadPayload(SudokuFixtures.sudokuPadPayload(properties =
             """"metadata":{"rules":"Quadruple circles contain digits from surrounding cells."},"overlays":[
