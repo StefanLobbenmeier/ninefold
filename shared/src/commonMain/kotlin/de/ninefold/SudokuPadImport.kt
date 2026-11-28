@@ -151,23 +151,23 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     }
     val initialValues = mutableMapOf<Int, Int>()
     val givens = sourceCells.flatMap { row -> row.jsonArray.map { cell ->
-        cell.jsonObject.int("value")?.takeIf { it in 0..9 }?.digitToChar() ?: '.'
+        cell.jsonObject["value"]?.asCellSymbol()?.symbolText()?.single() ?: '.'
     } }.joinToString("")
-    val fixedGivens = givens.mapIndexed { index, digit ->
+    val fixedGivens = givens.mapIndexed { index, symbol ->
         val cell = sourceCells[index / size].jsonArray[index % size].jsonObject
-        if (fpuzzles && cell.boolean("given") != true && digit in '0'..'9') {
+        if (fpuzzles && cell.boolean("given") != true && symbol != '.') {
             // Unmarked f-puzzles values can contain the setter's completed grid.
             // Only an explicit false denotes an authored editable starting value.
-            if (cell.boolean("given") == false) initialValues[index] = digit.digitToInt()
+            if (cell.boolean("given") == false) initialValues[index] = symbol.cellSymbolOrNull()!!
             '.'
-        } else digit
+        } else symbol
     }.joinToString("")
     val cellShading = sourceCells.flatMapIndexed { r, row -> row.jsonArray.mapIndexedNotNull { c, element ->
         element.jsonObject.string("color")?.takeIf(::isImportedCellColor)?.let { color ->
             PuzzleOverlay(GridPoint(r + .5, c + .5), 1.0, 1.0, color, rounded = false)
         }
     } }
-    val solution = metadata.string("solution") ?: root.array("solution")?.mapNotNull(JsonElement::asInt)?.joinToString("")
+    val solution = metadata.string("solution") ?: root.array("solution")?.mapNotNull(JsonElement::asCellSymbol)?.joinToString("") { it.symbolText() }
     val rulesText = metadata.string("rules") ?: metadata.string("ruleset") ?: SUDOKUPAD_DEFAULT_RULES
     val rules = rulesText.trim().takeIf(String::isNotEmpty)?.lines()?.map(String::trim)
         ?: listOf(SUDOKUPAD_DEFAULT_RULES)
@@ -246,7 +246,10 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
         size = size,
         regions = parseRegions(root, sourceCells, fpuzzles, size),
         initialValues = initialValues,
-        solution = solution?.filter(Char::isDigit)?.takeIf { it.length == size * size },
+        solution = solution?.let { raw ->
+            raw.filter { it.cellSymbolOrNull() != null }.uppercase().takeIf { it.length == size * size }
+                ?: raw.filter(Char::isDigit).takeIf { it.length == size * size }
+        },
         cages = cages,
         rules = rules,
         antiKing = metadata.boolean("antiking") ?: root.boolean("antiking") ?: false,
@@ -619,6 +622,8 @@ private fun JsonObject.int(name: String): Int? = get(name)?.asInt()
 private fun JsonObject.double(name: String): Double? = get(name)?.asDouble()
 private fun JsonObject.boolean(name: String): Boolean? = (get(name) as? JsonPrimitive)?.booleanOrNull
 private fun JsonElement.asString(): String? = (this as? JsonPrimitive)?.contentOrNull
+private fun JsonElement.asCellSymbol(): Int? =
+    asInt()?.takeIf { it in 0..9 } ?: asString()?.singleOrNull()?.letterSymbolOrNull()
 private fun JsonElement.asInt(): Int? = (this as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
 private fun JsonElement.asDouble(): Double? = (this as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
 

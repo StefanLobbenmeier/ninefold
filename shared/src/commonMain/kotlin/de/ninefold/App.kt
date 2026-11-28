@@ -4,6 +4,11 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.layout.Layout
@@ -55,11 +61,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.SpanStyle
@@ -68,6 +76,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.drawText
@@ -162,7 +173,16 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var selected by remember(puzzle) { mutableStateOf(setOf(CellPosition(0, minOf(2, puzzle.size - 1)))) }
     val mode = InputMode.entries.firstOrNull { it.name == repository.settings.inputMode } ?: InputMode.Digit
     var altHeld by remember { mutableStateOf(false) }
-    val letters = repository.settings.letters != altHeld
+    val puzzleUsesLetters = remember(puzzle) { puzzle.hasLetterSymbols }
+    var puzzleLetterMode by remember(puzzle) { mutableStateOf(true) }
+    val letterMode = if (puzzleUsesLetters) puzzleLetterMode else repository.settings.letters
+    val letters = letterMode != altHeld
+    var keyboardEnabled by remember(puzzle) { mutableStateOf(false) }
+    // Keep the text field mounted before a tap so focus can be requested during the gesture.
+    val keyboardArmed = keyboardEnabled && letters
+    val keyboardFocus = remember { FocusRequester() }
+    val softwareKeyboard = LocalSoftwareKeyboardController.current
+    val keyboardText = remember(puzzle) { TextFieldState() }
     var temporaryMode by remember { mutableStateOf<InputMode?>(null) }
     val effectiveMode = temporaryMode ?: mode
     var showRules by remember { mutableStateOf(saved?.started != true) }
@@ -299,6 +319,45 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
     var playerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     val focusRequester = remember { FocusRequester() }
+    val boardAvailable = !showRules && !showChecking && !showSuccess && colourSettings == null
+    val openLetterKeyboard = {
+        if (keyboardArmed && boardAvailable && selected.isNotEmpty()) {
+            keyboardFocus.requestFocus()
+            softwareKeyboard?.show()
+        }
+    }
+    fun toggleKeyboard() {
+        keyboardEnabled = !keyboardEnabled
+        if (!keyboardEnabled) {
+            focusRequester.requestFocus()
+            softwareKeyboard?.hide()
+        }
+    }
+    fun toggleLetters() {
+        if (puzzleUsesLetters) puzzleLetterMode = !puzzleLetterMode
+        else repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters))
+    }
+    val textFieldActive = keyboardEnabled && (letterMode || letters) && boardAvailable
+    LaunchedEffect(textFieldActive, selected.isNotEmpty()) {
+        if (!textFieldActive || selected.isEmpty()) {
+            keyboardText.clearText()
+            if (keyboardEnabled && boardAvailable && (selected.isEmpty() || !letters)) {
+                focusRequester.requestFocus()
+                softwareKeyboard?.hide()
+            }
+        }
+    }
+    val enterKeyboardLetter by rememberUpdatedState { symbol: Int -> enter(symbol, effectiveMode) }
+    LaunchedEffect(textFieldActive, keyboardText) {
+        if (textFieldActive) {
+            snapshotFlow { keyboardText.text.toString() to keyboardText.composition }.collect { (text, composition) ->
+                if (text.isNotEmpty() && composition == null) {
+                    keyboardText.clearText()
+                    text.reversed().firstNotNullOfOrNull(Char::letterSymbolOrNull)?.let(enterKeyboardLetter)
+                }
+            }
+        }
+    }
     val back by rememberUpdatedState(onBrowse)
     PlayerBackHandler(onBrowse)
     LaunchedEffect(puzzle) { repository.markPlayed(puzzle) }
@@ -322,7 +381,9 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             primaryModifier = event.isCtrlPressed || event.isMetaPressed,
             shift = event.isShiftPressed,
             alt = event.isAltPressed,
-            letters = repository.settings.letters != event.isAltPressed,
+            letters = letterMode != event.isAltPressed,
+            typedLetter = event.utf16CodePoint.takeIf { it in 0..Char.MAX_VALUE.code }
+                ?.toChar()?.letterSymbolOrNull(),
         ) ?: return@onPreviewKeyEvent false
         handleShortcut(shortcut)
         true
@@ -337,10 +398,23 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
             }
         }
         false
-    }.focusable().edgeSwipeBack { back() }.background(Paper).safeDrawingPadding()) {
+    }.focusable().edgeSwipeBack { back() }.background(Paper)) {
         val compact = maxWidth <= maxHeight - 52.dp
         val landscapePhone = !compact && maxHeight < 600.dp
-        Column(Modifier.fillMaxSize().onGloballyPositioned { playerCoordinates = it }.pointerInput(compact) {
+        if (textFieldActive) {
+            BasicTextField(
+                state = keyboardText,
+                modifier = Modifier.size(1.dp).alpha(0f).focusRequester(keyboardFocus)
+                    .semantics { hideFromAccessibility() },
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Ascii,
+                ),
+                lineLimits = TextFieldLineLimits.SingleLine,
+            )
+        }
+        Column(Modifier.fillMaxSize().safeDrawingPadding().onGloballyPositioned { playerCoordinates = it }.pointerInput(compact) {
             awaitEachGesture {
                 // Board gestures and controls consume their presses before the final pass.
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
@@ -357,16 +431,16 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                     modifier = Modifier.fillMaxSize(),
                     onInputBounds = { inputBounds = it },
                     board = {
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onDragStep = ::clearDragPencilmarks, onToolSelect = ::smartSelect, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onDragStep = ::clearDragPencilmarks, onToolSelect = ::smartSelect, onTap = openLetterKeyboard, onSelect = ::select)
                     },
                 ) {
-                    Controls(puzzle.size, effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
+                    Controls(puzzle.size, effectiveMode, letters, ::toggleLetters, keyboardEnabled, ::toggleKeyboard, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = true)
                 }
             } else {
                 DesktopPlayerLayout(
                     modifier = Modifier.fillMaxSize(),
                     board = {
-                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onDragStep = ::clearDragPencilmarks, onToolSelect = ::smartSelect, onSelect = ::select)
+                        SudokuBoard(puzzle, cells, selected, checkResult.cells, automaticColours = automaticColours, fadedOutsideClues = fadedOutsideClues, onToggleOutsideClue = ::toggleOutsideClue, fadedOutsideArrows = fadedOutsideArrows, onToggleOutsideArrow = ::toggleOutsideArrow, invalidPencilMarks = checkResult.pencilMarks, modifier = Modifier.fillMaxSize(), additiveSelection = multiSelect, onDragSelection = { if (colourSettings == null) changeSelection(it) }, onDragStep = ::clearDragPencilmarks, onToolSelect = ::smartSelect, onTap = openLetterKeyboard, onSelect = ::select)
                     },
                 ) {
                     DesktopPlayerSidebar(
@@ -383,7 +457,7 @@ internal fun SudokuApp(puzzle: Puzzle, repository: GameRepository, shareBaseUrl:
                             // Reduce the panel height while keeping the small mode labels readable.
                             val inputFontScale = if (landscapePhone) 1f else 0.8f
                             CompositionLocalProvider(LocalDensity provides Density(density.density * inputScale, density.fontScale * inputFontScale / inputScale)) {
-                                SideCard("PLAY") { Controls(puzzle.size, effectiveMode, letters, { repository.saveSettings(repository.settings.copy(letters = !repository.settings.letters)) }, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
+                                SideCard("PLAY") { Controls(puzzle.size, effectiveMode, letters, ::toggleLetters, keyboardEnabled, ::toggleKeyboard, digitCounts, ::setMode, { enter(it, effectiveMode) }, history.isNotEmpty(), redoStack.isNotEmpty(), ::undo, ::redo, checkRules || checkSolution, ::checkNow, onColourSettings = { colourSettings = it }, automaticColours = automaticColours, multiple = multiSelect, onMultiple = { setMultiple(!multiSelect) }, onRules = { showRules = true }, onChecking = { showChecking = true }, compact = landscapePhone) }
                             }
                         },
                     )
@@ -588,12 +662,13 @@ private fun CompletionDialog(puzzle: Puzzle, elapsed: Long, onViewPuzzle: () -> 
 }
 
 @Composable
-internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onDragStep: ((BoardDragStep) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), interactive: Boolean = true, fadedOutsideClues: Set<PuzzleOverlay> = emptySet(), onToggleOutsideClue: ((PuzzleOverlay) -> Unit)? = null, fadedOutsideArrows: Set<PuzzleArrow> = emptySet(), onToggleOutsideArrow: ((PuzzleArrow) -> Unit)? = null, onSelect: (CellPosition) -> Unit) {
+internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<CellPosition>, conflicts: Set<Int>, uncertain: Set<Int> = emptySet(), invalidPencilMarks: Map<Int, Set<Int>> = emptyMap(), modifier: Modifier = Modifier, additiveSelection: Boolean = false, onDragSelection: ((Set<CellPosition>) -> Unit)? = null, onDragStep: ((BoardDragStep) -> Unit)? = null, onToolSelect: ((CellPosition, Boolean) -> Unit)? = null, automaticColours: Map<Int, AutomaticColourRule> = emptyMap(), interactive: Boolean = true, fadedOutsideClues: Set<PuzzleOverlay> = emptySet(), onToggleOutsideClue: ((PuzzleOverlay) -> Unit)? = null, fadedOutsideArrows: Set<PuzzleArrow> = emptySet(), onToggleOutsideArrow: ((PuzzleArrow) -> Unit)? = null, onTap: () -> Unit = {}, onSelect: (CellPosition) -> Unit) {
     val currentSelection by rememberUpdatedState(selected)
     val currentDragSelection by rememberUpdatedState(onDragSelection)
     val currentDragStep by rememberUpdatedState(onDragStep)
     val currentCells by rememberUpdatedState(cells)
     val currentToolSelect by rememberUpdatedState(onToolSelect)
+    val currentTap by rememberUpdatedState(onTap)
     val currentAdditive by rememberUpdatedState(additiveSelection)
     val padCells = remember(puzzle) { puzzle.boardPaddingCells() }
     val hasOutside = padCells > 0f
@@ -692,6 +767,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
                                 lastTapPosition = null
                                 lastTapTime = Long.MIN_VALUE
                             }
+                            if (!moved) currentTap()
                         }
                     }
                 }
@@ -704,7 +780,7 @@ internal fun SudokuBoard(puzzle: Puzzle, cells: List<CellState>, selected: Set<C
             val background = when { isSelected -> selectionBackground; position.index(puzzle.size) in conflicts -> Color(0xEFFFF1EC); position.index(puzzle.size) in uncertain -> Color(0xEFFFEDBD); same -> selectionBackground.copy(alpha = selectionBackground.alpha * .5f); else -> Color.Transparent }.let { if (colours.isNotEmpty()) it.copy(alpha = minOf(it.alpha, .18f)) else it }
             val textBackdrop = Color.Transparent
             val fogged = puzzle.fogLights != null && position !in litCells
-            Box(Modifier.fillMaxSize().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value?.symbolText() ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString { it.symbolText() }}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString { it.symbolText() }}" else ""}${if (colours.isNotEmpty()) ", colours ${colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index(puzzle.size) in uncertain) ", uncertain reading" else ""}" }.then(if (interactive) Modifier.clickable { onSelect(position) } else Modifier), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().semantics { this.selected = isSelected; contentDescription = "Row ${row + 1}, column ${column + 1}, ${cell.value?.symbolText() ?: "empty"}${if (isSelected) ", selected" else ""}${if (cell.cornerNotes.isNotEmpty()) ", corner notes ${cell.cornerNotes.sorted().joinToString { it.symbolText() }}" else ""}${if (cell.centreNotes.isNotEmpty()) ", centre notes ${cell.centreNotes.sorted().joinToString { it.symbolText() }}" else ""}${if (colours.isNotEmpty()) ", colours ${colours.sorted().mapNotNull(CellColour::fromNumber).joinToString { it.label }}" else ""}${if (position.index(puzzle.size) in uncertain) ", uncertain reading" else ""}" }.then(if (interactive) Modifier.clickable { onSelect(position); onTap() } else Modifier), contentAlignment = Alignment.Center) {
                 if (fogged) Canvas(Modifier.matchParentSize()) {
                     drawRect(Color(0xFFB4B7B5))
                     drawCellColours(colours)
@@ -1035,7 +1111,7 @@ private fun SideCard(label: String, content: @Composable ColumnScope.() -> Unit)
 }
 
 @Composable
-private fun Controls(gridSize: Int, mode: InputMode, letters: Boolean, onLetters: () -> Unit, digitCounts: Map<Int, Int>, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, onColourSettings: (CellColour) -> Unit, automaticColours: Map<Int, AutomaticColourRule>, multiple: Boolean, onMultiple: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, compact: Boolean = false) {
+private fun Controls(gridSize: Int, mode: InputMode, letters: Boolean, onLetters: () -> Unit, keyboardEnabled: Boolean, onKeyboard: () -> Unit, digitCounts: Map<Int, Int>, onMode: (InputMode) -> Unit, onNumber: (Int?) -> Unit, canUndo: Boolean, canRedo: Boolean, onUndo: () -> Unit, onRedo: () -> Unit, canCheck: Boolean, onCheck: () -> Unit, onColourSettings: (CellColour) -> Unit, automaticColours: Map<Int, AutomaticColourRule>, multiple: Boolean, onMultiple: () -> Unit, onRules: () -> Unit, onChecking: () -> Unit, compact: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (compact) Column(Modifier.width(48.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             CompactAction("Undo", Glyph.Undo, onUndo, canUndo)
@@ -1080,12 +1156,12 @@ private fun Controls(gridSize: Int, mode: InputMode, letters: Boolean, onLetters
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (compact) {
                     FilledTonalButton(onLetters, Modifier.weight(1f).height(48.dp).semantics { contentDescription = "Switch numbers and letters" }, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(0.dp)) { Text(if (letters) "A–Z" else "1–$gridSize") }
-                    FilledTonalButton({ onNumber(0) }, Modifier.weight(1f).height(48.dp), enabled = mode != InputMode.Colour, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(0.dp)) { Text("0", fontSize = 22.sp, fontWeight = FontWeight.SemiBold) }
+                    KeyboardOrZero(letters, keyboardEnabled, onKeyboard, mode != InputMode.Colour, { onNumber(0) }, Modifier.weight(1f).height(48.dp), RoundedCornerShape(12.dp))
                     FilledTonalIconButton({ onNumber(null) }, Modifier.weight(1f).height(48.dp).semantics { contentDescription = if (mode == InputMode.Colour) "Erase colours" else "Erase" }, shape = RoundedCornerShape(12.dp)) { AppIcon(Glyph.Erase) }
                 } else {
                     FilledTonalIconToggleButton(multiple, { onMultiple() }, Modifier.weight(1f).height(52.dp).semantics { contentDescription = "Select multiple" }, shape = RoundedCornerShape(10.dp)) { AppIcon(Glyph.Multiple) }
                     IconButton(onUndo, Modifier.weight(1f).height(52.dp).semantics { contentDescription = "Undo" }, enabled = canUndo) { AppIcon(Glyph.Undo) }
-                    FilledTonalButton({ onNumber(0) }, Modifier.weight(1f).height(52.dp), enabled = mode != InputMode.Colour, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(0.dp)) { Text("0", fontSize = 22.sp, fontWeight = FontWeight.SemiBold) }
+                    KeyboardOrZero(letters, keyboardEnabled, onKeyboard, mode != InputMode.Colour, { onNumber(0) }, Modifier.weight(1f).height(52.dp), RoundedCornerShape(10.dp))
                     IconButton({ onNumber(null) }, Modifier.weight(1f).height(52.dp).semantics { contentDescription = if (mode == InputMode.Colour) "Erase colours" else "Erase" }) { AppIcon(Glyph.Erase) }
                 }
             }
@@ -1112,6 +1188,30 @@ private fun Controls(gridSize: Int, mode: InputMode, letters: Boolean, onLetters
         if (!compact) IconButton(onRedo, Modifier.semantics { contentDescription = "Redo" }, enabled = canRedo) { AppIcon(Glyph.Redo) }
         if (compact) TextButton(onChecking, Modifier.weight(1f)) { AppIcon(Glyph.Settings); Spacer(Modifier.width(6.dp)); Text("Settings") }
         else IconButton(onChecking, Modifier.semantics { contentDescription = "Settings" }) { AppIcon(Glyph.Settings) }
+    }
+}
+
+@Composable
+private fun KeyboardOrZero(
+    letters: Boolean,
+    keyboardEnabled: Boolean,
+    onKeyboard: () -> Unit,
+    zeroEnabled: Boolean,
+    onZero: () -> Unit,
+    modifier: Modifier,
+    shape: RoundedCornerShape,
+) {
+    if (letters) {
+        FilledTonalIconToggleButton(
+            checked = keyboardEnabled,
+            onCheckedChange = { onKeyboard() },
+            modifier = modifier.semantics { contentDescription = "Letter keyboard" },
+            shape = shape,
+        ) { AppIcon(Glyph.Keyboard) }
+    } else {
+        FilledTonalButton(onZero, modifier, enabled = zeroEnabled, shape = shape, contentPadding = PaddingValues(0.dp)) {
+            Text("0", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        }
     }
 }
 

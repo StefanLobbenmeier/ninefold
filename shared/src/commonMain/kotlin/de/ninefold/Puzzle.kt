@@ -4,6 +4,12 @@ import kotlinx.serialization.Serializable
 
 /** Symbols 0–9 are digits; 10–35 represent A–Z in saved values and notes. */
 internal fun Int.symbolText(): String = if (this in 10..35) ('A' + (this - 10)).toString() else toString()
+internal fun Char.letterSymbolOrNull(): Int? = when (this) {
+    in 'A'..'Z' -> 10 + (this - 'A')
+    in 'a'..'z' -> 10 + (this - 'a')
+    else -> null
+}
+internal fun Char.cellSymbolOrNull(): Int? = digitToIntOrNull() ?: letterSymbolOrNull()
 internal fun Int.isDigitSymbol(): Boolean = this in 0..9
 
 @Serializable
@@ -108,9 +114,14 @@ data class Puzzle(
         }
     }
     fun regionIndex(position: CellPosition): Int = regionCells().indexOfFirst { position in it }
+    internal val hasLetterSymbols: Boolean
+        get() = givens.any { it.letterSymbolOrNull() != null } ||
+            solution.orEmpty().any { it.letterSymbolOrNull() != null } ||
+            initialValues.values.any { it in 10..35 }
+
     fun startingCells(): List<CellState> = givens.mapIndexed { index, char ->
-        val value = char.digitToIntOrNull()
-        CellState(value = value ?: initialValues[index]?.takeIf { it in 0..9 }, given = value != null)
+        val value = char.cellSymbolOrNull()
+        CellState(value = value ?: initialValues[index]?.takeIf { it in 0..35 }, given = value != null)
     }.let { it + List((cellCount - it.size).coerceAtLeast(0)) { CellState() } }.take(cellCount)
 }
 
@@ -122,26 +133,28 @@ fun GridPoint.cellPositionOrNull(size: Int = 9): CellPosition? {
 
 fun checkAgainstSolution(puzzle: Puzzle, cells: List<CellState>): PuzzleCheckResult {
     val solution = puzzle.solution ?: return PuzzleCheckResult()
+    val letterSolution = solution.any { it.letterSymbolOrNull() != null }
+    fun checkedSymbol(symbol: Int) = letterSolution || symbol.isDigitSymbol()
     val size = puzzle.size
     val conflicts = mutableSetOf<Int>()
     val pencilMarks = mutableMapOf<Int, Set<Int>>()
     fun block(index: Int): Int = puzzle.regionIndex(CellPosition(index / size, index % size))
-    // Corner marks describe possible positions for a digit within a block.
+    // Corner marks describe possible positions for a symbol within a block.
     // Accept the whole group when it includes the answer, without revealing its position.
-    val validCornerDigits = cells.indices.groupBy(::block).mapValues { (_, indices) ->
+    val validCornerSymbols = cells.indices.groupBy(::block).mapValues { (_, indices) ->
         indices.mapNotNull { index ->
-            solution.getOrNull(index)?.digitToIntOrNull()?.takeIf { cells[index].value == null && it in cells[index].cornerNotes }
+            solution.getOrNull(index)?.cellSymbolOrNull()?.takeIf { cells[index].value == null && it in cells[index].cornerNotes }
         }.toSet()
     }
     cells.forEachIndexed { index, cell ->
-        val answer = solution.getOrNull(index)?.digitToIntOrNull() ?: return@forEachIndexed
-        if (!cell.given && cell.value?.isDigitSymbol() == true && answer != cell.value) conflicts += index
+        val answer = solution.getOrNull(index)?.cellSymbolOrNull() ?: return@forEachIndexed
+        if (!cell.given && cell.value?.let(::checkedSymbol) == true && answer != cell.value) conflicts += index
         if (cell.value == null && cell.cornerNotes.isNotEmpty()) {
-            val invalid = cell.cornerNotes.filterTo(mutableSetOf(), Int::isDigitSymbol) - validCornerDigits[block(index)].orEmpty()
+            val invalid = cell.cornerNotes.filterTo(mutableSetOf(), ::checkedSymbol) - validCornerSymbols[block(index)].orEmpty()
             if (invalid.isNotEmpty()) pencilMarks[index] = invalid
         }
-        if (cell.value == null && cell.centreNotes.any(Int::isDigitSymbol) && answer !in cell.centreNotes) {
-            pencilMarks[index] = pencilMarks[index].orEmpty() + cell.centreNotes.filter(Int::isDigitSymbol)
+        if (cell.value == null && cell.centreNotes.any(::checkedSymbol) && answer !in cell.centreNotes) {
+            pencilMarks[index] = pencilMarks[index].orEmpty() + cell.centreNotes.filter(::checkedSymbol)
         }
     }
     return PuzzleCheckResult(conflicts, pencilMarks)

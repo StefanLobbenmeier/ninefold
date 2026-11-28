@@ -12,7 +12,7 @@ internal fun Puzzle.litCells(cells: List<CellState>): Set<CellPosition> {
             fogLinks.forEach { link ->
                 if (link.triggers.all { position ->
                     val value = cells.getOrNull(position.index(gridSize))?.value
-                    value != null && (solution == null || solution.getOrNull(position.index(gridSize))?.digitToIntOrNull() == value)
+                    value != null && (solution == null || solution.getOrNull(position.index(gridSize))?.cellSymbolOrNull() == value)
                 }) addAll(link.cells)
             }
             return@buildSet
@@ -20,7 +20,7 @@ internal fun Puzzle.litCells(cells: List<CellState>): Set<CellPosition> {
         cells.forEachIndexed { index, cell ->
             val position = CellPosition(index / gridSize, index % gridSize)
             if (cell.given) add(position)
-            else if (cell.value != null && (solution?.getOrNull(index)?.digitToIntOrNull() == cell.value || solution == null)) {
+            else if (cell.value != null && (solution?.getOrNull(index)?.cellSymbolOrNull() == cell.value || solution == null)) {
                 for (row in position.row - 1..position.row + 1) for (column in position.column - 1..position.column + 1) {
                     if (row in 0 until gridSize && column in 0 until gridSize) add(CellPosition(row, column))
                 }

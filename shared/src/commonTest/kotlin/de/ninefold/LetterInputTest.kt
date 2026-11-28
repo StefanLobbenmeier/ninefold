@@ -3,6 +3,7 @@ package de.ninefold
 import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class LetterInputTest {
@@ -18,6 +19,21 @@ class LetterInputTest {
         }
         assertEquals(GameShortcut.Enter(10, InputMode.Centre), gameShortcut(Key.A, true, false, letters = true))
         assertEquals(GameShortcut.Enter(35, null), gameShortcut(Key.Z, false, false, alt = true, letters = true))
+    }
+
+    @Test fun importedLetterGivensAndSolutionsUseTheFullAlphabet() {
+        val payload = SudokuFixtures.sudokuPadPayload("a...", """"solution":["a","Z","z","A"]""")
+        val puzzle = parseSudokuPadPayload(payload)
+        assertTrue(puzzle.hasLetterSymbols)
+        assertEquals(CellState(10, given = true), puzzle.startingCells().first())
+
+        val solved = puzzle.startingCells().mapIndexed { index, cell -> cell.copy(value = listOf(10, 35, 35, 10)[index]) }
+        assertTrue(puzzle.isComplete(solved))
+        val wrong = solved.toMutableList().also { it[1] = CellState(11) }
+        assertFalse(puzzle.isComplete(wrong))
+        assertEquals(setOf(1), checkAgainstSolution(puzzle, wrong).cells)
+        val notes = solved.toMutableList().also { it[1] = CellState(centreNotes = setOf(11)) }
+        assertEquals(mapOf(1 to setOf(11)), checkAgainstSolution(puzzle, notes).pencilMarks)
     }
 
     @Test fun lettersConflictWithPeersButIgnoreSumsAndSolution() {
