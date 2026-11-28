@@ -12,18 +12,21 @@ internal fun clearDraggedPencilmarks(
     if (added.size < 2) return cells
 
     val next = cells.toMutableList()
-    fun cell(position: CellPosition) = next[position.index(puzzle.size)]
+    fun cell(position: CellPosition): CellState {
+        val state = next[position.index(puzzle.size)]
+        return if (state.given && position !in lit) CellState() else state
+    }
 
     val rulesByCell = puzzle.sudokuRules().flatMap { rule -> rule.cells.map { it to rule } }
         .groupBy({ it.first }, { it.second })
     val previous = mutableListOf<CellPosition>()
     val visited = mutableSetOf<CellPosition>()
     for (target in path) {
-        if (target !in added || target !in lit) {
+        if (target !in added) {
             previous.clear()
             continue
         }
-        val old = cell(target)
+        val old = next[target.index(puzzle.size)]
         if (visited.add(target) && target in targets && !old.given && old.value == null) {
             val digits = 1..puzzle.size
             val activeRules = rulesByCell[target].orEmpty().mapNotNull { rule ->

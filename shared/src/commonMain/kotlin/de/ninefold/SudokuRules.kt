@@ -35,6 +35,7 @@ internal class SudokuRule(
     private val dragPath: List<CellPosition>? = null,
     private val numeric: Boolean = false,
     private val requiresVisibleGroup: Boolean = false,
+    private val dragThroughFog: Boolean = false,
     private val violations: (List<Int?>) -> List<Int>,
 ) {
     private val members = cells.toSet()
@@ -65,7 +66,9 @@ internal class SudokuRule(
         cellAt: (CellPosition) -> CellState,
     ): DragRule? {
         if (requiresVisibleGroup && !lit.containsAll(members)) return null
-        val sources = dragSources(target, previous).associateWith(cellAt)
+        if (!dragThroughFog && target !in lit) return null
+        val path = if (dragThroughFog) previous else previous.takeLastWhile { it in lit }
+        val sources = dragSources(target, path).associateWith(cellAt)
         if (sources.isEmpty()) return null
 
         if (useCentreNotes) {
@@ -109,8 +112,11 @@ private fun nakedGroupSymbols(sources: Collection<CellState>): Set<Int> {
     return grouped
 }
 
-private fun distinctSymbols(cells: List<CellPosition>, requiresVisibleGroup: Boolean = false) =
-    SudokuRule(cells, allDifferent = true, requiresVisibleGroup = requiresVisibleGroup) { values ->
+private fun distinctSymbols(
+    cells: List<CellPosition>,
+    requiresVisibleGroup: Boolean = false,
+    dragThroughFog: Boolean = false,
+) = SudokuRule(cells, allDifferent = true, requiresVisibleGroup = requiresVisibleGroup, dragThroughFog = dragThroughFog) { values ->
         values.indices.filter { index -> values[index] != null && values.count { it == values[index] } > 1 }
     }
 
@@ -138,11 +144,12 @@ private fun numericGroup(
 internal fun Puzzle.sudokuRules(includeSpecialRules: Boolean = true): List<SudokuRule> = buildList {
     val gridSize = this@sudokuRules.size
     val regions = regionCells()
+    val standardRegions = if (this@sudokuRules.regions == null) regions else copy(regions = null).regionCells()
     for (index in 0 until gridSize) {
-        add(distinctSymbols(List(gridSize) { CellPosition(index, it) }))
-        add(distinctSymbols(List(gridSize) { CellPosition(it, index) }))
+        add(distinctSymbols(List(gridSize) { CellPosition(index, it) }, dragThroughFog = true))
+        add(distinctSymbols(List(gridSize) { CellPosition(it, index) }, dragThroughFog = true))
     }
-    regions.forEach { add(distinctSymbols(it.toList())) }
+    regions.forEach { add(distinctSymbols(it.toList(), dragThroughFog = it in standardRegions)) }
     if (!includeSpecialRules) return@buildList
 
     if (antiKnight || antiKing) {
