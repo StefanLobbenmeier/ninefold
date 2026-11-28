@@ -204,7 +204,10 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
                 ruleTotal = sharedCageTotal.takeIf { value == null }, hidden = cage.boolean("hidden") == true)
         } else null
     }
-    val lines = parseLines(root, fpuzzles).withImportedDiagonals(root, size)
+    val maxima = if (fpuzzles) root.array("maximum").orEmpty().mapNotNull {
+        parseFpuzzlesMaximum(it, size)
+    }.toSet() else emptySet()
+    val lines = parseLines(root, fpuzzles).withImportedDiagonals(root, size) + maximumChevrons(maxima, size)
     val littleKillers = if (fpuzzles) parseFpuzzlesLittleKillers(root, size) else emptyList()
     val rawOverlays = littleKillers.map { PuzzleOverlay(it.position, .6, .6, text = it.value.toString()) } + root.array("overlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesOverlays(root) else emptyList()
     val (importedOverlays, graphicalQuadruples) = importQuadruples(rawOverlays, rulesText, size)
@@ -223,7 +226,10 @@ private fun puzzleFromJson(root: JsonObject, fpuzzles: Boolean, sourceUrl: Strin
     val shadedCages = if (fpuzzles) cages.filter { !it.hidden && it.total == null }.flatMap { it.cells }.distinct().map {
         PuzzleOverlay(GridPoint(it.row + .5, it.column + .5), 1.0, 1.0, backgroundColor = "#E0E0E0")
     } else emptyList()
-    val underlays = shadedCages + cellShading + root.array("underlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
+    val maximumShading = maxima.map { cell ->
+        PuzzleOverlay(GridPoint(cell.row + .5, cell.column + .5), 1.0, 1.0, backgroundColor = "#CCCCCC")
+    }
+    val underlays = shadedCages + cellShading + root.array("underlays").orEmpty().mapNotNull { parseOverlay(it, root.double("cellSize") ?: 50.0) } + maximumShading + if (fpuzzles) parseFpuzzlesCellShading(root) else emptyList()
     val arrows = parseArrows(root, fpuzzles, overlays, size) + littleKillers.map { clue ->
         val first = clue.cells.first()
         val dr = (first.row + .5 - clue.position.row).compareTo(0.0)
@@ -508,13 +514,16 @@ private fun parseFpuzzlesOverlays(root: JsonObject): List<PuzzleOverlay> = build
             rounded = feature == "circle",
         ))
     }
-    fun pairMarks(feature: String, background: String, border: String?, defaultText: String? = null) {
+    fun pairMarks(feature: String, background: String, border: String?) {
         root.array(feature).orEmpty().forEach { element ->
             val mark = element.jsonObject
             val cells = mark.array("cells").orEmpty().mapNotNull(::parseCell)
             if (cells.size == 2) {
                 val center = GridPoint((cells[0].row + cells[1].row + 1) / 2.0, (cells[0].column + cells[1].column + 1) / 2.0)
-                add(PuzzleOverlay(center, .33, .33, background, border, if (background == "#000000") "#FFFFFF" else "#000000", mark.string("value") ?: defaultText, true))
+                val value = mark.string("value")
+                val bareX = feature == "xv" && value?.trim().equals("X", ignoreCase = true)
+                add(PuzzleOverlay(center, .33, .33, background, border.takeUnless { bareX },
+                    if (background == "#000000") "#FFFFFF" else "#000000", value, rounded = !bareX))
             }
         }
     }
@@ -525,6 +534,25 @@ private fun parseFpuzzlesOverlays(root: JsonObject): List<PuzzleOverlay> = build
         element.jsonObject.array("cells").orEmpty().mapNotNull(::parseCell).forEach { cell ->
             add(PuzzleOverlay(GridPoint(cell.row + .5, cell.column + .5), .8, .8, "#FFFFFF", "#999999", rounded = true))
         }
+    }
+}
+
+internal fun parseFpuzzlesMaximum(element: JsonElement, size: Int): CellPosition? =
+    (element as? JsonObject)?.get("cell")?.let(::parseCell)
+        ?.takeIf { it.row in 0 until size && it.column in 0 until size }
+
+private fun maximumChevrons(cells: Set<CellPosition>, size: Int): List<PuzzleLine> = buildList {
+    val directions = listOf(-1 to 0, 0 to 1, 1 to 0, 0 to -1)
+    for (cell in cells) for ((dr, dc) in directions) {
+        val neighbor = CellPosition(cell.row + dr, cell.column + dc)
+        if (neighbor.row !in 0 until size || neighbor.column !in 0 until size || neighbor in cells) continue
+        val row = cell.row + .5
+        val column = cell.column + .5
+        add(PuzzleLine(listOf(
+            GridPoint(row + .39 * dr + .1 * dc, column + .39 * dc - .1 * dr),
+            GridPoint(row + .44 * dr, column + .44 * dc),
+            GridPoint(row + .39 * dr - .1 * dc, column + .39 * dc + .1 * dr),
+        ), color = "#000000", thickness = 1.0))
     }
 }
 

@@ -163,6 +163,34 @@ class SudokuPadImportTest {
         assertTrue(malformed.importOmissions.any { it.path.endsWith(".given") })
     }
 
+    @Test fun importsFpuzzlesMaximumShadingAndOutwardChevrons() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"maximum":[
+            {"cell":"R1C2"},{"cell":"R1C3"},{"cell":"R10C1"}
+        ]"""))
+        assertEquals(listOf(GridPoint(.5, 1.5), GridPoint(.5, 2.5)), puzzle.underlays.map { it.center })
+        assertTrue(puzzle.underlays.all { it.backgroundColor == "#CCCCCC" && it.width == 1.0 && it.height == 1.0 })
+        assertEquals(listOf(
+            GridPoint(.94, 1.5), GridPoint(.5, 1.06), GridPoint(.5, 2.94), GridPoint(.94, 2.5),
+        ), puzzle.lines.map { it.points[1] })
+        val west = puzzle.lines[1].points
+        assertTrue(west.first().column > west[1].column && west.last().column > west[1].column)
+        assertEquals(listOf("$.maximum[2]"), puzzle.importOmissions.map { it.path }.filter { it.startsWith("$.maximum") })
+    }
+
+    @Test fun importsFpuzzlesXWithoutCircleAndPreservesOtherPairMarks() {
+        val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """
+            "xv":[{"cells":["R1C1","R1C2"],"value":"X"},{"cells":["R2C1","R2C2"],"value":"V"}],
+            "difference":[{"cells":["R3C1","R3C2"]}]
+        """.trimIndent()))
+        val (x, v) = puzzle.overlays.filter { it.text != null }
+        assertEquals(GridPoint(.5, 1.0), x.center)
+        assertEquals(10, x.edgeSum())
+        assertEquals(null, x.borderColor)
+        assertEquals(false, x.rounded)
+        assertTrue(v.rounded)
+        assertTrue(puzzle.overlays.single { it.text == null }.isKropkiDot())
+    }
+
     @Test fun importsFpuzzlesCircleArtworkBetweenCellsAndAtIntersections() {
         val puzzle = parseSudokuPadPayload(SudokuFixtures.fpuzzlesPayload(properties = """"circle":[
             {"cells":["R1C1","R1C2"],"baseC":"#FFFFFF","outlineC":"#000000","width":0.35,"height":0.35},
