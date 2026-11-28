@@ -5,9 +5,20 @@ internal fun CheckingSettings.rulesResult(puzzle: Puzzle, cells: List<CellState>
         checkSudokuRules(puzzle, cells, specialRules)
     }
 
-internal fun CheckingSettings.solutionResult(puzzle: Puzzle, cells: List<CellState>, manual: Boolean = false): PuzzleCheckResult =
+internal fun CheckingSettings.solutionResult(
+    puzzle: Puzzle,
+    cells: List<CellState>,
+    manual: Boolean = false,
+    editing: Set<CellPosition> = emptySet(),
+): PuzzleCheckResult =
     checkingResult(solution, automaticSolution || manual, automaticSolutionPencilmarks || manual) {
-        checkAgainstSolution(puzzle, cells)
+        // Selected cells still contribute to the region's corner candidates.
+        val result = checkAgainstSolution(puzzle, cells)
+        val editingIndices = editing.map { it.index(puzzle.size) }.toSet()
+        result.copy(
+            cells = result.cells - editingIndices,
+            pencilMarks = result.pencilMarks.filterKeys { it !in editingIndices },
+        )
     }
 
 private inline fun checkingResult(
