@@ -30,6 +30,16 @@ class DragPencilmarksTest {
         assertEquals(cells, drag(cells, a, outside, d))
     }
 
+    @Test fun standardRulesClearFoggedNotesUsingOnlyVisibleDigits() {
+        val puzzle = empty.copy(fogLights = setOf(a), fogLinks = emptyList())
+        val cells = board(a to CellState(value = 2), b to notes(2, 8), c to notes(3, 8))
+        assertEquals(listOf(2, 8, 3), drag(cells, a, b, c, puzzle = puzzle).take(3).map { it.value })
+
+        val hiddenGiven = board(b to CellState(value = 2, given = true), c to notes(2, 8))
+        assertEquals(hiddenGiven, drag(hiddenGiven, b, c, puzzle = puzzle))
+        assertEquals(hiddenGiven, drag(hiddenGiven, c, b, puzzle = puzzle))
+    }
+
     @Test fun pairMustBeVisitedBeforeItsTarget() {
         val cells = board(a to notes(2, 8), b to notes(2, 8), c to notes(2, 3, 8))
         assertEquals(3, drag(cells, a, b, c)[c.index].value)
